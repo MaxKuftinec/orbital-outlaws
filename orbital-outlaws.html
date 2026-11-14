@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07111d">
+  <meta name="description" content="Orbital Outlaws: a Newtonian orbital combat and salvage prototype.">
+  <title>Orbital Outlaws — Physics Combat Prototype</title>
+  <style>
+:root{color-scheme:dark;--bg:#060d17;--surface:#0b1725;--surface2:#101e2e;--line:#203348;--line2:#1a2b3d;--text:#eaf1f6;--muted:#8599ab;--cyan:#62d9f6;--aqua:#2dbac9;--green:#67e0aa;--amber:#edbe6b;--red:#ff7184;--purple:#bd9efa}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 54% -20%,#142b43 0%,transparent 48%),var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px}button,select{font:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}button:disabled{opacity:.45;cursor:not-allowed}.app-shell{max-width:1440px;margin:auto;padding:22px clamp(12px,2.4vw,34px) 20px}.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:22px}.identity{display:flex;gap:11px;align-items:center}.brand-mark{width:44px;height:44px;border:1px solid #38718a;border-radius:13px;background:#142d41;display:grid;place-items:center;color:var(--cyan);font-size:33px}.brand-mark span{line-height:1}.eyebrow{font-size:10px;letter-spacing:2.1px;color:var(--muted);font-weight:700}.identity h1{font-size:clamp(21px,2vw,28px);letter-spacing:.75px;line-height:1.12;margin:3px 0 0;font-weight:850}.identity h1 span{color:var(--cyan)}.top-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.sim-clock{display:flex;align-items:center;gap:10px;padding:0 17px;border-right:1px solid var(--line)}.sim-clock strong{display:block;font-variant-numeric:tabular-nums;font-size:17px}.quiet-label{font-size:9px;color:var(--muted);letter-spacing:1.1px;display:block}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none}.live{background:#57e2b1;box-shadow:0 0 12px #57e2b176}.speed-label{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}.speed-label select{border:1px solid var(--line);border-radius:7px;background:#152536;color:var(--text);padding:9px 7px}.action-btn{border:1px solid #325066;border-radius:8px;background:#163044;color:var(--text);padding:10px 13px;font-weight:700;font-size:12px}.action-btn.muted{background:transparent;border-color:var(--line);color:#b3c5d1}.action-btn:hover,.small-btn:hover,.wide-subtle-btn:hover{border-color:#54cce5}.game-layout{display:grid;grid-template-columns:minmax(0,1fr) 305px;gap:17px;align-items:start}.arena-shell{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;min-width:0}.arena-head{display:flex;justify-content:space-between;align-items:center;padding:16px 17px;gap:14px}.section-kicker{color:var(--cyan);font-size:10px;letter-spacing:1.4px;font-weight:800}.arena-title{font-size:17px;font-weight:720;margin-top:2px}.online{display:inline-flex;align-items:center;gap:6px;font-size:9px;letter-spacing:1.2px;color:var(--green);margin-left:9px;vertical-align:middle}.arena-actions{display:flex;gap:5px;align-items:center;flex-wrap:wrap}.small-btn{border:1px solid #2b4255;border-radius:6px;background:#101f30;color:#ccdfeb;font-size:12px;padding:7px 10px}.small-btn.selected{color:var(--cyan);background:#123242;border-color:#286a7f}.zoom-text{width:34px;text-align:center;color:var(--muted);font-size:11px}.canvas-wrap{position:relative;background:#050d18;overflow:hidden}.canvas-wrap canvas{display:block;width:100%;height:clamp(390px,47vw,585px);cursor:crosshair;touch-action:manipulation}.canvas-overlay{position:absolute;pointer-events:none;background:#071320bc;color:#95b5c8;border:1px solid #213c4c88;backdrop-filter:blur(5px);font-size:10px;letter-spacing:.5px;padding:7px 9px;border-radius:5px}.top-left{left:13px;top:12px;display:flex;align-items:center;gap:7px}.tiny-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--cyan)}.bottom-left{bottom:12px;left:12px}.keyboard-tag{font-size:10px;font-weight:800;color:#b7e7f3;margin-left:8px}.keyboard-tag:first-child{margin:0}.mission-strip{border-top:1px solid #24384a;border-bottom:1px solid var(--line);background:#111f2c;display:flex;gap:8px;align-items:center;padding:11px 16px;color:#b6c8d5;font-size:12px}.mission-strip strong{color:var(--amber);letter-spacing:.7px}.objective-icon{font-size:22px;line-height:1;color:var(--amber)}.mission-right{margin-left:auto;color:var(--muted);white-space:nowrap}.flight-controls{padding:18px}.control-description{display:flex;gap:9px;align-items:baseline;margin-bottom:13px;flex-wrap:wrap}.control-description>strong{font-size:11px;letter-spacing:1.2px}.control-description small{color:var(--muted);font-size:12px}.control-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) 1.2fr;gap:9px}.thruster,.fire-button{touch-action:none;user-select:none;min-height:77px;border-radius:10px;border:1px solid #29465a;background:linear-gradient(#15283a,#102131);color:#d6e7f0;display:flex;flex-direction:column;justify-content:center;gap:1px;align-items:center}.thruster b,.fire-button b{font-size:23px;line-height:1.1;color:#b7e6ef}.thruster strong,.fire-button strong{font-size:10px;letter-spacing:.7px}.thruster small,.fire-button small{font-size:10px;color:#8ca8b7}.thruster:active,.thruster.pressed{background:#245066;border-color:#51cfdf}.fire-button{background:linear-gradient(#462430,#301a26);border-color:#6c3546;color:#ffd6df}.fire-button b{color:var(--red)}.fire-button:active,.fire-button.pressed{background:#743748;border-color:var(--red)}.control-note{margin-top:11px;color:var(--muted);font-size:11px;line-height:1.5}.control-note button{background:none;border:0;padding:2px 3px;color:var(--cyan);text-decoration:underline;text-underline-offset:3px}.sidebar{display:flex;flex-direction:column;gap:12px;min-width:0}.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:17px}.panel-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:13px;color:#b9cbd6;font-size:10px;letter-spacing:1.2px;font-weight:800}.panel-heading>span+span{color:var(--muted);font-weight:600;letter-spacing:.4px}.ship-class{border:1px solid #33495d;border-radius:3px;padding:4px 5px}.ship-name{display:flex;align-items:center;gap:11px;margin-bottom:17px;font-size:19px;letter-spacing:.5px;font-weight:850}.ship-name small{display:block;font-size:11px;letter-spacing:0;color:var(--green);font-weight:500;margin-top:3px}.ship-glyph{font-size:28px;color:var(--cyan);width:37px;height:37px;background:#123342;border:1px solid #2a6e7a;border-radius:8px;display:grid;place-items:center}.meter-title{display:flex;justify-content:space-between;color:var(--muted);letter-spacing:.75px;font-size:10px;font-weight:700;margin:14px 0 7px}.meter-title b{font-size:11px;letter-spacing:0;color:var(--text)}.meter{height:7px;overflow:hidden;border-radius:12px;background:#283848}.meter-fill{height:100%;border-radius:12px;transition:width .16s}.meter-fill.green{background:linear-gradient(90deg,#2fa87f,#6beaaf)}.meter-fill.cyan{background:linear-gradient(90deg,#198ba4,#6edaf5)}.small-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:19px;gap:4px}.small-stats>div{min-width:0;border-right:1px solid #243749}.small-stats>div:last-child{border:0;padding-left:7px}.small-stats>div:nth-child(2){padding-left:9px}.small-stats span{display:block;color:var(--muted);font-size:9px;letter-spacing:.7px;margin-bottom:5px}.small-stats strong{font-size:16px;font-variant-numeric:tabular-nums}.small-stats i{font-size:12px;color:var(--amber)}.metric-row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line2);gap:12px;font-size:12px}.metric-row span{color:var(--muted)}.metric-row strong{font-variant-numeric:tabular-nums;font-size:13px;font-weight:650;text-align:right}.status-pill{background:#12323c;color:var(--cyan)!important;border-radius:4px;padding:4px 5px;font-size:9px;white-space:nowrap}.status-pill.hostile{background:#39232d;color:var(--red)!important}.mini-note{color:#748ba0;font-size:10px;line-height:1.6;margin-top:11px}.target-name{font-size:19px;font-weight:850;color:var(--red);letter-spacing:.5px}.wide-subtle-btn{width:100%;background:#14283a;border:1px solid #27445a;color:var(--cyan);padding:9px;border-radius:7px;margin-top:12px;font-size:12px;font-weight:700}.upgrade-entry{display:flex;gap:8px;align-items:center}.upgrade-entry>div{flex:1;min-width:0}.upgrade-entry strong,.upgrade-entry small,.upgrade-entry span{display:block}.upgrade-entry strong{font-size:12px}.upgrade-entry small{font-size:10px;color:var(--muted);line-height:1.5;margin-top:4px}.upgrade-entry span{font-size:12px;color:var(--amber);font-weight:700;margin-top:7px}.buy-btn{border:1px solid #477a78;background:#144641;color:#9ff7db;border-radius:7px;font-size:11px;font-weight:800;padding:10px 11px}.event-feed{max-height:195px;overflow:auto;display:flex;flex-direction:column;gap:7px}.event-entry{display:flex;gap:8px;align-items:baseline;color:#b3c6d1;font-size:11px;line-height:1.35}.event-entry time{color:#5f8094;font-variant-numeric:tabular-nums;flex:none;font-size:10px}.event-entry.danger{color:#f5a1a7}.event-entry.good{color:#86ecc0}.live-label{color:#58e2b1!important}.footer-note{display:flex;justify-content:space-between;gap:8px;color:#70889d;font-size:10px;padding:19px 2px}.game-over{position:absolute;inset:0;background:#020813dd;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:2;text-align:center;padding:24px}.game-over.hidden{display:none}.game-over h2{font-size:28px;letter-spacing:4px;margin:9px 0 3px}.game-over p{max-width:310px;color:#9ab0c1}.failure-mark{font-size:38px;color:var(--red)}.primary-btn{border:1px solid #4d8da4;background:#14546a;color:#e3faff;padding:12px 19px;font-weight:800;border-radius:8px;margin-top:10px}@media(max-width:1080px){.game-layout{grid-template-columns:minmax(0,1fr) 268px}.panel{padding:14px}.control-grid{gap:5px}.thruster strong,.fire-button strong{font-size:9px}}@media(max-width:850px){.game-layout{grid-template-columns:minmax(0,1fr)}.sidebar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.feed-panel{grid-column:1 / -1}.event-feed{max-height:130px}.canvas-wrap canvas{height:clamp(360px,60vw,540px)}}@media(max-width:540px){.app-shell{padding:13px 9px}.topbar{align-items:flex-start;flex-wrap:wrap;margin-bottom:12px}.identity h1{font-size:22px}.eyebrow{font-size:8px}.brand-mark{width:39px;height:39px}.top-actions{width:100%;justify-content:space-between}.sim-clock{padding-left:2px}.sim-clock strong{font-size:14px}.action-btn{padding:9px 11px}.arena-head{padding:12px 10px;align-items:flex-start;flex-wrap:wrap;gap:7px}.arena-title{font-size:15px}.online{margin-left:5px;font-size:8px}.arena-actions{margin-left:auto}.canvas-wrap canvas{height:390px}.canvas-overlay{font-size:9px}.bottom-left{display:none}.mission-strip{font-size:10px;padding:11px}.mission-right{display:none}.flight-controls{padding:12px}.control-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}.thruster,.fire-button{min-height:76px;border-radius:7px;padding:2px}.thruster b,.fire-button b{font-size:21px}.thruster strong,.fire-button strong{font-size:8px;letter-spacing:0}.thruster small,.fire-button small{font-size:10px}.control-description small{font-size:10px}.sidebar{gap:8px}.panel{padding:12px}.panel-heading{font-size:9px;letter-spacing:.4px}.ship-name{font-size:15px;gap:5px}.ship-glyph{width:30px;height:30px;font-size:22px}.small-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:1px}.small-stats span{font-size:8px}.small-stats strong{font-size:13px}.metric-row{font-size:11px}.metric-row strong{font-size:11px}.mini-note{font-size:9px}.upgrade-entry{flex-wrap:wrap}.buy-btn{width:100%}.footer-note span{display:none}}@media(max-width:355px){.sidebar{grid-template-columns:1fr}.feed-panel{grid-column:auto}.thruster strong{font-size:7px}.top-actions{gap:5px}}
+
+  </style>
+
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="identity">
+        <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
+        <div><div class="eyebrow">PHYSICS SANDBOX • PROTOTYPE 0.1</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+      </div>
+      <div class="top-actions">
+        <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">MISSION TIME</span><strong id="sim-clock">00:00</strong></div></div>
+        <label class="speed-label">Speed <select id="sim-speed" aria-label="Simulation speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+        <button id="pause-btn" class="action-btn">Ⅱ Pause</button>
+        <button id="reset-btn" class="action-btn muted">↻ Reset</button>
+      </div>
+    </header>
+
+    <main class="game-layout">
+      <section class="arena-shell" aria-label="Orbital gameplay area">
+        <div class="arena-head">
+          <div><span class="section-kicker">SECTOR 01</span><div class="arena-title">Kestrel gravity well <span class="online"><span class="dot live"></span> LIVE PHYSICS</span></div></div>
+          <div class="arena-actions"><button id="orbit-btn" class="small-btn selected" aria-pressed="true">◌ Trajectory</button><button id="zoom-out" class="small-btn" aria-label="Zoom out">−</button><span id="zoom-level" class="zoom-text">1.0×</span><button id="zoom-in" class="small-btn" aria-label="Zoom in">+</button></div>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat."></canvas>
+          <div class="canvas-overlay top-left"><span class="tiny-dot blue"></span><span id="target-indicator">TRACKING: RAIDER-01</span></div>
+          <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W/S</span> tangent <span class="keyboard-tag">A/D</span> radial <span class="keyboard-tag">SPACE</span> fire</div>
+          <div id="game-over" class="game-over hidden" role="alertdialog" aria-modal="false" aria-labelledby="game-over-title"><span class="failure-mark">✕</span><h2 id="game-over-title">SHIP LOST</h2><p id="game-over-details">Your orbit ended.</p><button id="retry-btn" class="primary-btn">Try again ↻</button></div>
+        </div>
+        <div class="mission-strip"><span class="objective-icon">◎</span><span><strong>OBJECTIVE</strong> · Stay in orbit. Outmaneuver raiders. Collect salvage.</span><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
+        <section class="flight-controls" aria-label="Spacecraft flight controls">
+          <div class="control-description"><strong>MANEUVER</strong><small>Hold to fire thrusters · fuel only burns when thrusting</small></div>
+          <div class="control-grid">
+            <button type="button" data-thrust="prograde" class="thruster" aria-label="Hold for prograde thrust"><b>↑</b><strong>PROGRADE</strong><small>W</small></button>
+            <button type="button" data-thrust="retrograde" class="thruster" aria-label="Hold for retrograde thrust"><b>↓</b><strong>RETROGRADE</strong><small>S</small></button>
+            <button type="button" data-thrust="inward" class="thruster" aria-label="Hold for inward radial thrust"><b>↙</b><strong>RADIAL IN</strong><small>A</small></button>
+            <button type="button" data-thrust="outward" class="thruster" aria-label="Hold for outward radial thrust"><b>↗</b><strong>RADIAL OUT</strong><small>D</small></button>
+            <button type="button" id="fire-btn" class="fire-button" aria-label="Fire at selected target"><b>⌖</b><strong>FIRE</strong><small>SPACE</small></button>
+          </div>
+          <div class="control-note">Click or tap a hostile ship to target it. Click empty space to aim manually. <button id="lock-btn" type="button">Auto-target nearest ↗</button></div>
+        </section>
+      </section>
+
+      <aside class="sidebar" aria-label="Spacecraft instruments">
+        <section class="panel ship-panel">
+          <div class="panel-heading"><span>YOUR SHIP</span><span class="ship-class">SCOUT / MK-I</span></div>
+          <div class="ship-name"><span class="ship-glyph">△</span><span>KESTREL-7<small id="status-text">Nominal orbit</small></span></div>
+          <div class="meter-title"><span>HULL INTEGRITY</span><b id="hull-value">100%</b></div><div class="meter"><div id="hull-bar" class="meter-fill green" style="width:100%"></div></div>
+          <div class="meter-title"><span>PROPELLANT</span><b id="fuel-value">100 / 100</b></div><div class="meter"><div id="fuel-bar" class="meter-fill cyan" style="width:100%"></div></div>
+          <div class="small-stats"><div><span>AMMO</span><strong id="ammo-value">36</strong></div><div><span>CREDITS</span><strong id="credits-value">0 <i>¤</i></strong></div><div><span>ΔV BUDGET</span><strong id="dv-value">—</strong></div></div>
+        </section>
+        <section class="panel instruments">
+          <div class="panel-heading"><span>ORBITAL TELEMETRY</span><span class="status-pill">NEWTONIAN</span></div>
+          <div class="metric-row"><span>Altitude</span><strong id="alt-value">—</strong></div>
+          <div class="metric-row"><span>Speed</span><strong id="speed-value">—</strong></div>
+          <div class="metric-row"><span>Periapsis</span><strong id="peri-value">—</strong></div>
+          <div class="metric-row"><span>Apoapsis</span><strong id="apo-value">—</strong></div>
+          <div class="metric-row"><span>Orbit period</span><strong id="period-value">—</strong></div>
+          <div class="metric-row"><span>Predicted path</span><strong id="path-status">SAFE</strong></div>
+          <div class="mini-note">Distances and times are scaled simulation units. Orbital dynamics follow inverse-square gravity.</div>
+        </section>
+        <section class="panel targeting">
+          <div class="panel-heading"><span>TARGET ACQUISITION</span><span id="target-state" class="status-pill hostile">HOSTILE</span></div>
+          <div class="target-name" id="target-name">RAIDER-01</div>
+          <div class="metric-row"><span>Range</span><strong id="range-value">—</strong></div>
+          <div class="metric-row"><span>Hull</span><strong id="target-hull">—</strong></div>
+          <div class="metric-row"><span>Weapon</span><strong>Ballistic rounds</strong></div>
+          <button id="next-target" class="wide-subtle-btn">Next target ↗</button>
+        </section>
+        <section class="panel upgrades">
+          <div class="panel-heading"><span>UPGRADES</span><span>FIELD MARKET</span></div>
+          <div class="upgrade-entry"><div><strong>Predictive fire control</strong><small>Solves a lead shot using projected target motion.</small><span id="upgrade-status">40 ¤</span></div><button id="upgrade-btn" class="buy-btn">BUY</button></div>
+        </section>
+        <section class="panel feed-panel"><div class="panel-heading"><span>COMMS & EVENTS</span><span class="live-label">●</span></div><div id="event-feed" class="event-feed" aria-live="polite"></div></section>
+      </aside>
+    </main>
+    <footer class="footer-note">Orbital Outlaws · Prototype 0.1 <span>Numerical Newtonian gravity · finite thrust & fuel · ballistic projectiles</span></footer>
+  </div>
+  <script>
+/**
+ * ORBITAL OUTLAWS 0.1
+ * One central body, Newtonian inverse-square gravity, kick-drift-kick (velocity Verlet).
+ * World distances and seconds are intentionally game-scaled to keep orbits playable.
+ * All ships, floating salvage and ballistic projectiles share the same gravity solver.
+ * No propulsion is needed to remain in a stable orbit.
+ */
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const canvas = $('orbit-canvas');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const WORLD = Object.freeze({ mu: 310000, radius: 85, crashRadius: 91, outerRadius: 1200, projectileSpeed: 205 });
+  const TWO_PI = Math.PI * 2;
+  const palette = { cyan: '#62d9f6', green:'#67e0aa', red:'#ff7184', yellow:'#edbe6b', purple:'#bd9efa' };
+  let W = 840, H = 550, dpr = 1;
+  let state;
+  let lastFrame = performance.now(), accumulator = 0, nextHud = 0;
+  let lastFrameId;
+  let starfield = [];
+
+  const vec = (x,y) => ({x,y});
+  const magnitude = (x,y) => Math.hypot(x,y);
+  const clamp = (x,a,b) => Math.max(a, Math.min(b,x));
+  const rand = (min,max) => min + Math.random()*(max-min);
+  function circularPosition(r, theta, clockwise=false) {
+    const s = Math.sqrt(WORLD.mu / r)*(clockwise?-1:1);
+    return {x:r*Math.cos(theta), y:r*Math.sin(theta), vx:-s*Math.sin(theta), vy:s*Math.cos(theta)};
+  }
+  function newShip(id, name, r, theta, color, isPlayer=false) {
+    return {...circularPosition(r,theta), id,name,color, isPlayer, hp:isPlayer?100:66, fuel:isPlayer?100:rand(70,100), fuelMax:isPlayer?100:100,
+      ammo:isPlayer?36:999, credits:0, thrustAccel:isPlayer?14:9.5, fuelRate:isPlayer?7.2:4.4,
+      gunCooldown: isPlayer?0:rand(2.2,4), aiThrustUntil:0, aiThrustKind:null, nextDecision:rand(4,9),
+      trail:[], trailT:0, alive:true, heading:0, thrustVector:null, shotCount:0 };
+  }
+  function newPickup(r, angle, type='fuel', amount=25) {
+    return {...circularPosition(r,angle), id:'pod-'+Math.random().toString(36).slice(2,8), type, amount,
+      phase:rand(0,TWO_PI), age:0, alive:true};
+  }
+  function logEvent(message, category='neutral') {
+    state.events.unshift({t:state.t, message, category});
+    if(state.events.length>7) state.events.length=7;
+    $('event-feed').innerHTML = state.events.map(e => {
+      const min = Math.floor(e.t/60).toString().padStart(2,'0');
+      const sec = Math.floor(e.t%60).toString().padStart(2,'0');
+      return `<div class="event-entry ${e.category}"><time>${min}:${sec}</time><span>${escapeHtml(e.message)}</span></div>`;
+    }).join('');
+  }
+  function escapeHtml(str) { return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+  function reset() {
+    const player = newShip('player','KESTREL-7',260,-0.67,palette.cyan,true);
+    const e1 = newShip('raider-01','RAIDER-01',280,0.17,palette.red);
+    const e2 = newShip('raider-02','RAIDER-02',323,-2.02,palette.purple);
+    state = {t:0, player, enemies:[e1,e2], shots:[], pickups:[
+      newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30)
+    ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
+    orbitVisible:true, predictive:false, ended:false, paused:false, speed:1, nextEnemySpawn:75,
+    playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false};
+    lastFrame = performance.now(); accumulator=0;
+    document.querySelectorAll('[data-thrust]').forEach(btn=>btn.classList.remove('pressed'));
+    $('fire-btn').classList.remove('pressed');
+    $('game-over').classList.add('hidden');
+    $('sim-speed').value='1';$('pause-btn').textContent='Ⅱ Pause';
+    $('orbit-btn').classList.add('selected');$('orbit-btn').setAttribute('aria-pressed','true');
+    updateZoom();
+    logEvent('Circular orbit established · no fuel needed to coast.','good');
+    logEvent('Two pirate ships detected in sector.','danger');
+    logEvent('Use RETROGRADE to enter a faster, lower orbit.');
+    computePrediction();updateHud();
+  }
+  function accel(x,y) {
+    const r2 = Math.max(x*x+y*y, 10);
+    const f = -WORLD.mu / (r2 * Math.sqrt(r2));
+    return {x:x*f,y:y*f};
+  }
+  function stepBody(body, dt, extra=null) {
+    const a = accel(body.x,body.y);
+    const ax = a.x + (extra?.x || 0), ay = a.y + (extra?.y || 0);
+    const halfVx = body.vx + .5*dt*ax, halfVy = body.vy + .5*dt*ay;
+    body.x += halfVx*dt; body.y += halfVy*dt;
+    const a2 = accel(body.x,body.y);
+    body.vx = halfVx + .5*dt*(a2.x + (extra?.x || 0));
+    body.vy = halfVy + .5*dt*(a2.y + (extra?.y || 0));
+  }
+  function unit(x,y) {const m=magnitude(x,y)||1;return {x:x/m,y:y/m};}
+  function thrustVector(ship, pressed) {
+    if (!ship.fuel || pressed.length===0) return null;
+    const radial=unit(ship.x,ship.y), forward=unit(ship.vx,ship.vy);
+    let dx=0, dy=0;
+    for(const kind of pressed) {
+      if(kind==='prograde') {dx+=forward.x;dy+=forward.y;}
+      if(kind==='retrograde') {dx-=forward.x;dy-=forward.y;}
+      if(kind==='outward') {dx+=radial.x;dy+=radial.y;}
+      if(kind==='inward') {dx-=radial.x;dy-=radial.y;}
+    }
+    if(magnitude(dx,dy)<.01) return null;
+    const dir=unit(dx,dy);
+    return {x:dir.x*ship.thrustAccel,y:dir.y*ship.thrustAccel};
+  }
+  function applyShipStep(ship, dt, pressed) {
+    if(!ship.alive) return;
+    const extra=thrustVector(ship, pressed);
+    ship.thrustVector=extra;
+    if(extra) ship.fuel=Math.max(0,ship.fuel-dt*ship.fuelRate);
+    stepBody(ship,dt,extra);
+    ship.gunCooldown=Math.max(0,ship.gunCooldown-dt);
+    ship.trailT+=dt;
+    if(ship.trailT>.16) {ship.trail.push({x:ship.x,y:ship.y});if(ship.trail.length>120)ship.trail.shift();ship.trailT=0;}
+    if(magnitude(ship.x,ship.y)<WORLD.crashRadius) {
+      if(ship.isPlayer) endGame('Your spacecraft intersected the surface of Kestrel.');
+      else destroyEnemy(ship,'fell into the gravity well');
+    }
+    if(ship.isPlayer && magnitude(ship.x,ship.y)>WORLD.outerRadius) endGame('Your spacecraft escaped the playable sector.');
+    if(ship.isPlayer && ship.hp<=0) endGame('Hostile fire destroyed your spacecraft.');
+  }
+  function step(dt) {
+    if(state.ended)return;
+    state.t+=dt;
+    const player=state.player;
+    const pressed = ['prograde','retrograde','inward','outward'].filter(k=>state.down.has(k));
+    applyShipStep(player,dt,pressed);
+    if(state.ended)return;
+    for(const enemy of state.enemies) {
+      if(!enemy.alive)continue;
+      let command=[];
+      if(state.t>enemy.nextDecision) {
+        const r=magnitude(enemy.x,enemy.y);
+        enemy.aiThrustKind = r<165 ? 'prograde' : ['retrograde','prograde','inward','outward',null][Math.floor(rand(0,5))];
+        enemy.aiThrustUntil=state.t+rand(.2,.6);
+        enemy.nextDecision=state.t+rand(6,12);
+      }
+      if(enemy.aiThrustKind && state.t<enemy.aiThrustUntil) command=[enemy.aiThrustKind];
+      applyShipStep(enemy,dt,command);
+      if(!enemy.alive)continue;
+      const d=magnitude(enemy.x-player.x,enemy.y-player.y);
+      if(d<310 && enemy.gunCooldown<=0 && state.t>5) {
+        shoot(enemy,player,true);
+        enemy.gunCooldown=rand(3.7,5.2);
+      }
+    }
+    if(state.down.has('fire')) firePlayer();
+    for(const p of state.pickups) {
+      if(!p.alive) continue;
+      stepBody(p,dt);p.age+=dt;
+      if(magnitude(p.x-player.x,p.y-player.y)<19) collect(p);
+      if(magnitude(p.x,p.y)<WORLD.crashRadius || p.age>190) p.alive=false;
+    }
+    for(const shot of state.shots) {
+      if(!shot.alive)continue;
+      stepBody(shot,dt);shot.age+=dt;
+      if(shot.age>5.2 || magnitude(shot.x,shot.y)<WORLD.crashRadius || magnitude(shot.x,shot.y)>1300) {shot.alive=false;continue;}
+      const targets=shot.fromPlayer?state.enemies:[player];
+      for(const target of targets) {
+        if(!target.alive)continue;
+        if(magnitude(shot.x-target.x,shot.y-target.y)<14) {
+          shot.alive=false; target.hp=Math.max(0,target.hp-(shot.fromPlayer?26:10));
+          sparks(shot.x,shot.y,shot.fromPlayer?palette.red:palette.cyan,9);
+          if(target.hp<=0) {
+            if(target.isPlayer)endGame('Hostile projectile destroyed your spacecraft.');
+            else destroyEnemy(target,'destroyed by Kestrel-7');
+          } else if(target.isPlayer && (state.t-(target.lastHitLog||0))>2.3) {
+            logEvent('Hull impact! Integrity '+Math.ceil(target.hp)+'%.','danger');target.lastHitLog=state.t;
+          }
+          break;
+        }
+      }
+    }
+    for(const part of state.particles){part.x+=part.vx*dt;part.y+=part.vy*dt;part.life-=dt;}
+    state.shots=state.shots.filter(s=>s.alive);
+    state.pickups=state.pickups.filter(p=>p.alive);
+    state.particles=state.particles.filter(p=>p.life>0);
+    if(state.t>state.nextEnemySpawn) {
+      const alive = state.enemies.filter(e=>e.alive).length;
+      if(alive<2){spawnEnemy();}
+      state.nextEnemySpawn=state.t+rand(35,55);
+    }
+  }
+  function spawnEnemy() {
+    const r=rand(240,370),angle=rand(-Math.PI,Math.PI);
+    const id='raider-'+Math.random().toString(36).slice(2,7);
+    const bot = newShip(id,'RAIDER-'+String(Math.floor(rand(10,99))),r,angle,palette.red);
+    state.enemies.push(bot);logEvent('New pirate contact: '+bot.name,'danger');
+  }
+  function destroyEnemy(enemy,reason) {
+    if(!enemy.alive)return;
+    enemy.alive=false; enemy.hp=0;sparks(enemy.x,enemy.y,palette.red,22);
+    state.pickups.push({x:enemy.x,y:enemy.y,vx:enemy.vx,vy:enemy.vy,id:'wreck-'+enemy.id,type:'wreck',amount:1,age:0,phase:0,alive:true});
+    if(reason==='destroyed by Kestrel-7'){state.playerKills++;logEvent(enemy.name+' destroyed. Salvage the wreck.','good');}
+    else logEvent(enemy.name+' '+reason+'.');
+    const survivors=state.enemies.filter(e=>e.alive);
+    if(state.targetId===enemy.id)state.targetId=survivors.length?survivors[0].id:null;
+  }
+  function collect(pod) {
+    pod.alive=false;
+    const p=state.player;
+    if(pod.type==='fuel') {p.fuel=Math.min(p.fuelMax,p.fuel+pod.amount);logEvent('Recovered '+pod.amount+' units of fuel.','good');}
+    if(pod.type==='ammo') {p.ammo+=pod.amount;logEvent('Recovered '+pod.amount+' ballistic rounds.','good');}
+    if(pod.type==='credits') {p.credits+=pod.amount;logEvent('Recovered '+pod.amount+' salvage credits.','good');}
+    if(pod.type==='wreck') {p.credits+=50;p.ammo+=12;p.fuel=Math.min(p.fuelMax,p.fuel+25);logEvent('Wreck salvaged: +50 ¤, +25 fuel, +12 ammo.','good');}
+    sparks(pod.x,pod.y,palette.green,12);
+  }
+  function sparks(x,y,color,n) {
+    for(let i=0;i<n;i++){const a=rand(0,TWO_PI),v=rand(6,45);state.particles.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,color,life:rand(.35,1),maxLife:1});}
+    if(state.particles.length>200)state.particles.splice(0,state.particles.length-200);
+  }
+  function aliveTarget() {return state.enemies.find(e=>e.id===state.targetId && e.alive)||null;}
+  function selectNextTarget() {
+    const targets=state.enemies.filter(e=>e.alive);
+    if(!targets.length){state.targetId=null;state.aimMode='manual';return;}
+    const index=targets.findIndex(e=>e.id===state.targetId);
+    state.targetId=targets[(index+1)%targets.length].id;
+    state.aimMode='locked';logEvent('Tracking '+aliveTarget().name+'.');
+  }
+  function lockNearest() {
+    let nearest=null, dist=Infinity;
+    for(const e of state.enemies)if(e.alive){const d=magnitude(e.x-state.player.x,e.y-state.player.y);if(d<dist){nearest=e;dist=d;}}
+    if(nearest){state.targetId=nearest.id;state.aimMode='locked';logEvent('Locked nearest contact: '+nearest.name+'.');}
+    else logEvent('No living targets in range.');
+  }
+  // Predict intercept by iterating a target's free orbital motion, the shooter's
+  // existing velocity and approximate projectile gravity over a short flight.
+  function leadAim(shooter, target) {
+    const speed=WORLD.projectileSpeed;
+    let t=magnitude(target.x-shooter.x,target.y-shooter.y)/speed;
+    const g=accel(shooter.x,shooter.y);
+    let direction=unit(target.x-shooter.x,target.y-shooter.y);
+    for(let i=0;i<5;i++) {
+      const predicted={x:target.x,y:target.y,vx:target.vx,vy:target.vy};
+      const sub=Math.max(1,Math.ceil(t/.07)),d=t/sub;
+      for(let j=0;j<sub;j++)stepBody(predicted,d);
+      const dx=predicted.x-shooter.x-shooter.vx*t-.5*g.x*t*t;
+      const dy=predicted.y-shooter.y-shooter.vy*t-.5*g.y*t*t;
+      direction=unit(dx,dy);
+      const required=magnitude(dx,dy);
+      t=clamp(required/speed,.03,5);
+    }
+    return direction;
+  }
+  function shoot(shooter,target,isEnemy=false) {
+    if(!shooter.alive || shooter.gunCooldown>0)return;
+    if(shooter.isPlayer && shooter.ammo<=0){if(state.t-(shooter.lastOutOfAmmo||0)>3){logEvent('Ammo depleted. Search for salvage.','danger');shooter.lastOutOfAmmo=state.t;}return;}
+    let aim;
+    if(!isEnemy && state.aimMode==='manual' && state.mouseTarget) aim=unit(state.mouseTarget.x-shooter.x,state.mouseTarget.y-shooter.y);
+    else if(target && target.alive) aim=state.predictive||isEnemy?leadAim(shooter,target):unit(target.x-shooter.x,target.y-shooter.y);
+    else aim=unit(shooter.vx,shooter.vy);
+    if(isEnemy){const theta=rand(-.045,.045);const c=Math.cos(theta),s=Math.sin(theta);aim={x:aim.x*c-aim.y*s,y:aim.x*s+aim.y*c};}
+    const gun= {x:shooter.x+aim.x*12, y:shooter.y+aim.y*12,
+      vx:shooter.vx+WORLD.projectileSpeed*aim.x,vy:shooter.vy+WORLD.projectileSpeed*aim.y,
+      fromPlayer:!isEnemy,alive:true,age:0};
+    state.shots.push(gun);
+    shooter.gunCooldown=isEnemy?rand(2.4,3.6):.27;
+    if(shooter.isPlayer){shooter.ammo--;shooter.shotCount++;}
+    sparks(gun.x,gun.y, isEnemy?palette.red:palette.cyan,2);
+  }
+  function firePlayer(){if(!state.ended)shoot(state.player,aliveTarget());}
+  function endGame(reason) {
+    if(state.ended)return;
+    state.ended=true;state.paused=true;state.down.clear();
+    $('game-over-details').textContent=`${reason} Survived ${formatTime(state.t)}. Raider kills: ${state.playerKills}.`;
+    $('game-over').classList.remove('hidden');
+    $('pause-btn').textContent='Ⅱ Pause';logEvent('MISSION FAILED: '+reason,'danger');
+  }
+  function orbitalElements(b){
+    const r=magnitude(b.x,b.y),v2=b.vx*b.vx+b.vy*b.vy,h=b.x*b.vy-b.y*b.vx,eps=v2/2-WORLD.mu/r;
+    const e=Math.sqrt(Math.max(0,1+2*eps*h*h/(WORLD.mu*WORLD.mu)));
+    const rp=h*h/(WORLD.mu*(1+e));
+    const ra=e<1? h*h/(WORLD.mu*(1-e)) : Infinity;
+    const a=eps<0?-WORLD.mu/(2*eps):Infinity;
+    const period=isFinite(a)?TWO_PI*Math.sqrt(a*a*a/WORLD.mu):Infinity;
+    return {r,v:Math.sqrt(v2),e,rp,ra,period};
+  }
+  function computePrediction(){
+    const b=state.player, ghost={x:b.x,y:b.y,vx:b.vx,vy:b.vy},out=[];
+    let dangerous=false;
+    for(let i=0;i<580;i++) {
+      stepBody(ghost,.22);out.push({x:ghost.x,y:ghost.y});
+      const r=magnitude(ghost.x,ghost.y);
+      if(r<WORLD.crashRadius){dangerous=true;break;}
+      if(r>1400) break;
+    }
+    state.predicted=out;state.dangerPrediction=dangerous;state.lastPrediction=state.t;
+  }
+  function formatTime(t){const sec=Math.floor(t);return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;}
+  function updateHud() {
+    const p=state.player;const e=orbitalElements(p);
+    $('sim-clock').textContent=formatTime(state.t);
+    $('hull-value').textContent=Math.round(p.hp)+'%';$('hull-bar').style.width=clamp(p.hp,0,100)+'%';
+    $('fuel-value').textContent=`${Math.ceil(p.fuel)} / ${p.fuelMax}`;$('fuel-bar').style.width=(100*p.fuel/p.fuelMax)+'%';
+    $('ammo-value').textContent=p.ammo;
+    $('credits-value').innerHTML=p.credits+' <i>¤</i>';
+    $('dv-value').textContent=(p.fuel/p.fuelRate*p.thrustAccel).toFixed(0)+' u/s';
+    $('alt-value').textContent=(e.r-WORLD.radius).toFixed(1)+' u';
+    $('speed-value').textContent=e.v.toFixed(1)+' u/s';
+    $('peri-value').textContent=Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' u':'—';
+    $('apo-value').textContent=Number.isFinite(e.ra)?Math.max(0,e.ra-WORLD.radius).toFixed(1)+' u':'ESCAPE';
+    $('period-value').textContent=Number.isFinite(e.period)?e.period.toFixed(1)+' s':'UNBOUND';
+    $('path-status').textContent=state.dangerPrediction?'IMPACT':e.e>=1?'UNBOUND':'BOUND';
+    $('path-status').style.color=state.dangerPrediction?palette.red:e.e>=1?palette.yellow:palette.green;
+    $('status-text').textContent=state.ended?'Spacecraft lost':p.thrustVector?'Thrusters active':e.e>=1?'Escape trajectory':'Coasting (no fuel burn)';
+    $('status-text').style.color=state.ended?palette.red:p.thrustVector?palette.yellow:palette.green;
+    const target=aliveTarget();
+    $('target-name').textContent=state.aimMode==='manual'?'MANUAL AIM':target?target.name:'NO CONTACT';
+    $('target-state').textContent=state.aimMode==='manual'?'FREE AIM':target?'HOSTILE':'SCANNING';
+    $('range-value').textContent=target?magnitude(target.x-p.x,target.y-p.y).toFixed(1)+' u':'—';
+    $('target-hull').textContent=target?Math.ceil(target.hp)+' / 66':'—';
+    $('target-indicator').textContent=state.aimMode==='manual'?'AIM MODE: MANUAL':target?'TRACKING: '+target.name:'NO TARGET';
+    $('mission-status').textContent=state.enemies.filter(ship=>ship.alive).length+' hostiles in sector';
+    $('upgrade-status').textContent=state.predictive?'Installed · lead shot active':'40 ¤';
+    $('upgrade-btn').textContent=state.predictive?'OWNED':'BUY';
+    $('upgrade-btn').disabled=state.predictive||p.credits<40||state.ended;
+  }
+  function updateZoom(){$('zoom-level').textContent=state.zoom.toFixed(1)+'×';}
+  function fitCanvas(){
+    const bounds=canvas.getBoundingClientRect();
+    W=Math.max(200, bounds.width);H=Math.max(200,bounds.height);
+    dpr=Math.min(window.devicePixelRatio||1,2);
+    canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    starfield=[];
+    for(let i=0;i<150;i++)starfield.push({x:Math.random()*W,y:Math.random()*H,size:rand(.3,1.3),alpha:rand(.12,.55)});
+  }
+  function scale(){return Math.min(W/700,H/660)*state.zoom;}
+  function toScreen(x,y){const s=scale();return {x:W/2 + x*s,y:H/2+y*s};}
+  function fromScreen(x,y){const s=scale();return {x:(x-W/2)/s,y:(y-H/2)/s};}
+  function pathWorld(points,stroke,lineWidth=1,dash=[]) {
+    if(points.length<2)return;
+    ctx.save();ctx.beginPath();const first=toScreen(points[0].x,points[0].y);ctx.moveTo(first.x,first.y);
+    for(let i=1;i<points.length;i++){const p=toScreen(points[i].x,points[i].y);ctx.lineTo(p.x,p.y);}
+    ctx.strokeStyle=stroke;ctx.lineWidth=lineWidth;ctx.setLineDash(dash);ctx.stroke();ctx.restore();
+  }
+  function drawBackground(){
+    ctx.fillStyle='#06101b';ctx.fillRect(0,0,W,H);
+    const g=ctx.createRadialGradient(W/2,H/2,20,W/2,H/2,Math.max(W,H)*.75);
+    g.addColorStop(0,'#11283b');g.addColorStop(.5,'#0a1a2b');g.addColorStop(1,'#060e18');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    for(const star of starfield){ctx.fillStyle=`rgba(178,209,229,${star.alpha})`;ctx.fillRect(star.x,star.y,star.size,star.size);}
+    ctx.save();ctx.lineWidth=1;const center=toScreen(0,0);const s=scale();
+    ctx.strokeStyle='#183149';ctx.setLineDash([3,7]);
+    for(let r=150;r<=1050;r+=100){ctx.beginPath();ctx.ellipse(center.x,center.y,r*s,r*s,0,0,TWO_PI);ctx.stroke();
+      if(r<=550){ctx.fillStyle='#54778e';ctx.font='10px monospace';ctx.fillText(r+'u',center.x+r*s+4,center.y-4);}}
+    ctx.setLineDash([]);ctx.strokeStyle='#25445c';ctx.beginPath();ctx.moveTo(0,center.y);ctx.lineTo(W,center.y);ctx.moveTo(center.x,0);ctx.lineTo(center.x,H);ctx.stroke();ctx.restore();
+    drawCentralBody(center.x,center.y,s);
+  }
+  function drawCentralBody(x,y,s){
+    const R=WORLD.radius*s;
+    ctx.save();
+    let halo=ctx.createRadialGradient(x,y,R*.1,x,y,R*2.65);
+    halo.addColorStop(0,'rgba(255,173,87,.35)');halo.addColorStop(.55,'rgba(250,142,64,.10)');halo.addColorStop(1,'rgba(250,142,64,0)');
+    ctx.beginPath();ctx.arc(x,y,R*2.65,0,TWO_PI);ctx.fillStyle=halo;ctx.fill();
+    ctx.beginPath();ctx.arc(x,y,WORLD.crashRadius*s,0,TWO_PI);ctx.strokeStyle='#ed765355';ctx.setLineDash([4,6]);ctx.lineWidth=1.4;ctx.stroke();ctx.setLineDash([]);
+    const planet=ctx.createRadialGradient(x-R*.4,y-R*.35,R*.1,x,y,R*1.1);
+    planet.addColorStop(0,'#f6c17a');planet.addColorStop(.32,'#cf8750');planet.addColorStop(.77,'#724d46');planet.addColorStop(1,'#2a2a3a');
+    ctx.beginPath();ctx.arc(x,y,R,0,TWO_PI);ctx.fillStyle=planet;ctx.fill();ctx.strokeStyle='#d3a771';ctx.lineWidth=1;ctx.stroke();
+    ctx.translate(x,y);ctx.rotate(-.35);
+    for(let j=0;j<4;j++){ctx.beginPath();ctx.ellipse(0,R*(-.5+j*.33),R*.84,R*.075,.06*j,0,TWO_PI);ctx.strokeStyle=`rgba(61,35,43,${.13+.07*j})`;ctx.lineWidth=Math.max(1,R*.1);ctx.stroke();}
+    ctx.restore();
+    ctx.fillStyle='#dda96e';ctx.font='11px ui-monospace,monospace';ctx.textAlign='center';ctx.fillText('KESTREL',x,y+R+20);ctx.textAlign='left';
+  }
+  function drawTrails(){
+    if(state.orbitVisible){pathWorld(state.predicted, state.dangerPrediction?'rgba(255,113,132,.72)':'rgba(98,217,246,.63)',1.7,[5,5]);}
+    for(const e of [...state.enemies,state.player])if(e.alive)pathWorld(e.trail,e.isPlayer?'#62d9f654':'#ff718433',1.5);
+  }
+  function drawShip(ship){
+    if(!ship.alive)return;
+    const p=toScreen(ship.x,ship.y),s=Math.max(.67,Math.min(1.2,scale()*1.6));
+    const aim = ship.isPlayer? (state.aimMode==='manual'&&state.mouseTarget?unit(state.mouseTarget.x-ship.x,state.mouseTarget.y-ship.y):aliveTarget()?unit(aliveTarget().x-ship.x,aliveTarget().y-ship.y):unit(ship.vx,ship.vy)) : unit(ship.vx,ship.vy);
+    const a=Math.atan2(aim.y,aim.x)+Math.PI/2;
+    ctx.save();ctx.translate(p.x,p.y);ctx.rotate(a);ctx.scale(s,s);
+    if(ship.thrustVector){const tv=ship.thrustVector;const flame=unit(-tv.x,-tv.y); const ang=Math.atan2(flame.y,flame.x)-a;
+      ctx.save();ctx.rotate(ang);ctx.fillStyle=ship.isPlayer?'#72d9ef':'#ec956c';ctx.beginPath();ctx.moveTo(0,-4);ctx.lineTo(21+Math.sin(state.t*40)*6,0);ctx.lineTo(0,4);ctx.fill();ctx.restore();}
+    ctx.fillStyle='#0a1f30';ctx.strokeStyle=ship.color;ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(0,-12);ctx.lineTo(9,10);ctx.lineTo(0,5);ctx.lineTo(-9,10);ctx.closePath();ctx.fill();ctx.stroke();
+    ctx.fillStyle=ship.color;ctx.beginPath();ctx.arc(0,1,2.5,0,TWO_PI);ctx.fill();ctx.restore();
+    if(!ship.isPlayer){ctx.font='10px system-ui';ctx.fillStyle=ship.color;ctx.fillText(ship.name,p.x+13,p.y-12);ctx.fillStyle='#254052';ctx.fillRect(p.x+13,p.y-7,48,3);ctx.fillStyle=ship.color;ctx.fillRect(p.x+13,p.y-7,48*(ship.hp/66),3);}
+    if(ship.isPlayer){ctx.save();ctx.strokeStyle=palette.cyan;ctx.globalAlpha=.4;ctx.setLineDash([4,6]);ctx.beginPath();ctx.arc(p.x,p.y,19,0,TWO_PI);ctx.stroke();ctx.restore();}
+  }
+  function drawPickup(pod){const p=toScreen(pod.x,pod.y),s=clamp(scale(),.5,1.25),size=6*s+2;
+    const color=pod.type==='fuel'?palette.green:pod.type==='ammo'?palette.purple:pod.type==='wreck'?palette.red:palette.yellow;
+    ctx.save();ctx.translate(p.x,p.y);ctx.rotate(state.t*.4+pod.phase);ctx.strokeStyle=color;ctx.lineWidth=1.6;ctx.fillStyle='#102334';ctx.beginPath();ctx.moveTo(0,-size);ctx.lineTo(size,0);ctx.lineTo(0,size);ctx.lineTo(-size,0);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
+    ctx.save();ctx.strokeStyle=color;ctx.globalAlpha=.24+.13*Math.sin(state.t*2+pod.phase);ctx.beginPath();ctx.arc(p.x,p.y,size+6,0,TWO_PI);ctx.stroke();ctx.restore();
+    ctx.fillStyle=color;ctx.font='9px monospace';ctx.fillText(pod.type==='wreck'?'WRECK':pod.type.toUpperCase(),p.x+10,p.y+14);
+  }
+  function drawShots(){for(const s of state.shots){const p=toScreen(s.x,s.y),tail=toScreen(s.x-s.vx*.035,s.y-s.vy*.035);ctx.strokeStyle=s.fromPlayer?palette.cyan:palette.red;ctx.lineWidth=2.6;ctx.beginPath();ctx.moveTo(tail.x,tail.y);ctx.lineTo(p.x,p.y);ctx.stroke();}}
+  function drawParticles(){for(const p of state.particles){const q=toScreen(p.x,p.y);ctx.globalAlpha=clamp(p.life/p.maxLife,0,1);ctx.fillStyle=p.color;ctx.fillRect(q.x,q.y,2.2,2.2);}ctx.globalAlpha=1;}
+  function drawAim(){
+    const p=state.player;if(!p.alive)return;const pos=toScreen(p.x,p.y);let target=null;
+    const enemy=aliveTarget();
+    if(state.aimMode==='manual')target=state.mouseTarget;
+    else if(enemy){if(state.predictive){const d=leadAim(p,enemy);target={x:p.x+d.x*170,y:p.y+d.y*170};} else target={x:enemy.x,y:enemy.y};}
+    if(!target)return;
+    const q=toScreen(target.x,target.y);
+    ctx.save();ctx.setLineDash([4,6]);ctx.strokeStyle=state.predictive?'#67e0aa8a':'#62d9f67a';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pos.x,pos.y);ctx.lineTo(q.x,q.y);ctx.stroke();ctx.setLineDash([]);
+    ctx.strokeStyle=state.predictive?palette.green:palette.cyan;ctx.beginPath();ctx.arc(q.x,q.y,11,0,TWO_PI);ctx.moveTo(q.x-18,q.y);ctx.lineTo(q.x-7,q.y);ctx.moveTo(q.x+7,q.y);ctx.lineTo(q.x+18,q.y);ctx.moveTo(q.x,q.y-18);ctx.lineTo(q.x,q.y-7);ctx.moveTo(q.x,q.y+7);ctx.lineTo(q.x,q.y+18);ctx.stroke();
+    ctx.restore();
+  }
+  function draw(){
+    if(!state)return;ctx.setTransform(dpr,0,0,dpr,0,0);drawBackground();drawTrails();
+    for(const pod of state.pickups)drawPickup(pod);
+    drawShots();for(const e of state.enemies)drawShip(e);drawShip(state.player);drawAim();drawParticles();
+    if(state.paused&&!state.ended){ctx.fillStyle='#0513207f';ctx.fillRect(0,0,W,H);ctx.fillStyle='#e1f2fc';ctx.textAlign='center';ctx.font='bold 25px system-ui';ctx.fillText('PAUSED',W/2,H/2);ctx.textAlign='left';}
+    if(state.ended){ctx.fillStyle='#060e1870';ctx.fillRect(0,0,W,H);}
+  }
+  function frame(now){
+    const realDelta=Math.min(Math.max((now-lastFrame)/1000,0),.06);
+    lastFrame=now;
+    if(state&&!state.paused&&!state.ended){
+      accumulator+=realDelta*state.speed;
+      let steps=0;
+      while(accumulator>=.015 && steps<22){step(.015);accumulator-=.015;steps++;if(state.ended)break;}
+      if(steps>=22)accumulator=0;
+      if(state.t-state.lastPrediction>.22)computePrediction();
+    }
+    if(now>nextHud){updateHud();nextHud=now+130;}
+    draw();lastFrameId=requestAnimationFrame(frame);
+  }
+  function bindControls(){
+    const keyToAction={KeyW:'prograde',ArrowUp:'prograde',KeyS:'retrograde',ArrowDown:'retrograde',KeyA:'inward',ArrowLeft:'inward',KeyD:'outward',ArrowRight:'outward',Space:'fire'};
+    window.addEventListener('keydown',(e)=>{
+      if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName))return;
+      const action=keyToAction[e.code];
+      if(action){e.preventDefault();state.down.add(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.add('pressed'));if(action==='fire')$('fire-btn').classList.add('pressed');}
+      if(e.code==='KeyP'&&!e.repeat){e.preventDefault();togglePause();}
+    });
+    window.addEventListener('keyup',(e)=>{
+      const action=keyToAction[e.code];if(action){e.preventDefault();state.down.delete(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.remove('pressed'));if(action==='fire')$('fire-btn').classList.remove('pressed');}
+    });
+    window.addEventListener('blur',()=>{if(state){state.down.clear();document.querySelectorAll('.pressed').forEach(b=>b.classList.remove('pressed'));}});
+    function hold(button,action){
+      button.addEventListener('pointerdown',e=>{if(state.ended)return;e.preventDefault();state.down.add(action);button.classList.add('pressed');if(button.setPointerCapture)button.setPointerCapture(e.pointerId);});
+      const stop=()=>{state.down.delete(action);button.classList.remove('pressed');};
+      button.addEventListener('pointerup',stop);button.addEventListener('pointercancel',stop);button.addEventListener('lostpointercapture',stop);
+    }
+    document.querySelectorAll('[data-thrust]').forEach(b=>hold(b,b.dataset.thrust));hold($('fire-btn'),'fire');
+    $('pause-btn').addEventListener('click',togglePause);
+    $('reset-btn').addEventListener('click',reset);
+    $('retry-btn').addEventListener('click',reset);
+    $('sim-speed').addEventListener('change',e=>state.speed=clamp(Number(e.target.value)||1,.5,4));
+    $('orbit-btn').addEventListener('click',()=>{
+      state.orbitVisible=!state.orbitVisible;$('orbit-btn').classList.toggle('selected',state.orbitVisible);$('orbit-btn').setAttribute('aria-pressed',String(state.orbitVisible));
+    });
+    $('zoom-in').addEventListener('click',()=>{state.zoom=clamp(state.zoom+.2,.6,2.2);updateZoom();});
+    $('zoom-out').addEventListener('click',()=>{state.zoom=clamp(state.zoom-.2,.6,2.2);updateZoom();});
+    $('next-target').addEventListener('click',selectNextTarget);
+    $('lock-btn').addEventListener('click',lockNearest);
+    $('upgrade-btn').addEventListener('click',()=>{
+      if(state.predictive||state.player.credits<40||state.ended)return;
+      state.player.credits-=40;state.predictive=true;logEvent('Predictive fire control installed.','good');updateHud();
+    });
+    canvas.addEventListener('pointerdown',e=>{
+      if(state.ended)return;
+      const bounds=canvas.getBoundingClientRect(),p=fromScreen(e.clientX-bounds.left,e.clientY-bounds.top);
+      let candidate=null,dist=Infinity;
+      for(const enemy of state.enemies)if(enemy.alive){const d=magnitude(p.x-enemy.x,p.y-enemy.y);if(d<Math.max(25,23/scale())&&d<dist){dist=d;candidate=enemy;}}
+      if(candidate){state.targetId=candidate.id;state.aimMode='locked';logEvent('Target lock: '+candidate.name);}
+      else{state.aimMode='manual';state.mouseTarget=p;logEvent('Manual firing solution selected.');}
+    });
+    window.addEventListener('resize',fitCanvas);
+    if(typeof ResizeObserver!=='undefined'){const ro=new ResizeObserver(fitCanvas);ro.observe(canvas);}
+    document.addEventListener('visibilitychange',()=>{lastFrame=performance.now();accumulator=0;if(document.hidden&&state&&!state.paused&&!state.ended){state.paused=true;$('pause-btn').textContent='▶ Resume';}});
+  }
+  function togglePause(){if(state.ended)return;state.paused=!state.paused;state.down.clear();$('pause-btn').textContent=state.paused?'▶ Resume':'Ⅱ Pause';}
+  bindControls();reset();fitCanvas();lastFrameId=requestAnimationFrame(frame);
+})();
+
+  </script>
+</body>
+</html>
