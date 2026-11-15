@@ -1,5 +1,5 @@
 /**
- * ORBITAL OUTLAWS 0.2
+ * ORBITAL OUTLAWS 0.3
  * One central body, Newtonian inverse-square gravity, kick-drift-kick (velocity Verlet).
  * World distances and seconds are intentionally game-scaled to keep orbits playable.
  * All ships, floating salvage and ballistic projectiles share the same gravity solver.
@@ -17,6 +17,7 @@
   // 1 world distance unit = 1 km; velocities in km/s. Engines are futuristic.
   const ENGINE=Object.freeze({dryKg:900,propellantKg:200,thrustN:1600000,flowKgS:5,rcsN:2500,rcsFlowKgS:.04,leverM:7,shipLengthM:14,gimbalMax:28*Math.PI/180});
   const exhaustKmS=ENGINE.thrustN/ENGINE.flowKgS/1000;
+  const REPAIR=Object.freeze({starterKg:10,capacityKg:24,hpPerKg:5,rateHpS:5});
 
   const palette = { cyan: '#62d9f6', green:'#67e0aa', red:'#ff7184', yellow:'#edbe6b', purple:'#bd9efa' };
   let W = 840, H = 550, dpr = 1;
@@ -38,6 +39,7 @@
     return {...orbit,id,name,color,isPlayer,hp:isPlayer?100:66,
       fuel:isPlayer?ENGINE.propellantKg:rand(120,170),fuelMax:isPlayer?ENGINE.propellantKg:170,
       dryMass:isPlayer?ENGINE.dryKg:1050,ammo:isPlayer?36:999,credits:isPlayer?65:0,
+      repairParts:isPlayer?REPAIR.starterKg:0,
       thrustN:isPlayer?ENGINE.thrustN:1400000,flowKgS:isPlayer?ENGINE.flowKgS:4.8,
       gunCooldown:isPlayer?0:rand(2.2,4),aiThrustUntil:0,aiThrustKind:null,nextDecision:rand(4,9),
       trail:[],trailT:0,alive:true,heading:Math.atan2(orbit.vy,orbit.vx),omega:0,
@@ -62,20 +64,22 @@
     const e1 = newShip('raider-01','RAIDER-01',280,0.17,palette.red);
     const e2 = newShip('raider-02','RAIDER-02',323,-2.02,palette.purple);
     state = {t:0, player, enemies:[e1,e2], shots:[], pickups:[
-      newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30)
+      newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30),newPickup(295,1.1,'parts',8)
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
-    orbitVisible:true, predictive:false, navOwned:false, navPlan:null, autopilot:null, waypoint:null, panX:0,panY:0, pointerThrust:false, ended:false, paused:false, speed:1, nextEnemySpawn:75,
+    orbitVisible:true, predictive:false, navOwned:false, navPlan:null, autopilot:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, paused:false, speed:1, nextEnemySpawn:75,
     playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false};
     lastFrame = performance.now(); accumulator=0;
     document.querySelectorAll('[data-thrust]').forEach(btn=>btn.classList.remove('pressed'));
     $('fire-btn').classList.remove('pressed');
+    $('repair-btn').classList.remove('pressed');
     $('game-over').classList.add('hidden');
     $('sim-speed').value='1';$('pause-btn').textContent='Ⅱ Pause';
     $('orbit-btn').classList.add('selected');$('orbit-btn').setAttribute('aria-pressed','true');
     updateZoom();
     logEvent('Coast is free. Starter grant: 65 ¤ for testing upgrades.','good');
     logEvent('Two pirate ships detected in sector.','danger');
-    logEvent('Rotate with A/D, stop spin with S; aim and hold W or left mouse for main thrust.');
+    logEvent('Rotate A/D, stabilize S, thrust W; left-click targets, SPACE fires.');
+    logEvent('Hold R to repair damage using spare parts (5 HP/kg).');
     updateTargetOptions();
     computePrediction();updateHud();
   }
@@ -95,7 +99,16 @@
   }
   function unit(x,y){const m=magnitude(x,y)||1;return {x:x/m,y:y/m};}
   function normAngle(a){return Math.atan2(Math.sin(a),Math.cos(a));}
-  function mass(ship){return ship.dryMass+ship.fuel;}
+  function mass(ship){return ship.dryMass+ship.fuel+(ship.repairParts||0);}
+  function repairHull(ship,dt){
+    // Deliberately simple field repair: consumes cargo mass, never restores a destroyed ship.
+    if(!ship.alive || ship.hp>=100 || ship.repairParts<=0 || dt<=0)return false;
+    const restored=Math.min(REPAIR.rateHpS*dt,100-ship.hp,ship.repairParts*REPAIR.hpPerKg);
+    if(restored<=0)return false;
+    ship.hp=Math.min(100,ship.hp+restored);
+    ship.repairParts=Math.max(0,ship.repairParts-restored/REPAIR.hpPerKg);
+    return true;
+  }
   function burn(ship,dt,dir,rcs=false){
     if(!dir||ship.fuel<=0)return null;
     const flow=rcs?ENGINE.rcsFlowKgS:ship.flowKgS;
@@ -204,6 +217,7 @@
     const player=state.player;
     applyShipStep(player,dt);
     if(state.ended)return;
+    state.repairing=state.down.has('repair')&&repairHull(player,dt);
     for(const enemy of state.enemies) {
       if(!enemy.alive)continue;
       let command=[];
@@ -282,7 +296,8 @@
     if(pod.type==='fuel') {p.fuel=Math.min(p.fuelMax,p.fuel+pod.amount);logEvent('Recovered '+pod.amount+' kg propellant.','good');}
     if(pod.type==='ammo') {p.ammo+=pod.amount;logEvent('Recovered '+pod.amount+' ballistic rounds.','good');}
     if(pod.type==='credits') {p.credits+=pod.amount;logEvent('Recovered '+pod.amount+' salvage credits.','good');}
-    if(pod.type==='wreck') {p.credits+=50;p.ammo+=12;p.fuel=Math.min(p.fuelMax,p.fuel+25);logEvent('Wreck salvaged: +50 ¤, +25 kg propellant, +12 ammo.','good');}
+    if(pod.type==='parts') {const received=Math.min(pod.amount,REPAIR.capacityKg-p.repairParts);p.repairParts+=received;logEvent(received>0?'Recovered '+received.toFixed(1)+' kg repair materials.':'Repair storage already full.','good');}
+    if(pod.type==='wreck') {p.credits+=50;p.ammo+=12;p.fuel=Math.min(p.fuelMax,p.fuel+25);const parts=Math.min(6,REPAIR.capacityKg-p.repairParts);p.repairParts+=parts;logEvent('Wreck salvaged: +50 ¤, +25 kg propellant, +12 ammo, +'+parts.toFixed(1)+' kg parts.','good');}
     if(state.autopilot?.targetKey==='pickup:'+pod.id){state.autopilot=null;state.navPlan=null;logEvent('Rendezvous complete. Salvage secured!','good');}
     sparks(pod.x,pod.y,palette.green,12);updateTargetOptions();
   }
@@ -462,9 +477,12 @@
     $('sim-clock').textContent=formatTime(state.t);
     $('hull-value').textContent=Math.round(p.hp)+'%';$('hull-bar').style.width=clamp(p.hp,0,100)+'%';
     $('fuel-value').textContent=`${p.fuel.toFixed(1)} / ${p.fuelMax} kg`;$('fuel-bar').style.width=(100*p.fuel/p.fuelMax)+'%';
+    $('repair-parts').textContent=p.repairParts.toFixed(1)+' / '+REPAIR.capacityKg+' kg';
+    $('repair-btn').disabled=state.ended||p.hp>=100||p.repairParts<=.00001;
+    $('repair-btn').textContent=state.repairing?'REPAIRING… (R)':'HOLD R · REPAIR';
     $('ammo-value').textContent=p.ammo;
     $('credits-value').innerHTML=p.credits+' <i>¤</i>';
-    $('dv-value').textContent=(exhaustKmS*Math.log(mass(p)/p.dryMass)).toFixed(1)+' km/s';
+    $('dv-value').textContent=(exhaustKmS*Math.log(mass(p)/(p.dryMass+p.repairParts))).toFixed(1)+' km/s';
     $('alt-value').textContent=(e.r-WORLD.radius).toFixed(1)+' km';
     $('speed-value').textContent=e.v.toFixed(1)+' km/s';
     $('peri-value').textContent=Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' km':'—';
@@ -472,7 +490,7 @@
     $('period-value').textContent=Number.isFinite(e.period)?e.period.toFixed(1)+' s':'UNBOUND';
     $('path-status').textContent=state.dangerPrediction?'IMPACT':e.e>=1?'UNBOUND':'BOUND';
     $('path-status').style.color=state.dangerPrediction?palette.red:e.e>=1?palette.yellow:palette.green;
-    $('status-text').textContent=state.ended?'Spacecraft lost':state.autopilot?'Autopilot '+state.autopilot.phase:p.thrustVector?'Main engine firing':p.rcsFiring?'RCS firing':e.e>=1?'Escape trajectory':'Coasting (fuel conserved)';
+    $('status-text').textContent=state.ended?'Spacecraft lost':state.repairing?'Repairing hull':state.autopilot?'Autopilot '+state.autopilot.phase:p.thrustVector?'Main engine firing':p.rcsFiring?'RCS firing':e.e>=1?'Escape trajectory':'Coasting (fuel conserved)';
     $('status-text').style.color=state.ended?palette.red:p.thrustVector?palette.yellow:palette.green;
     const target=aliveTarget();
     $('target-name').textContent=state.aimMode==='manual'?'MANUAL AIM':target?target.name:'NO CONTACT';
@@ -586,7 +604,7 @@
     if(ship.isPlayer){ctx.save();ctx.strokeStyle=palette.cyan;ctx.globalAlpha=.4;ctx.setLineDash([4,6]);ctx.beginPath();ctx.arc(p.x,p.y,22,0,TWO_PI);ctx.stroke();ctx.restore();}
   }
   function drawPickup(pod){const p=toScreen(pod.x,pod.y),s=clamp(scale(),.5,1.25),size=6*s+2;
-    const color=pod.type==='fuel'?palette.green:pod.type==='ammo'?palette.purple:pod.type==='wreck'?palette.red:palette.yellow;
+    const color=pod.type==='fuel'?palette.green:pod.type==='ammo'?palette.purple:pod.type==='wreck'?palette.red:pod.type==='parts'?palette.cyan:palette.yellow;
     ctx.save();ctx.translate(p.x,p.y);ctx.rotate(state.t*.4+pod.phase);ctx.strokeStyle=color;ctx.lineWidth=1.6;ctx.fillStyle='#102334';ctx.beginPath();ctx.moveTo(0,-size);ctx.lineTo(size,0);ctx.lineTo(0,size);ctx.lineTo(-size,0);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
     ctx.save();ctx.strokeStyle=color;ctx.globalAlpha=.24+.13*Math.sin(state.t*2+pod.phase);ctx.beginPath();ctx.arc(p.x,p.y,size+6,0,TWO_PI);ctx.stroke();ctx.restore();
     ctx.fillStyle=color;ctx.font='9px monospace';ctx.fillText(pod.type==='wreck'?'WRECK':pod.type.toUpperCase(),p.x+10,p.y+14);
@@ -625,24 +643,24 @@
     draw();lastFrameId=requestAnimationFrame(frame);
   }
   function bindControls(){
-    const keyToAction={KeyW:'main',ArrowUp:'main',KeyS:'stabilize',ArrowDown:'stabilize',KeyA:'rotate-left',ArrowLeft:'rotate-left',KeyD:'rotate-right',ArrowRight:'rotate-right',Space:'fire'};
+    const keyToAction={KeyW:'main',ArrowUp:'main',KeyS:'stabilize',ArrowDown:'stabilize',KeyA:'rotate-left',ArrowLeft:'rotate-left',KeyD:'rotate-right',ArrowRight:'rotate-right',KeyR:'repair',Space:'fire'};
     const manual=()=>{if(state.autopilot)abortNav('Manual pilot override.');};
     window.addEventListener('keydown',e=>{
       if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName))return;
       const action=keyToAction[e.code];
-      if(action){e.preventDefault();if(action!=='fire')manual();state.down.add(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.add('pressed'));if(action==='fire')$('fire-btn').classList.add('pressed');}
+      if(action){e.preventDefault();if(action!=='fire'&&action!=='repair')manual();state.down.add(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.add('pressed'));if(action==='fire')$('fire-btn').classList.add('pressed');if(action==='repair')$('repair-btn').classList.add('pressed');}
       if(e.code==='KeyP'&&!e.repeat){e.preventDefault();togglePause();}
     });
     window.addEventListener('keyup',e=>{
-      const action=keyToAction[e.code];if(action){e.preventDefault();state.down.delete(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.remove('pressed'));if(action==='fire')$('fire-btn').classList.remove('pressed');}
+      const action=keyToAction[e.code];if(action){e.preventDefault();state.down.delete(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.remove('pressed'));if(action==='fire')$('fire-btn').classList.remove('pressed');if(action==='repair')$('repair-btn').classList.remove('pressed');}
     });
     window.addEventListener('blur',()=>{if(state){state.down.clear();state.pointerThrust=false;document.querySelectorAll('.pressed').forEach(b=>b.classList.remove('pressed'));}});
     function hold(button,action){
-      button.addEventListener('pointerdown',e=>{if(state.ended)return;e.preventDefault();if(action!=='fire')manual();state.down.add(action);button.classList.add('pressed');if(button.setPointerCapture)button.setPointerCapture(e.pointerId);});
+      button.addEventListener('pointerdown',e=>{if(state.ended)return;e.preventDefault();if(action!=='fire'&&action!=='repair')manual();state.down.add(action);button.classList.add('pressed');if(button.setPointerCapture)button.setPointerCapture(e.pointerId);});
       const stop=()=>{state.down.delete(action);button.classList.remove('pressed');};
       button.addEventListener('pointerup',stop);button.addEventListener('pointercancel',stop);button.addEventListener('lostpointercapture',stop);
     }
-    document.querySelectorAll('[data-thrust]').forEach(b=>hold(b,b.dataset.thrust));hold($('fire-btn'),'fire');
+    document.querySelectorAll('[data-thrust]').forEach(b=>hold(b,b.dataset.thrust));hold($('fire-btn'),'fire');hold($('repair-btn'),'repair');
     $('pause-btn').addEventListener('click',togglePause);
     $('reset-btn').addEventListener('click',reset);
     $('retry-btn').addEventListener('click',reset);
