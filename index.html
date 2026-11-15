@@ -15,7 +15,7 @@
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
-        <div><div class="eyebrow">PHYSICS SANDBOX • PROTOTYPE 0.2</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+        <div><div class="eyebrow">PHYSICS SANDBOX • PROTOTYPE 0.3</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
       <div class="top-actions">
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">MISSION TIME</span><strong id="sim-clock">00:00</strong></div></div>
@@ -34,7 +34,7 @@
         <div class="canvas-wrap">
           <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat."></canvas>
           <div class="canvas-overlay top-left"><span class="tiny-dot blue"></span><span id="target-indicator">TRACKING: RAIDER-01</span></div>
-          <div class="canvas-overlay bottom-left"><span class="keyboard-tag">LMB / W</span> main engine <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom</div>
+          <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom</div>
           <div id="game-over" class="game-over hidden" role="alertdialog" aria-modal="false" aria-labelledby="game-over-title"><span class="failure-mark">✕</span><h2 id="game-over-title">SHIP LOST</h2><p id="game-over-details">Your orbit ended.</p><button id="retry-btn" class="primary-btn">Try again ↻</button></div>
         </div>
         <div class="mission-strip"><span class="objective-icon">◎</span><span><strong>OBJECTIVE</strong> · Stay in orbit. Outmaneuver raiders. Collect salvage.</span><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
@@ -57,13 +57,14 @@
           <div class="panel-heading"><span>YOUR SHIP</span><span class="ship-class">SCOUT / MK-I</span></div>
           <div class="ship-name"><span class="ship-glyph">△</span><span>KESTREL-7<small id="status-text">Nominal orbit</small></span></div>
           <div class="meter-title"><span>HULL INTEGRITY</span><b id="hull-value">100%</b></div><div class="meter"><div id="hull-bar" class="meter-fill green" style="width:100%"></div></div>
+          <div class="repair-controls"><span>SPARE PARTS <strong id="repair-parts">10.0 / 24 kg</strong></span><button id="repair-btn" type="button" class="small-btn repair-button" disabled>HOLD R · REPAIR</button></div>
           <div class="meter-title"><span>PROPELLANT</span><b id="fuel-value">200 / 200 kg</b></div><div class="meter"><div id="fuel-bar" class="meter-fill cyan" style="width:100%"></div></div>
           <div class="small-stats"><div><span>AMMO</span><strong id="ammo-value">36</strong></div><div><span>CREDITS</span><strong id="credits-value">0 <i>¤</i></strong></div><div><span>ΔV BUDGET</span><strong id="dv-value">—</strong></div></div>
         </section>
         <section class="panel propulsion">
           <div class="panel-heading"><span>PROPULSION</span><span>SCOUT MK-I</span></div>
           <div class="metric-row"><span>Dry mass</span><strong id="dry-mass">900 kg</strong></div>
-          <div class="metric-row"><span>Total mass</span><strong id="total-mass">1,100 kg</strong></div>
+          <div class="metric-row"><span>Total mass</span><strong id="total-mass">1,110 kg</strong></div>
           <div class="metric-row"><span>Main thrust</span><strong id="main-thrust">1.6 MN</strong></div>
           <div class="metric-row"><span>Mass flow</span><strong id="mass-flow">5 kg/s</strong></div>
           <div class="metric-row"><span>Effective exhaust</span><strong id="exhaust-vel">320 km/s</strong></div>
@@ -109,7 +110,7 @@
         <section class="panel feed-panel"><div class="panel-heading"><span>COMMS & EVENTS</span><span class="live-label">●</span></div><div id="event-feed" class="event-feed" aria-live="polite"></div></section>
       </aside>
     </main>
-    <footer class="footer-note">Orbital Outlaws · Prototype 0.2 <span>Real propellant mass · attitude thrusters · two-burn rendezvous guidance</span></footer>
+    <footer class="footer-note">Orbital Outlaws · Prototype 0.3 <span>Real propellant mass · attitude thrusters · two-burn rendezvous guidance</span></footer>
   </div>
 </body>
 </html>
