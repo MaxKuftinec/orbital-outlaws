@@ -41,7 +41,7 @@ On touch devices, hold the control buttons to rotate, thrust or fire. Tapping th
 
 Field repairs are available from the beginning. KESTREL-7 starts with **10 kg** of spare parts in a **24 kg** storage bay. Holding **R** repairs at **5 hull HP/s**, consuming **1 kg/s**, while the game is running. Repairs stop at **100 HP** or when parts are depleted; they do not work on a destroyed spacecraft. A repair button in the ship panel also works for touch users. Repairing can happen while coasting, manoeuvring, or using autopilot; it does not cancel navigation.
 
-Spare parts appear as blue `PARTS` salvage containers (**8 kg**) and are also recovered from wrecks (up to **6 kg**, limited by remaining storage). The mass of carried parts contributes to your spacecraft's total inertial mass and therefore affects thrust acceleration and remaining Δv. The repair constants are intentionally gameplay values, not an engineering model of real hull materials. No drones, individual subsystem damage, repair stations, or repair-cost markets yet.
+Spare parts appear as blue `PARTS` salvage containers (**8 kg**) and are also recovered from wrecks (up to **6 kg**, limited by remaining storage). Carried parts contribute to inertial mass. When used, repair material becomes hull structure rather than vanishing: dry mass increases, spare-parts inventory decreases, and total ship mass is conserved (except when propellant is expelled). The repair constants are intentionally gameplay values, not an engineering model of real hull materials. No drones, individual subsystem damage, repair stations, or repair-cost markets yet.
 
 ## Ballistic weapon realism
 
