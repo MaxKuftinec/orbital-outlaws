@@ -106,7 +106,9 @@
     const restored=Math.min(REPAIR.rateHpS*dt,100-ship.hp,ship.repairParts*REPAIR.hpPerKg);
     if(restored<=0)return false;
     ship.hp=Math.min(100,ship.hp+restored);
-    ship.repairParts=Math.max(0,ship.repairParts-restored/REPAIR.hpPerKg);
+    const usedKg=restored/REPAIR.hpPerKg;
+    ship.repairParts=Math.max(0,ship.repairParts-usedKg);
+    ship.dryMass+=usedKg; // Repair material becomes hull structure; total mass is conserved.
     return true;
   }
   function burn(ship,dt,dir,rcs=false){
