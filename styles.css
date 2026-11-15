@@ -20,3 +20,10 @@
 .repair-button:active,.repair-button.pressed{border-color:var(--green);background:#1e4b40;color:#baf3dd}
 .repair-button:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:540px){.repair-controls{gap:6px}.repair-button{max-width:none;min-width:116px}}
+
+/* v0.4: hostile-spawn toggle, allied telemetry and ballistic fire control */
+.arena-actions #reinforce-btn{font-size:9px;white-space:nowrap;padding:8px 9px;border-color:#42634d;color:#98e5b8}
+.arena-actions #reinforce-btn[aria-pressed="true"]{border-color:#a65c62;color:#ffadad;background:#4d222d}
+.ally-panel .ship-name{font-size:17px;letter-spacing:1px;margin-bottom:8px}
+.ally-panel .mini-note{color:#88b9a3;font-weight:700;letter-spacing:.6px}
+@media(max-width:550px){.arena-actions #reinforce-btn{font-size:8px;padding:7px 5px}.arena-actions{flex-wrap:wrap;gap:4px}}
