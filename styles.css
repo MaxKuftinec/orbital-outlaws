@@ -27,3 +27,17 @@
 .ally-panel .ship-name{font-size:17px;letter-spacing:1px;margin-bottom:8px}
 .ally-panel .mini-note{color:#88b9a3;font-weight:700;letter-spacing:.6px}
 @media(max-width:550px){.arena-actions #reinforce-btn{font-size:8px;padding:7px 5px}.arena-actions{flex-wrap:wrap;gap:4px}}
+
+/* v0.5 — compact always-visible navigation console inside the arena. */
+.nav-command{position:absolute;top:11px;right:11px;z-index:5;width:min(315px,calc(100% - 22px));padding:11px 12px 9px;border:1px solid #41677d;border-radius:10px;background:#071726ed;box-shadow:0 9px 28px #010609b5;backdrop-filter:blur(9px);pointer-events:auto}
+.nav-command-head{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:10px;color:var(--cyan);letter-spacing:1.05px}
+.nav-command-head span{font-size:9px;color:#c2d2dc;letter-spacing:0;white-space:nowrap}
+.nav-command-select{display:flex;align-items:center;gap:5px;margin-top:7px}
+.nav-command-select .nav-target{flex:1;width:0;min-width:0;margin:0;padding:8px 6px;font-size:11px}
+.nav-command-select #nav-next{padding:8px 9px;flex:none}
+.nav-command-actions{display:grid;grid-template-columns:1.15fr 1fr .73fr;gap:5px;margin-top:7px}
+.nav-command-actions button{min-width:0;max-width:100%;font-size:10px;min-height:31px;white-space:nowrap;padding:7px 3px;border-radius:6px}
+.nav-command-actions #nav-plan{margin:0;font-size:10px}
+.nav-command-readout{margin-top:7px;color:#b9c9d3;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+@media(max-width:720px){.nav-command{top:8px;right:8px;width:min(285px,calc(100% - 16px));padding:8px}.nav-command-head{font-size:9px}.nav-command-head span{font-size:8px}.nav-command-readout{font-size:9px}}
+@media(max-width:410px){.nav-command{top:6px;right:6px;width:min(262px,calc(100% - 12px));}.nav-command-actions button{font-size:9px}.canvas-wrap .top-left{max-width:32%;overflow:hidden;text-overflow:ellipsis}}

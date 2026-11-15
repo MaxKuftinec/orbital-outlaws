@@ -1,4 +1,4 @@
-/** Orbital Outlaws v0.2: deterministic Newtonian transfer planner.
+/** Orbital Outlaws v0.5: deterministic Newtonian transfer planner.
  * Two-impulse, fixed-time shooting with a discrete search of coast / flight windows.
  * It minimizes a sampled delta-v objective; it is not a globally optimal low-thrust solver.
  */
@@ -68,8 +68,24 @@
   }
   function plan(start,target,options={}){
     const mu=options.mu??310000,inner=options.inner??97,outer=options.outer??1200;
-    const waits=options.waits??[0,5,12,22,36];
-    const flights=options.flights??[7,10,15,21,29,39,52,70,92];
+    // Extended planning expands the departure/arrival windows for highly elliptical
+    // targets. The transfer remains a sampled two-impulse search: it does not
+    // invent free plane changes or guarantee a global optimum.
+    function orbitPeriod(body){
+      const r=Math.hypot(body.x,body.y),v2=body.vx*body.vx+body.vy*body.vy;
+      const energy=v2/2-mu/r;
+      if(energy>=0)return null;
+      const a=-mu/(2*energy);
+      return 2*Math.PI*Math.sqrt(a*a*a/mu);
+    }
+    const initialWaits=[0,5,12,22,36];
+    const initialFlights=[7,10,15,21,29,39,52,70,92];
+    const periodA=orbitPeriod(start);
+    const periodB=target.fixed?null:orbitPeriod(target);
+    const bounded=(t)=>Math.round(t*10)/10;
+    const toCandidates=(base,extra,lo,hi)=>[...new Set([...base,...extra].filter(t=>Number.isFinite(t)&&t>=lo&&t<=hi).map(bounded))].sort((a,b)=>a-b);
+    const waits=options.waits??(options.extended?toCandidates(initialWaits,[periodA/4,periodA/2,periodB/4,periodB/2,57,75],0,95):initialWaits);
+    const flights=options.flights??(options.extended?toCandidates(initialFlights,[periodA,periodA*1.5,periodA*2,periodB,periodB*1.5,110,135,165,205,250],4,280):initialFlights);
     const exhaust=options.exhaustKmS??320;
     const mass=options.massKg??1100;
     const propellant=options.propellantKg??200;

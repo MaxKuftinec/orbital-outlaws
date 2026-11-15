@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="styles.css">
   <script src="navigation.js" defer></script>
   <script src="ballistics.js" defer></script>
+  <script src="collisions.js" defer></script>
   <script src="game.js" defer></script>
 </head>
 <body>
@@ -16,7 +17,7 @@
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
-        <div><div class="eyebrow">PHYSICS SANDBOX • PROTOTYPE 0.4</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+        <div><div class="eyebrow">PHYSICS SANDBOX • PROTOTYPE 0.5</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
       <div class="top-actions">
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">MISSION TIME</span><strong id="sim-clock">00:00</strong></div></div>
@@ -34,8 +35,14 @@
         </div>
         <div class="canvas-wrap">
           <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat."></canvas>
+          <div class="nav-command" role="group" aria-label="Always available navigation console">
+            <div class="nav-command-head"><strong>◈ NAVIGATION CONSOLE</strong><span id="nav-quick-status">COMPUTER LOCKED</span></div>
+            <div class="nav-command-select"><select id="nav-target" class="nav-target" aria-label="Rendezvous destination"></select><button type="button" id="nav-next" class="small-btn" title="Next navigation target (N)" aria-label="Cycle navigation targets">↻</button></div>
+            <div class="nav-command-actions"><button type="button" id="nav-plan" class="wide-subtle-btn" title="Calculate route (C)">CALCULATE</button><button type="button" id="nav-engage" class="buy-btn" title="Install navigation computer or engage route (E)">BUY NAV 60¤</button><button type="button" id="nav-abort" class="small-btn" title="Abort autopilot (X)" disabled>ABORT</button></div>
+            <div class="nav-command-readout" id="nav-quick-metrics" aria-live="polite">Pick a contact · press C to calculate</div>
+          </div>
           <div class="canvas-overlay top-left"><span class="tiny-dot blue"></span><span id="target-indicator">TRACKING: RAIDER-01</span></div>
-          <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom</div>
+          <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom <span class="keyboard-tag">N/C/E/X</span> nav</div>
           <div id="game-over" class="game-over hidden" role="alertdialog" aria-modal="false" aria-labelledby="game-over-title"><span class="failure-mark">✕</span><h2 id="game-over-title">SHIP LOST</h2><p id="game-over-details">Your orbit ended.</p><button id="retry-btn" class="primary-btn">Try again ↻</button></div>
         </div>
         <div class="mission-strip"><span class="objective-icon">◎</span><span><strong>OBJECTIVE</strong> · Stay in orbit. Outmaneuver raiders. Collect salvage.</span><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
@@ -103,20 +110,17 @@
         </section>
         <section class="panel autopilot-panel">
           <div class="panel-heading"><span>RENDEZVOUS COMPUTER</span><span id="autopilot-chip" class="status-pill">LOCKED</span></div>
-          <div class="mini-note">Select a salvage pod, raider, friendly escort or map waypoint. Planner samples coast times and solves a two-impulse intercept, favouring less Δv.</div>
-          <label for="nav-target" class="field-label">NAVIGATION TARGET</label>
-          <select id="nav-target" class="nav-target" aria-label="Rendezvous destination"></select>
+          <div class="mini-note">Navigation selection, route calculation and autopilot controls are always visible on the map. The computer scans short and long coast windows, favouring affordable Δv.</div>
           <div class="metric-row"><span>Estimated total Δv</span><strong id="nav-dv">—</strong></div>
           <div class="metric-row"><span>Arrival in</span><strong id="nav-eta">—</strong></div>
           <div class="metric-row"><span>Propellant estimate</span><strong id="nav-fuel">—</strong></div>
           <div class="metric-row"><span>Guidance status</span><strong id="nav-status">No plan</strong></div>
-          <div class="nav-buttons"><button id="nav-plan" class="wide-subtle-btn">Calculate route</button><button id="nav-engage" class="buy-btn" disabled>ENGAGE</button><button id="nav-abort" class="small-btn" disabled>ABORT</button></div>
           <div class="control-note">Alt+click empty space to place a fixed-position orbital waypoint. Manual controls override the autopilot. Estimates assume instantaneous burns; real engines need correction.</div>
         </section>
         <section class="panel feed-panel"><div class="panel-heading"><span>COMMS & EVENTS</span><span class="live-label">●</span></div><div id="event-feed" class="event-feed" aria-live="polite"></div></section>
       </aside>
     </main>
-    <footer class="footer-note">Orbital Outlaws · Prototype 0.4 <span>Friendly escort · ballistic targeting · optional pirate reinforcements</span></footer>
+    <footer class="footer-note">Orbital Outlaws · Prototype 0.5 <span>On-map navigation · extended transfer scan · continuous spacecraft collisions</span></footer>
   </div>
 </body>
 </html>

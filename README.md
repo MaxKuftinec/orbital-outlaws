@@ -1,4 +1,4 @@
-# Orbital Outlaws — Prototype v0.4
+# Orbital Outlaws — Prototype v0.5
 
 **Orbital Outlaws** is an experimental browser game about fighting and surviving in orbit under Newtonian gravity. The current prototype is single-player against AI raiders; multiplayer networking is not yet included.
 
@@ -50,6 +50,15 @@ Spare parts appear as blue `PARTS` salvage containers (**8 kg**) and are also re
 The **cyan curved fire-control line is included by default**, reflecting the projectile trajectory in the gravitational field. Click empty space to aim freely, or left-click a raider to lock it; hold **SPACE** to fire and **W** to thrust. A **Target trajectory analyzer (25 credits)** adds a purple future target path and marker at the time the ballistic shot reaches the cursor-selected range. This assumes the opponent does not thrust during the prediction. The display uses a finite **12-second preview horizon** for performance; this is *not* a projectile lifetime.
 
 **Physical objects have no automatic expiry:** bullets, uncollected resource pods and floating wrecks persist. Objects are removed only by meaningful events such as a collision with the planet, hitting a vessel, or being collected. Bullets that escape the gravitational well continue on their outward trajectories, even outside the visible camera. Camera rendering culls off-screen bullets without deleting their simulated positions. Small impact/engine sparks are transient *visual effects* and still fade normally. Continuous firing can make the simulation more expensive over time; optimized persistent-debris simulation is future work.
+
+
+## Navigation HUD and physical collisions (v0.5)
+
+**Navigation is always visible in the orbital map**, with a target picker, cycle control (N), Calculate (C), Buy Computer / Engage (E), and Abort (X). Buying the rendezvous computer costs **60 credits**; after purchase, the same button engages a calculated route. Selecting a contact by clicking it in the arena updates the picker. The sidebar retains detailed route statistics but no longer requires scrolling for routine navigation.
+
+The two-impulse route planner now performs an **extended coast-time search**, including longer flights and some windows derived from the starting and target orbital periods. This helps with highly elliptical targets. It is not a globally optimal finite-burn solver or an automatic three-burn high-apoapsis orbit reversal. The existing autopilot still corrects finite-burn errors near its destination.
+
+**Vessel-to-vessel collisions:** spacecraft now have a **4 km total collision envelope** for playable 2-D encounter rates; this is an intentionally exaggerated gameplay hitbox, not a claim that a 14-metre craft is kilometres wide. A swept collision calculation checks paths between frames so fast crossing trajectories aren't missed. Encounters produce a normal impulse using mass-weighted momentum conservation and impact damage based on the relative *closing* kinetic energy. Gentle bumps can be survivable, while orbital-speed impacts are usually catastrophic. Wrecks persist according to the existing salvage mechanics. Collision calculations are simplified rigid-body mechanics, not structural fragmentation or docking simulation.
 
 ## Ballistic weapon realism
 
@@ -129,6 +138,8 @@ The test suite checks circular-orbit stability, predicted transfer accuracy, uns
 - `index.html` — UI and input elements.
 - `styles.css` — responsive visual layout.
 - `game.js` — physics loop, spacecraft controls, combat, salvage, HUD, canvas renderer and autopilot execution.
+- `collisions.js` — swept spacecraft impacts and mass-based collision impulses.
+- `tests/collisions.test.cjs` — crossing, conservation, low-speed and near-miss tests.
 - `navigation.js` — pure Newtonian trajectory propagation and two-impulse transfer search.
 - `ballistics.js` — shared-gravity projectile forecast and target-at-arrival computation.
 - `tests/navigation.test.cjs` — Node tests for the transfer planner.
@@ -138,3 +149,5 @@ The test suite checks circular-orbit stability, predicted transfer accuracy, uns
 ### Upcoming ideas
 
 More advanced orbital rendezvous (including multi-revolution, finite-burn optimal control and recovery from changing target trajectories), upgraded RCS and engines, different rocket types, guided missiles, lasers, long-term debris, multiplayer networking and eventually relativistic geodesics near compact objects.
+
+Navigation console shortcuts: **N** next target, **C** calculate, **E** purchase/engage, **X** abort. The existing **W**, **A**, **D**, **S**, **R**, and **SPACE** controls remain unchanged.

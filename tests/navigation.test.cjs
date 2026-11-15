@@ -29,3 +29,13 @@ test('fuel limit eliminates impossible transfer',()=>{
   const a=circular(260,-.67),b=circular(365,1.7);
   assert.equal(nav.plan(a,b,{mu,massKg:1100,propellantKg:.000001}),null);
 });
+
+test('extended orbital-period scan finds lower-cost long-coast transfer',()=>{
+  const start=circular(260,-.67),target=circular(280,.7);
+  const basic=nav.plan(start,target,{mu,massKg:1110,propellantKg:200});
+  const advanced=nav.plan(start,target,{mu,massKg:1110,propellantKg:200,extended:true});
+  assert(basic&&advanced);
+  assert(advanced.dv<basic.dv-1);
+  assert(advanced.eta>92,'a longer transfer is allowed when it saves propellant');
+  assert(advanced.miss<1);
+});

@@ -1,5 +1,5 @@
 /**
- * ORBITAL OUTLAWS 0.4
+ * ORBITAL OUTLAWS 0.5
  * One central body, Newtonian inverse-square gravity, kick-drift-kick (velocity Verlet).
  * World distances and seconds are intentionally game-scaled to keep orbits playable.
  * All ships, floating salvage and ballistic projectiles share the same gravity solver.
@@ -14,7 +14,8 @@
   const TWO_PI = Math.PI * 2;
   const NAV = window.OrbitalNavigation;
   const BALL = window.OrbitalBallistics;
-  if(!NAV||!BALL)throw new Error('navigation.js and ballistics.js must load before game.js');
+  const COLL = window.OrbitalCollisions;
+  if(!NAV||!BALL||!COLL)throw new Error('Navigation, ballistics and collisions modules must load before game.js');
   // 1 world distance unit = 1 km; velocities in km/s. Engines are futuristic.
   const ENGINE=Object.freeze({dryKg:900,propellantKg:200,thrustN:1600000,flowKgS:5,rcsN:2500,rcsFlowKgS:.04,leverM:7,shipLengthM:14,gimbalMax:28*Math.PI/180});
   const exhaustKmS=ENGINE.thrustN/ENGINE.flowKgS/1000;
@@ -70,7 +71,7 @@
       newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30),newPickup(295,1.1,'parts',8)
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
     orbitVisible:true, predictive:false, trajectoryIntel:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, paused:false, speed:1, nextEnemySpawn:75,
-    playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false};
+    collisionCooldown:new Map(), playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false};
     lastFrame = performance.now(); accumulator=0;
     document.querySelectorAll('[data-thrust]').forEach(btn=>btn.classList.remove('pressed'));
     $('fire-btn').classList.remove('pressed');
@@ -218,9 +219,41 @@
     if(ship.isPlayer&&magnitude(ship.x,ship.y)>WORLD.outerRadius)endGame('Your spacecraft escaped the playable sector.');
     if(ship.isPlayer&&ship.hp<=0)endGame('Hostile fire destroyed your spacecraft.');
   }
+  function resolveVesselCollisions(dt,initial){
+    const vessels=[state.player,state.ally,...state.enemies].filter(v=>v.alive);
+    const effectiveDiameterKm=4; // A generous gameplay envelope; the literal ship is 14 m long.
+    for(let i=0;i<vessels.length;i++)for(let j=i+1;j<vessels.length;j++){
+      const a=vessels[i],b=vessels[j],a0=initial.get(a.id),b0=initial.get(b.id);
+      if(!a0||!b0)continue;
+      const pair=[a.id,b.id].sort().join(':');
+      if((state.collisionCooldown.get(pair)||-1)>state.t)continue;
+      const hit=COLL.sweep(a0,a,b0,b,effectiveDiameterKm);
+      if(!hit)continue;
+      const av={...a,startX:a0.x,startY:a0.y,massKg:mass(a)};
+      const bv={...b,startX:b0.x,startY:b0.y,massKg:mass(b)};
+      const impact=COLL.resolve(av,bv,hit,dt,effectiveDiameterKm);
+      if(!impact)continue;
+      for(const name of ['x','y','vx','vy']){a[name]=av[name];b[name]=bv[name];}
+      state.collisionCooldown.set(pair,state.t+.8);
+      if(impact.damage<.05)continue;
+      a.hp=Math.max(0,a.hp-impact.damage);b.hp=Math.max(0,b.hp-impact.damage);
+      const severity=impact.relativeSpeedKmS.toFixed(2)+' km/s';
+      logEvent(a.name+' collided with '+b.name+' at '+severity+'!','danger');
+      sparks((a.x+b.x)/2,(a.y+b.y)/2,palette.yellow,24);
+      for(const ship of [a,b]){
+        if(ship.hp>0||!ship.alive)continue;
+        if(ship.isPlayer)endGame('Spacecraft collision destroyed KESTREL-7.');
+        else if(ship.isAlly)destroyAlly('destroyed by collision');
+        else destroyEnemy(ship,'destroyed by spacecraft collision');
+      }
+      if(state.ended)return;
+    }
+    for(const [key,until] of state.collisionCooldown)if(until<state.t-2)state.collisionCooldown.delete(key);
+  }
   function step(dt) {
     if(state.ended)return;
     state.t+=dt;
+    const initial=new Map([state.player,state.ally,...state.enemies].filter(s=>s.alive).map(s=>[s.id,{x:s.x,y:s.y}]));
     const player=state.player;
     applyShipStep(player,dt);
     if(state.ended)return;
@@ -256,6 +289,8 @@
         enemy.gunCooldown=rand(3.7,5.2);
       }
     }
+    resolveVesselCollisions(dt,initial);
+    if(state.ended)return;
     if(state.down.has('fire')) firePlayer();
     for(const p of state.pickups) {
       if(!p.alive) continue;
@@ -375,14 +410,32 @@
     for(const item of entries){const o=document.createElement('option');o.value=item.key;o.textContent=item.text;select.append(o);}
     if(entries.some(item=>item.key===previous))select.value=previous;
   }
+  function cycleNavigationTarget(){
+    const select=$('nav-target');
+    if(select.options.length<2)return;
+    select.selectedIndex=(select.selectedIndex+1)%select.options.length;
+    state.navPlan=null;
+    const key=select.value;
+    if(key.startsWith('enemy:')){state.targetId=key.slice(6);state.aimMode='locked';state.lastBallistic=-999;}
+    logEvent('Navigation target: '+select.selectedOptions[0].textContent);
+    updateHud();
+  }
+  function purchaseOrEngage(){
+    if(state.ended)return;
+    if(!state.navOwned){
+      if(state.player.credits<60){logEvent('Rendezvous computer costs 60 credits.','danger');return;}
+      state.player.credits-=60;state.navOwned=true;logEvent('Rendezvous computer installed. Calculate a route, then engage.','good');updateHud();return;
+    }
+    engageNav();
+  }
   function planNav(){
     if(state.ended)return null;
     const key=$('nav-target').value,target=navTarget(key);
     if(!target){state.navPlan=null;logEvent('Select a valid target before planning.');return null;}
     const plan=NAV.plan(state.player,target,{mu:WORLD.mu,inner:WORLD.crashRadius+7,outer:WORLD.outerRadius-10,
-      massKg:mass(state.player),propellantKg:state.player.fuel,exhaustKmS});
+      massKg:mass(state.player),propellantKg:state.player.fuel,exhaustKmS,extended:true});
     state.navPlan=plan?{...plan,targetKey:key,calculatedAt:state.t}:null;
-    if(plan)logEvent('Route plotted: '+plan.dv.toFixed(2)+' km/s total Δv, '+plan.eta.toFixed(0)+' s.','good');
+    if(plan)logEvent('Route plotted: '+plan.dv.toFixed(2)+' km/s Δv, '+plan.eta.toFixed(0)+' s (extended scan).','good');
     else logEvent('No safe affordable transfer in sampled windows. Try later or change target.','danger');
     updateHud();return state.navPlan;
   }
@@ -578,8 +631,11 @@
     $('nav-dv').textContent=state.navPlan?state.navPlan.dv.toFixed(2)+' km/s':'—';
     $('nav-eta').textContent=state.navPlan?state.navPlan.eta.toFixed(0)+' s':'—';
     $('nav-fuel').textContent=state.navPlan?(mass(p)*(1-Math.exp(-state.navPlan.dv/exhaustKmS))).toFixed(1)+' kg':'—';
-    $('nav-engage').disabled=!state.navOwned||!state.navPlan||!!state.autopilot||state.ended;
+    $('nav-engage').textContent=state.navOwned?'ENGAGE':'BUY NAV 60¤';
+    $('nav-engage').disabled=state.ended||(!state.navOwned&&p.credits<60)||(state.navOwned&&(!state.navPlan||!!state.autopilot));
     $('nav-abort').disabled=!state.autopilot;
+    $('nav-quick-status').textContent=state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED';
+    $('nav-quick-metrics').textContent=state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${Math.max(0,mass(p)*(1-Math.exp(-state.navPlan.dv/exhaustKmS))).toFixed(1)} kg fuel`: 'Pick a contact · press C to calculate';
 
   }
   function updateZoom(){$('zoom-level').textContent=state.zoom.toFixed(2)+'×';}
@@ -728,6 +784,10 @@
       if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName))return;
       const action=keyToAction[e.code];
       if(action){e.preventDefault();if(action!=='fire'&&action!=='repair')manual();state.down.add(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.add('pressed'));if(action==='fire')$('fire-btn').classList.add('pressed');if(action==='repair')$('repair-btn').classList.add('pressed');}
+      if(!e.repeat&&e.code==='KeyN'){e.preventDefault();cycleNavigationTarget();}
+      if(!e.repeat&&e.code==='KeyC'){e.preventDefault();planNav();}
+      if(!e.repeat&&e.code==='KeyE'){e.preventDefault();purchaseOrEngage();}
+      if(!e.repeat&&e.code==='KeyX'){e.preventDefault();abortNav();}
       if(e.code==='KeyP'&&!e.repeat){e.preventDefault();togglePause();}
     });
     window.addEventListener('keyup',e=>{
@@ -754,7 +814,8 @@
     $('reinforce-btn').addEventListener('click',()=>{state.reinforcements=!state.reinforcements;state.nextEnemySpawn=state.t+rand(35,55);logEvent('Hostile reinforcements '+(state.reinforcements?'enabled.':'disabled.'),state.reinforcements?'danger':'good');updateHud();});
     $('nav-upgrade-btn').addEventListener('click',()=>{if(state.navOwned||state.player.credits<60||state.ended)return;state.player.credits-=60;state.navOwned=true;logEvent('Rendezvous intelligence installed.','good');updateHud();});
     $('nav-plan').addEventListener('click',planNav);
-    $('nav-engage').addEventListener('click',engageNav);
+    $('nav-engage').addEventListener('click',purchaseOrEngage);
+    $('nav-next').addEventListener('click',cycleNavigationTarget);
     $('nav-abort').addEventListener('click',()=>abortNav());
     $('nav-target').addEventListener('change',()=>{state.navPlan=null;updateHud();});
     let drag=null;
@@ -776,7 +837,7 @@
       if(e.altKey){state.waypoint={x:p.x,y:p.y};updateTargetOptions('waypoint');state.navPlan=null;logEvent('Waypoint plotted at '+p.x.toFixed(0)+', '+p.y.toFixed(0)+' km.');updateHud();return;}
       let candidate=null,dist=Infinity;
       for(const enemy of state.enemies)if(enemy.alive){const d=magnitude(p.x-enemy.x,p.y-enemy.y);if(d<Math.max(23,23/scale())&&d<dist){dist=d;candidate=enemy;}}
-      if(candidate){state.targetId=candidate.id;state.aimMode='locked';state.lastBallistic=-999;logEvent('Target lock: '+candidate.name);updateTargetOptions('enemy:'+candidate.id);return;}
+      if(candidate){state.targetId=candidate.id;state.aimMode='locked';state.lastBallistic=-999;state.navPlan=null;logEvent('Target lock: '+candidate.name);updateTargetOptions('enemy:'+candidate.id);updateHud();return;}
       if(state.ally.alive&&magnitude(p.x-state.ally.x,p.y-state.ally.y)<Math.max(23,23/scale())){updateTargetOptions('ally');state.navPlan=null;logEvent('Friendly escort selected as navigation target.','good');return;}
       for(const pickup of state.pickups)if(pickup.alive){const d=magnitude(p.x-pickup.x,p.y-pickup.y);if(d<Math.max(17,19/scale())&&d<dist){dist=d;candidate=pickup;}}
       if(candidate&&candidate.type){updateTargetOptions('pickup:'+candidate.id);state.navPlan=null;logEvent('Navigation target selected: '+candidate.type+'.');return;}

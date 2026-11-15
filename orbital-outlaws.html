@@ -37,17 +37,32 @@
 .ally-panel .mini-note{color:#88b9a3;font-weight:700;letter-spacing:.6px}
 @media(max-width:550px){.arena-actions #reinforce-btn{font-size:8px;padding:7px 5px}.arena-actions{flex-wrap:wrap;gap:4px}}
 
-  </style>
+/* v0.5 — compact always-visible navigation console inside the arena. */
+.nav-command{position:absolute;top:11px;right:11px;z-index:5;width:min(315px,calc(100% - 22px));padding:11px 12px 9px;border:1px solid #41677d;border-radius:10px;background:#071726ed;box-shadow:0 9px 28px #010609b5;backdrop-filter:blur(9px);pointer-events:auto}
+.nav-command-head{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:10px;color:var(--cyan);letter-spacing:1.05px}
+.nav-command-head span{font-size:9px;color:#c2d2dc;letter-spacing:0;white-space:nowrap}
+.nav-command-select{display:flex;align-items:center;gap:5px;margin-top:7px}
+.nav-command-select .nav-target{flex:1;width:0;min-width:0;margin:0;padding:8px 6px;font-size:11px}
+.nav-command-select #nav-next{padding:8px 9px;flex:none}
+.nav-command-actions{display:grid;grid-template-columns:1.15fr 1fr .73fr;gap:5px;margin-top:7px}
+.nav-command-actions button{min-width:0;max-width:100%;font-size:10px;min-height:31px;white-space:nowrap;padding:7px 3px;border-radius:6px}
+.nav-command-actions #nav-plan{margin:0;font-size:10px}
+.nav-command-readout{margin-top:7px;color:#b9c9d3;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+@media(max-width:720px){.nav-command{top:8px;right:8px;width:min(285px,calc(100% - 16px));padding:8px}.nav-command-head{font-size:9px}.nav-command-head span{font-size:8px}.nav-command-readout{font-size:9px}}
+@media(max-width:410px){.nav-command{top:6px;right:6px;width:min(262px,calc(100% - 12px));}.nav-command-actions button{font-size:9px}.canvas-wrap .top-left{max-width:32%;overflow:hidden;text-overflow:ellipsis}}
 
-
-
+</style>
+  
+  
+  
+  
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
-        <div><div class="eyebrow">PHYSICS SANDBOX • PROTOTYPE 0.4</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+        <div><div class="eyebrow">PHYSICS SANDBOX • PROTOTYPE 0.5</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
       <div class="top-actions">
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">MISSION TIME</span><strong id="sim-clock">00:00</strong></div></div>
@@ -65,8 +80,14 @@
         </div>
         <div class="canvas-wrap">
           <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat."></canvas>
+          <div class="nav-command" role="group" aria-label="Always available navigation console">
+            <div class="nav-command-head"><strong>◈ NAVIGATION CONSOLE</strong><span id="nav-quick-status">COMPUTER LOCKED</span></div>
+            <div class="nav-command-select"><select id="nav-target" class="nav-target" aria-label="Rendezvous destination"></select><button type="button" id="nav-next" class="small-btn" title="Next navigation target (N)" aria-label="Cycle navigation targets">↻</button></div>
+            <div class="nav-command-actions"><button type="button" id="nav-plan" class="wide-subtle-btn" title="Calculate route (C)">CALCULATE</button><button type="button" id="nav-engage" class="buy-btn" title="Install navigation computer or engage route (E)">BUY NAV 60¤</button><button type="button" id="nav-abort" class="small-btn" title="Abort autopilot (X)" disabled>ABORT</button></div>
+            <div class="nav-command-readout" id="nav-quick-metrics" aria-live="polite">Pick a contact · press C to calculate</div>
+          </div>
           <div class="canvas-overlay top-left"><span class="tiny-dot blue"></span><span id="target-indicator">TRACKING: RAIDER-01</span></div>
-          <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom</div>
+          <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom <span class="keyboard-tag">N/C/E/X</span> nav</div>
           <div id="game-over" class="game-over hidden" role="alertdialog" aria-modal="false" aria-labelledby="game-over-title"><span class="failure-mark">✕</span><h2 id="game-over-title">SHIP LOST</h2><p id="game-over-details">Your orbit ended.</p><button id="retry-btn" class="primary-btn">Try again ↻</button></div>
         </div>
         <div class="mission-strip"><span class="objective-icon">◎</span><span><strong>OBJECTIVE</strong> · Stay in orbit. Outmaneuver raiders. Collect salvage.</span><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
@@ -134,23 +155,20 @@
         </section>
         <section class="panel autopilot-panel">
           <div class="panel-heading"><span>RENDEZVOUS COMPUTER</span><span id="autopilot-chip" class="status-pill">LOCKED</span></div>
-          <div class="mini-note">Select a salvage pod, raider, friendly escort or map waypoint. Planner samples coast times and solves a two-impulse intercept, favouring less Δv.</div>
-          <label for="nav-target" class="field-label">NAVIGATION TARGET</label>
-          <select id="nav-target" class="nav-target" aria-label="Rendezvous destination"></select>
+          <div class="mini-note">Navigation selection, route calculation and autopilot controls are always visible on the map. The computer scans short and long coast windows, favouring affordable Δv.</div>
           <div class="metric-row"><span>Estimated total Δv</span><strong id="nav-dv">—</strong></div>
           <div class="metric-row"><span>Arrival in</span><strong id="nav-eta">—</strong></div>
           <div class="metric-row"><span>Propellant estimate</span><strong id="nav-fuel">—</strong></div>
           <div class="metric-row"><span>Guidance status</span><strong id="nav-status">No plan</strong></div>
-          <div class="nav-buttons"><button id="nav-plan" class="wide-subtle-btn">Calculate route</button><button id="nav-engage" class="buy-btn" disabled>ENGAGE</button><button id="nav-abort" class="small-btn" disabled>ABORT</button></div>
           <div class="control-note">Alt+click empty space to place a fixed-position orbital waypoint. Manual controls override the autopilot. Estimates assume instantaneous burns; real engines need correction.</div>
         </section>
         <section class="panel feed-panel"><div class="panel-heading"><span>COMMS & EVENTS</span><span class="live-label">●</span></div><div id="event-feed" class="event-feed" aria-live="polite"></div></section>
       </aside>
     </main>
-    <footer class="footer-note">Orbital Outlaws · Prototype 0.4 <span>Friendly escort · ballistic targeting · optional pirate reinforcements</span></footer>
+    <footer class="footer-note">Orbital Outlaws · Prototype 0.5 <span>On-map navigation · extended transfer scan · continuous spacecraft collisions</span></footer>
   </div>
 <script>
-/** Orbital Outlaws v0.2: deterministic Newtonian transfer planner.
+/** Orbital Outlaws v0.5: deterministic Newtonian transfer planner.
  * Two-impulse, fixed-time shooting with a discrete search of coast / flight windows.
  * It minimizes a sampled delta-v objective; it is not a globally optimal low-thrust solver.
  */
@@ -220,8 +238,24 @@
   }
   function plan(start,target,options={}){
     const mu=options.mu??310000,inner=options.inner??97,outer=options.outer??1200;
-    const waits=options.waits??[0,5,12,22,36];
-    const flights=options.flights??[7,10,15,21,29,39,52,70,92];
+    // Extended planning expands the departure/arrival windows for highly elliptical
+    // targets. The transfer remains a sampled two-impulse search: it does not
+    // invent free plane changes or guarantee a global optimum.
+    function orbitPeriod(body){
+      const r=Math.hypot(body.x,body.y),v2=body.vx*body.vx+body.vy*body.vy;
+      const energy=v2/2-mu/r;
+      if(energy>=0)return null;
+      const a=-mu/(2*energy);
+      return 2*Math.PI*Math.sqrt(a*a*a/mu);
+    }
+    const initialWaits=[0,5,12,22,36];
+    const initialFlights=[7,10,15,21,29,39,52,70,92];
+    const periodA=orbitPeriod(start);
+    const periodB=target.fixed?null:orbitPeriod(target);
+    const bounded=(t)=>Math.round(t*10)/10;
+    const toCandidates=(base,extra,lo,hi)=>[...new Set([...base,...extra].filter(t=>Number.isFinite(t)&&t>=lo&&t<=hi).map(bounded))].sort((a,b)=>a-b);
+    const waits=options.waits??(options.extended?toCandidates(initialWaits,[periodA/4,periodA/2,periodB/4,periodB/2,57,75],0,95):initialWaits);
+    const flights=options.flights??(options.extended?toCandidates(initialFlights,[periodA,periodA*1.5,periodA*2,periodB,periodB*1.5,110,135,165,205,250],4,280):initialFlights);
     const exhaust=options.exhaustKmS??320;
     const mass=options.massKg??1100;
     const propellant=options.propellantKg??200;
@@ -325,8 +359,73 @@
 
 </script>
 <script>
+/** Orbital Outlaws v0.5 — continuous 2-D spacecraft collision geometry.
+ * Uses swept circular collision envelopes and a momentum-conserving normal impulse.
+ * Envelopes are game-scaled (km), not the literal physical hull dimensions (metres).
+ */
+(function(root,factory){
+  const api=factory();
+  if(typeof module==='object'&&module.exports)module.exports=api;
+  if(root)root.OrbitalCollisions=api;
+})(typeof globalThis!=='undefined'?globalThis:this,function(){
+  'use strict';
+  const hypot=Math.hypot;
+  function sweep(a0,a1,b0,b1,radius){
+    const x=b0.x-a0.x,y=b0.y-a0.y;
+    const dx=(b1.x-b0.x)-(a1.x-a0.x),dy=(b1.y-b0.y)-(a1.y-a0.y);
+    const c=x*x+y*y-radius*radius;
+    let u;
+    if(c<=0)u=0;
+    else{
+      const aa=dx*dx+dy*dy;
+      if(aa<1e-18)return null;
+      const bb=2*(x*dx+y*dy),discriminant=bb*bb-4*aa*c;
+      if(discriminant<0)return null;
+      u=(-bb-Math.sqrt(discriminant))/(2*aa);
+      if(u<0||u>1)return null;
+    }
+    const hitX=x+dx*u,hitY=y+dy*u;
+    const len=hypot(hitX,hitY);
+    const fallback=hypot(dx,dy)||1;
+    return {timeFraction:u,nx:len>1e-9?hitX/len:dx/fallback,ny:len>1e-9?hitY/len:dy/fallback};
+  }
+  function resolve(a,b,hit,dt,contactRadius){
+    const m1=a.massKg,m2=b.massKg;
+    if(m1<=0||m2<=0||dt<=0)return null;
+    const relX=b.vx-a.vx,relY=b.vy-a.vy;
+    const closing=relX*hit.nx+relY*hit.ny;
+    const relSpeed=hypot(relX,relY);
+    const reduced=m1*m2/(m1+m2);
+    const impactEnergyJ=.5*reduced*(Math.max(0,-closing)*1000)**2;
+    const damage=closing>=-.15?0:Math.min(160,Math.max(0,(impactEnergyJ-500000)/18000000));
+    // Compute collision point along the swept motion; then integrate remaining fraction linearly.
+    const aX=a.startX+(a.x-a.startX)*hit.timeFraction;
+    const aY=a.startY+(a.y-a.startY)*hit.timeFraction;
+    const bX=b.startX+(b.x-b.startX)*hit.timeFraction;
+    const bY=b.startY+(b.y-b.startY)*hit.timeFraction;
+    if(closing<0){
+      const restitution=relSpeed<.15?.08:.22;
+      const impulse=-(1+restitution)*closing/(1/m1+1/m2);
+      a.vx-=impulse*hit.nx/m1;a.vy-=impulse*hit.ny/m1;
+      b.vx+=impulse*hit.nx/m2;b.vy+=impulse*hit.ny/m2;
+    }
+    const push=Math.max(0,contactRadius-hypot(bX-aX,bY-aY))+.02;
+    const separatedAX=aX-hit.nx*push*m2/(m1+m2);
+    const separatedAY=aY-hit.ny*push*m2/(m1+m2);
+    const separatedBX=bX+hit.nx*push*m1/(m1+m2);
+    const separatedBY=bY+hit.ny*push*m1/(m1+m2);
+    const remaining=(1-hit.timeFraction)*dt;
+    a.x=separatedAX+a.vx*remaining;a.y=separatedAY+a.vy*remaining;
+    b.x=separatedBX+b.vx*remaining;b.y=separatedBY+b.vy*remaining;
+    return {relativeSpeedKmS:relSpeed,impactEnergyJ,damage};
+  }
+  return {sweep,resolve};
+});
+
+</script>
+<script>
 /**
- * ORBITAL OUTLAWS 0.4
+ * ORBITAL OUTLAWS 0.5
  * One central body, Newtonian inverse-square gravity, kick-drift-kick (velocity Verlet).
  * World distances and seconds are intentionally game-scaled to keep orbits playable.
  * All ships, floating salvage and ballistic projectiles share the same gravity solver.
@@ -341,7 +440,8 @@
   const TWO_PI = Math.PI * 2;
   const NAV = window.OrbitalNavigation;
   const BALL = window.OrbitalBallistics;
-  if(!NAV||!BALL)throw new Error('navigation.js and ballistics.js must load before game.js');
+  const COLL = window.OrbitalCollisions;
+  if(!NAV||!BALL||!COLL)throw new Error('Navigation, ballistics and collisions modules must load before game.js');
   // 1 world distance unit = 1 km; velocities in km/s. Engines are futuristic.
   const ENGINE=Object.freeze({dryKg:900,propellantKg:200,thrustN:1600000,flowKgS:5,rcsN:2500,rcsFlowKgS:.04,leverM:7,shipLengthM:14,gimbalMax:28*Math.PI/180});
   const exhaustKmS=ENGINE.thrustN/ENGINE.flowKgS/1000;
@@ -397,7 +497,7 @@
       newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30),newPickup(295,1.1,'parts',8)
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
     orbitVisible:true, predictive:false, trajectoryIntel:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, paused:false, speed:1, nextEnemySpawn:75,
-    playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false};
+    collisionCooldown:new Map(), playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false};
     lastFrame = performance.now(); accumulator=0;
     document.querySelectorAll('[data-thrust]').forEach(btn=>btn.classList.remove('pressed'));
     $('fire-btn').classList.remove('pressed');
@@ -545,9 +645,41 @@
     if(ship.isPlayer&&magnitude(ship.x,ship.y)>WORLD.outerRadius)endGame('Your spacecraft escaped the playable sector.');
     if(ship.isPlayer&&ship.hp<=0)endGame('Hostile fire destroyed your spacecraft.');
   }
+  function resolveVesselCollisions(dt,initial){
+    const vessels=[state.player,state.ally,...state.enemies].filter(v=>v.alive);
+    const effectiveDiameterKm=4; // A generous gameplay envelope; the literal ship is 14 m long.
+    for(let i=0;i<vessels.length;i++)for(let j=i+1;j<vessels.length;j++){
+      const a=vessels[i],b=vessels[j],a0=initial.get(a.id),b0=initial.get(b.id);
+      if(!a0||!b0)continue;
+      const pair=[a.id,b.id].sort().join(':');
+      if((state.collisionCooldown.get(pair)||-1)>state.t)continue;
+      const hit=COLL.sweep(a0,a,b0,b,effectiveDiameterKm);
+      if(!hit)continue;
+      const av={...a,startX:a0.x,startY:a0.y,massKg:mass(a)};
+      const bv={...b,startX:b0.x,startY:b0.y,massKg:mass(b)};
+      const impact=COLL.resolve(av,bv,hit,dt,effectiveDiameterKm);
+      if(!impact)continue;
+      for(const name of ['x','y','vx','vy']){a[name]=av[name];b[name]=bv[name];}
+      state.collisionCooldown.set(pair,state.t+.8);
+      if(impact.damage<.05)continue;
+      a.hp=Math.max(0,a.hp-impact.damage);b.hp=Math.max(0,b.hp-impact.damage);
+      const severity=impact.relativeSpeedKmS.toFixed(2)+' km/s';
+      logEvent(a.name+' collided with '+b.name+' at '+severity+'!','danger');
+      sparks((a.x+b.x)/2,(a.y+b.y)/2,palette.yellow,24);
+      for(const ship of [a,b]){
+        if(ship.hp>0||!ship.alive)continue;
+        if(ship.isPlayer)endGame('Spacecraft collision destroyed KESTREL-7.');
+        else if(ship.isAlly)destroyAlly('destroyed by collision');
+        else destroyEnemy(ship,'destroyed by spacecraft collision');
+      }
+      if(state.ended)return;
+    }
+    for(const [key,until] of state.collisionCooldown)if(until<state.t-2)state.collisionCooldown.delete(key);
+  }
   function step(dt) {
     if(state.ended)return;
     state.t+=dt;
+    const initial=new Map([state.player,state.ally,...state.enemies].filter(s=>s.alive).map(s=>[s.id,{x:s.x,y:s.y}]));
     const player=state.player;
     applyShipStep(player,dt);
     if(state.ended)return;
@@ -583,6 +715,8 @@
         enemy.gunCooldown=rand(3.7,5.2);
       }
     }
+    resolveVesselCollisions(dt,initial);
+    if(state.ended)return;
     if(state.down.has('fire')) firePlayer();
     for(const p of state.pickups) {
       if(!p.alive) continue;
@@ -702,14 +836,32 @@
     for(const item of entries){const o=document.createElement('option');o.value=item.key;o.textContent=item.text;select.append(o);}
     if(entries.some(item=>item.key===previous))select.value=previous;
   }
+  function cycleNavigationTarget(){
+    const select=$('nav-target');
+    if(select.options.length<2)return;
+    select.selectedIndex=(select.selectedIndex+1)%select.options.length;
+    state.navPlan=null;
+    const key=select.value;
+    if(key.startsWith('enemy:')){state.targetId=key.slice(6);state.aimMode='locked';state.lastBallistic=-999;}
+    logEvent('Navigation target: '+select.selectedOptions[0].textContent);
+    updateHud();
+  }
+  function purchaseOrEngage(){
+    if(state.ended)return;
+    if(!state.navOwned){
+      if(state.player.credits<60){logEvent('Rendezvous computer costs 60 credits.','danger');return;}
+      state.player.credits-=60;state.navOwned=true;logEvent('Rendezvous computer installed. Calculate a route, then engage.','good');updateHud();return;
+    }
+    engageNav();
+  }
   function planNav(){
     if(state.ended)return null;
     const key=$('nav-target').value,target=navTarget(key);
     if(!target){state.navPlan=null;logEvent('Select a valid target before planning.');return null;}
     const plan=NAV.plan(state.player,target,{mu:WORLD.mu,inner:WORLD.crashRadius+7,outer:WORLD.outerRadius-10,
-      massKg:mass(state.player),propellantKg:state.player.fuel,exhaustKmS});
+      massKg:mass(state.player),propellantKg:state.player.fuel,exhaustKmS,extended:true});
     state.navPlan=plan?{...plan,targetKey:key,calculatedAt:state.t}:null;
-    if(plan)logEvent('Route plotted: '+plan.dv.toFixed(2)+' km/s total Δv, '+plan.eta.toFixed(0)+' s.','good');
+    if(plan)logEvent('Route plotted: '+plan.dv.toFixed(2)+' km/s Δv, '+plan.eta.toFixed(0)+' s (extended scan).','good');
     else logEvent('No safe affordable transfer in sampled windows. Try later or change target.','danger');
     updateHud();return state.navPlan;
   }
@@ -905,8 +1057,11 @@
     $('nav-dv').textContent=state.navPlan?state.navPlan.dv.toFixed(2)+' km/s':'—';
     $('nav-eta').textContent=state.navPlan?state.navPlan.eta.toFixed(0)+' s':'—';
     $('nav-fuel').textContent=state.navPlan?(mass(p)*(1-Math.exp(-state.navPlan.dv/exhaustKmS))).toFixed(1)+' kg':'—';
-    $('nav-engage').disabled=!state.navOwned||!state.navPlan||!!state.autopilot||state.ended;
+    $('nav-engage').textContent=state.navOwned?'ENGAGE':'BUY NAV 60¤';
+    $('nav-engage').disabled=state.ended||(!state.navOwned&&p.credits<60)||(state.navOwned&&(!state.navPlan||!!state.autopilot));
     $('nav-abort').disabled=!state.autopilot;
+    $('nav-quick-status').textContent=state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED';
+    $('nav-quick-metrics').textContent=state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${Math.max(0,mass(p)*(1-Math.exp(-state.navPlan.dv/exhaustKmS))).toFixed(1)} kg fuel`: 'Pick a contact · press C to calculate';
 
   }
   function updateZoom(){$('zoom-level').textContent=state.zoom.toFixed(2)+'×';}
@@ -1055,6 +1210,10 @@
       if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName))return;
       const action=keyToAction[e.code];
       if(action){e.preventDefault();if(action!=='fire'&&action!=='repair')manual();state.down.add(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.add('pressed'));if(action==='fire')$('fire-btn').classList.add('pressed');if(action==='repair')$('repair-btn').classList.add('pressed');}
+      if(!e.repeat&&e.code==='KeyN'){e.preventDefault();cycleNavigationTarget();}
+      if(!e.repeat&&e.code==='KeyC'){e.preventDefault();planNav();}
+      if(!e.repeat&&e.code==='KeyE'){e.preventDefault();purchaseOrEngage();}
+      if(!e.repeat&&e.code==='KeyX'){e.preventDefault();abortNav();}
       if(e.code==='KeyP'&&!e.repeat){e.preventDefault();togglePause();}
     });
     window.addEventListener('keyup',e=>{
@@ -1081,7 +1240,8 @@
     $('reinforce-btn').addEventListener('click',()=>{state.reinforcements=!state.reinforcements;state.nextEnemySpawn=state.t+rand(35,55);logEvent('Hostile reinforcements '+(state.reinforcements?'enabled.':'disabled.'),state.reinforcements?'danger':'good');updateHud();});
     $('nav-upgrade-btn').addEventListener('click',()=>{if(state.navOwned||state.player.credits<60||state.ended)return;state.player.credits-=60;state.navOwned=true;logEvent('Rendezvous intelligence installed.','good');updateHud();});
     $('nav-plan').addEventListener('click',planNav);
-    $('nav-engage').addEventListener('click',engageNav);
+    $('nav-engage').addEventListener('click',purchaseOrEngage);
+    $('nav-next').addEventListener('click',cycleNavigationTarget);
     $('nav-abort').addEventListener('click',()=>abortNav());
     $('nav-target').addEventListener('change',()=>{state.navPlan=null;updateHud();});
     let drag=null;
@@ -1103,7 +1263,7 @@
       if(e.altKey){state.waypoint={x:p.x,y:p.y};updateTargetOptions('waypoint');state.navPlan=null;logEvent('Waypoint plotted at '+p.x.toFixed(0)+', '+p.y.toFixed(0)+' km.');updateHud();return;}
       let candidate=null,dist=Infinity;
       for(const enemy of state.enemies)if(enemy.alive){const d=magnitude(p.x-enemy.x,p.y-enemy.y);if(d<Math.max(23,23/scale())&&d<dist){dist=d;candidate=enemy;}}
-      if(candidate){state.targetId=candidate.id;state.aimMode='locked';state.lastBallistic=-999;logEvent('Target lock: '+candidate.name);updateTargetOptions('enemy:'+candidate.id);return;}
+      if(candidate){state.targetId=candidate.id;state.aimMode='locked';state.lastBallistic=-999;state.navPlan=null;logEvent('Target lock: '+candidate.name);updateTargetOptions('enemy:'+candidate.id);updateHud();return;}
       if(state.ally.alive&&magnitude(p.x-state.ally.x,p.y-state.ally.y)<Math.max(23,23/scale())){updateTargetOptions('ally');state.navPlan=null;logEvent('Friendly escort selected as navigation target.','good');return;}
       for(const pickup of state.pickups)if(pickup.alive){const d=magnitude(p.x-pickup.x,p.y-pickup.y);if(d<Math.max(17,19/scale())&&d<dist){dist=d;candidate=pickup;}}
       if(candidate&&candidate.type){updateTargetOptions('pickup:'+candidate.id);state.navPlan=null;logEvent('Navigation target selected: '+candidate.type+'.');return;}
