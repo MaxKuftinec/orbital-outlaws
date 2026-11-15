@@ -63,9 +63,9 @@
     $('sim-speed').value='1';$('pause-btn').textContent='Ⅱ Pause';
     $('orbit-btn').classList.add('selected');$('orbit-btn').setAttribute('aria-pressed','true');
     updateZoom();
-    logEvent('Circular orbit established · no fuel needed to coast.','good');
-    logEvent('Two pirate ships detected in sector.','danger');
-    logEvent('Use RETROGRADE to enter a faster, lower orbit.');
+    logEvent('Circular orbit established · no fuel needed to coast','good');
+    logEvent('Two pirate ships detected in sector','danger');
+    logEvent('Use RETROGRADE to enter a faster, lower orbit');
     computePrediction();updateHud();
   }
   function accel(x,y) {
@@ -159,7 +159,7 @@
             if(target.isPlayer)endGame('Hostile projectile destroyed your spacecraft.');
             else destroyEnemy(target,'destroyed by Kestrel-7');
           } else if(target.isPlayer && (state.t-(target.lastHitLog||0))>2.3) {
-            logEvent('Hull impact! Integrity '+Math.ceil(target.hp)+'%.','danger');target.lastHitLog=state.t;
+            logEvent('Hull impact! HP '+Math.ceil(target.hp)+'%','danger');target.lastHitLog=state.t;
           }
           break;
         }

@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#07111d">
-  <meta name="description" content="Orbital Outlaws: a Newtonian orbital combat and salvage prototype.">
-  <title>Orbital Outlaws — Physics Combat Prototype</title>
+  <meta name="description" content="Orbital Outlaws: a Newtonian orbital combat and salvage prototype">
+  <title>Orbital Outlaws 0.1</title>
   <link rel="stylesheet" href="styles.css">
   <script src="game.js" defer></script>
 </head>
@@ -14,7 +14,7 @@
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
-        <div><div class="eyebrow">PHYSICS SANDBOX • PROTOTYPE 0.1</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+        <div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
       <div class="top-actions">
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">MISSION TIME</span><strong id="sim-clock">00:00</strong></div></div>
@@ -27,7 +27,7 @@
     <main class="game-layout">
       <section class="arena-shell" aria-label="Orbital gameplay area">
         <div class="arena-head">
-          <div><span class="section-kicker">SECTOR 01</span><div class="arena-title">Kestrel gravity well <span class="online"><span class="dot live"></span> LIVE PHYSICS</span></div></div>
+          <div><span class="section-kicker">SECTOR 01</span><div class="arena-title">Kestrel gravity well <span class="online"></span></div></div>
           <div class="arena-actions"><button id="orbit-btn" class="small-btn selected" aria-pressed="true">◌ Trajectory</button><button id="zoom-out" class="small-btn" aria-label="Zoom out">−</button><span id="zoom-level" class="zoom-text">1.0×</span><button id="zoom-in" class="small-btn" aria-label="Zoom in">+</button></div>
         </div>
         <div class="canvas-wrap">
@@ -36,7 +36,7 @@
           <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W/S</span> tangent <span class="keyboard-tag">A/D</span> radial <span class="keyboard-tag">SPACE</span> fire</div>
           <div id="game-over" class="game-over hidden" role="alertdialog" aria-modal="false" aria-labelledby="game-over-title"><span class="failure-mark">✕</span><h2 id="game-over-title">SHIP LOST</h2><p id="game-over-details">Your orbit ended.</p><button id="retry-btn" class="primary-btn">Try again ↻</button></div>
         </div>
-        <div class="mission-strip"><span class="objective-icon">◎</span><span><strong>OBJECTIVE</strong> · Stay in orbit. Outmaneuver raiders. Collect salvage.</span><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
+        <div class="mission-strip"><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
         <section class="flight-controls" aria-label="Spacecraft flight controls">
           <div class="control-description"><strong>MANEUVER</strong><small>Hold to fire thrusters · fuel only burns when thrusting</small></div>
           <div class="control-grid">
@@ -54,19 +54,17 @@
         <section class="panel ship-panel">
           <div class="panel-heading"><span>YOUR SHIP</span><span class="ship-class">SCOUT / MK-I</span></div>
           <div class="ship-name"><span class="ship-glyph">△</span><span>KESTREL-7<small id="status-text">Nominal orbit</small></span></div>
-          <div class="meter-title"><span>HULL INTEGRITY</span><b id="hull-value">100%</b></div><div class="meter"><div id="hull-bar" class="meter-fill green" style="width:100%"></div></div>
+          <div class="meter-title"><span>HP</span><b id="hull-value">100%</b></div><div class="meter"><div id="hull-bar" class="meter-fill green" style="width:100%"></div></div>
           <div class="meter-title"><span>PROPELLANT</span><b id="fuel-value">100 / 100</b></div><div class="meter"><div id="fuel-bar" class="meter-fill cyan" style="width:100%"></div></div>
           <div class="small-stats"><div><span>AMMO</span><strong id="ammo-value">36</strong></div><div><span>CREDITS</span><strong id="credits-value">0 <i>¤</i></strong></div><div><span>ΔV BUDGET</span><strong id="dv-value">—</strong></div></div>
         </section>
         <section class="panel instruments">
-          <div class="panel-heading"><span>ORBITAL TELEMETRY</span><span class="status-pill">NEWTONIAN</span></div>
           <div class="metric-row"><span>Altitude</span><strong id="alt-value">—</strong></div>
           <div class="metric-row"><span>Speed</span><strong id="speed-value">—</strong></div>
           <div class="metric-row"><span>Periapsis</span><strong id="peri-value">—</strong></div>
           <div class="metric-row"><span>Apoapsis</span><strong id="apo-value">—</strong></div>
           <div class="metric-row"><span>Orbit period</span><strong id="period-value">—</strong></div>
           <div class="metric-row"><span>Predicted path</span><strong id="path-status">SAFE</strong></div>
-          <div class="mini-note">Distances and times are scaled simulation units. Orbital dynamics follow inverse-square gravity.</div>
         </section>
         <section class="panel targeting">
           <div class="panel-heading"><span>TARGET ACQUISITION</span><span id="target-state" class="status-pill hostile">HOSTILE</span></div>
@@ -83,7 +81,7 @@
         <section class="panel feed-panel"><div class="panel-heading"><span>COMMS & EVENTS</span><span class="live-label">●</span></div><div id="event-feed" class="event-feed" aria-live="polite"></div></section>
       </aside>
     </main>
-    <footer class="footer-note">Orbital Outlaws · Prototype 0.1 <span>Numerical Newtonian gravity · finite thrust & fuel · ballistic projectiles</span></footer>
+    <footer class="footer-note">Orbital Outlaws · Prototype 0.1</footer>
   </div>
 </body>
 </html>
