@@ -1,8 +1,8 @@
-# Orbital Outlaws — Prototype v0.2
+# Orbital Outlaws — Prototype v0.3
 
 **Orbital Outlaws** is an experimental browser game about fighting and surviving in orbit under Newtonian gravity. The current prototype is single-player against AI raiders; multiplayer networking is not yet included.
 
-In v0.2 you **rotate your actual spacecraft before firing its main engine**. Fuel is propellant mass (kg). A purchasable **rendezvous computer** searches fuel-efficient transfer opportunities, steers the spacecraft and attempts to match velocity near salvage or other targets.
+The game uses independently rotating spacecraft, propellant measured in kilograms, and a purchasable **rendezvous computer** for fuel-conscious orbital transfers. **v0.3 adds basic manual hull repairs, spare-parts salvage, and carried spare-parts mass**, without adding complex subsystem damage or repair drones.
 
 ## Play
 
@@ -29,12 +29,23 @@ python -m http.server 8080
 | **Alt + left-click** empty arena | Set a static waypoint, available in rendezvous dropdown |
 | **Right/middle drag** or **Shift+left drag** | Pan the camera (does not affect physics) |
 | **Wheel** over arena | Zoom toward cursor; `+` / `−` buttons also zoom |
+| Hold **R** / **HOLD R · REPAIR** button | Repair hull at 5 HP/s using 1 kg of spare parts per second. Full repair to 100% is possible; no repair after death |
 | **P** | Pause/resume |
 | Simulation **Speed** | 0.5×, 1×, 2×, 4× |
 
 On touch devices, hold the control buttons to rotate, thrust or fire. Tapping the arena selects a contact or enables manual targeting; it does not burn propellant.
 
 **Autopilot:** Use the navigation target dropdown; click **Calculate route** to preview the transfer. Purchase **Rendezvous computer** for 60 credits, then click **ENGAGE**. The starting 65-credit grant makes the upgrade immediately testable. Manual engine/rotation commands disengage the autopilot; weapons remain usable. Use **ABORT** to disengage voluntarily.
+
+## Field repairs (v0.3)
+
+Field repairs are available from the beginning. KESTREL-7 starts with **10 kg** of spare parts in a **24 kg** storage bay. Holding **R** repairs at **5 hull HP/s**, consuming **1 kg/s**, while the game is running. Repairs stop at **100 HP** or when parts are depleted; they do not work on a destroyed spacecraft. A repair button in the ship panel also works for touch users. Repairing can happen while coasting, manoeuvring, or using autopilot; it does not cancel navigation.
+
+Spare parts appear as blue `PARTS` salvage containers (**8 kg**) and are also recovered from wrecks (up to **6 kg**, limited by remaining storage). The mass of carried parts contributes to your spacecraft's total inertial mass and therefore affects thrust acceleration and remaining Δv. The repair constants are intentionally gameplay values, not an engineering model of real hull materials. No drones, individual subsystem damage, repair stations, or repair-cost markets yet.
+
+## Ballistic weapon realism
+
+Current projectiles are **not photons**. The muzzle velocity is **205 km/s relative to the shooting spacecraft**, and rounds inherit the shooter's orbital velocity before following Newtonian trajectories. That is extremely fast for a solid slug (ordinary firearms are typically below ~1.2 km/s) and is fictionalized for this game. The simulation currently has **no projectile mass, firing recoil, weapon energy budget or energy-based damage model**; hits inflict fixed damage (26 HP against raiders, 10 HP against the player). A conventional/hypervelocity/laser weapon rebalance is postponed.
 
 ## Physics and instrumentation
 
@@ -91,6 +102,7 @@ With effective exhaust speed `vₑ`, the ideal propellant estimate is
 - Purchasable rendezvous intelligence and predictive fire-control upgrades.
 - Automatically planned/coasted transfers plus terminal proximity/velocity guidance.
 - Armed AI raiders, ballistic weapons, hull damage, salvage, credits and respawn after game over.
+- Basic field repairs (hold R), spare-parts salvage, and spare-parts mass in the propulsion and Δv budget.
 - No online multiplayer, no GR black-hole simulation, no landing or persistent economy yet.
 
 ## Test
