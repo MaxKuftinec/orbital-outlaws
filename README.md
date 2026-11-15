@@ -21,16 +21,18 @@ python -m http.server 8080
 | Hold **D / →** | Fire RCS to rotate clockwise |
 | Hold **S / ↓** | Fire RCS to stop spinning |
 | **Move mouse** over arena | Aim the main engine's limited ±28° nozzle gimbal; cannot rotate the whole ship |
-| Hold **left mouse** over empty arena or **W / ↑** | Fire the main engine in the ship's forward/gimbaled direction |
+| Hold **W / ↑** | Fire the main engine in the ship's forward/gimbaled direction |
 | Hold **Space** / FIRE button | Shoot ballistic projectiles at the locked hostile or manual aim point |
-| **Left-click** a hostile or salvage pod | Choose it as combat/nav target; clicking empty space with no hold ignites the engine briefly |
+| **Left-click** a hostile | Lock it as the gun target; **Space** fires |
+| **Left-click** empty arena | Activate manual weapon aiming; moving the cursor adjusts aim, and **Space** fires |
+| **Left-click** a salvage pod | Select it as a navigation target without firing the main engine |
 | **Alt + left-click** empty arena | Set a static waypoint, available in rendezvous dropdown |
 | **Right/middle drag** or **Shift+left drag** | Pan the camera (does not affect physics) |
 | **Wheel** over arena | Zoom toward cursor; `+` / `−` buttons also zoom |
 | **P** | Pause/resume |
 | Simulation **Speed** | 0.5×, 1×, 2×, 4× |
 
-On touch devices, hold the control buttons to rotate and fire the engine. A single canvas tap sets the gimbal and may fire the main engine until release.
+On touch devices, hold the control buttons to rotate, thrust or fire. Tapping the arena selects a contact or enables manual targeting; it does not burn propellant.
 
 **Autopilot:** Use the navigation target dropdown; click **Calculate route** to preview the transfer. Purchase **Rendezvous computer** for 60 credits, then click **ENGAGE**. The starting 65-credit grant makes the upgrade immediately testable. Manual engine/rotation commands disengage the autopilot; weapons remain usable. Use **ABORT** to disengage voluntarily.
 
