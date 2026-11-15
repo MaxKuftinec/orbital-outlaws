@@ -4,9 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#07111d">
-  <meta name="description" content="Orbital Outlaws: a Newtonian orbital combat and salvage prototype">
-  <title>Orbital Outlaws 0.1</title>
+  <meta name="description" content="Orbital Outlaws: a Newtonian orbital combat and salvage prototype.">
+  <title>Orbital Outlaws — Physics Combat Prototype</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="navigation.js" defer></script>
   <script src="game.js" defer></script>
 </head>
 <body>
@@ -14,7 +15,7 @@
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
-        <div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+        <div><div class="eyebrow">PHYSICS SANDBOX • PROTOTYPE 0.2</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
       <div class="top-actions">
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">MISSION TIME</span><strong id="sim-clock">00:00</strong></div></div>
@@ -27,44 +28,58 @@
     <main class="game-layout">
       <section class="arena-shell" aria-label="Orbital gameplay area">
         <div class="arena-head">
-          <div><span class="section-kicker">SECTOR 01</span><div class="arena-title">Kestrel gravity well <span class="online"></span></div></div>
+          <div><span class="section-kicker">SECTOR 01</span><div class="arena-title">Kestrel gravity well <span class="online"><span class="dot live"></span> LIVE PHYSICS</span></div></div>
           <div class="arena-actions"><button id="orbit-btn" class="small-btn selected" aria-pressed="true">◌ Trajectory</button><button id="zoom-out" class="small-btn" aria-label="Zoom out">−</button><span id="zoom-level" class="zoom-text">1.0×</span><button id="zoom-in" class="small-btn" aria-label="Zoom in">+</button></div>
         </div>
         <div class="canvas-wrap">
           <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat."></canvas>
           <div class="canvas-overlay top-left"><span class="tiny-dot blue"></span><span id="target-indicator">TRACKING: RAIDER-01</span></div>
-          <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W/S</span> tangent <span class="keyboard-tag">A/D</span> radial <span class="keyboard-tag">SPACE</span> fire</div>
+          <div class="canvas-overlay bottom-left"><span class="keyboard-tag">LMB / W</span> main engine <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom</div>
           <div id="game-over" class="game-over hidden" role="alertdialog" aria-modal="false" aria-labelledby="game-over-title"><span class="failure-mark">✕</span><h2 id="game-over-title">SHIP LOST</h2><p id="game-over-details">Your orbit ended.</p><button id="retry-btn" class="primary-btn">Try again ↻</button></div>
         </div>
-        <div class="mission-strip"><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
+        <div class="mission-strip"><span class="objective-icon">◎</span><span><strong>OBJECTIVE</strong> · Stay in orbit. Outmaneuver raiders. Collect salvage.</span><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
         <section class="flight-controls" aria-label="Spacecraft flight controls">
-          <div class="control-description"><strong>MANEUVER</strong><small>Hold to fire thrusters · fuel only burns when thrusting</small></div>
+          <div class="control-description"><strong>ATTITUDE & PROPULSION</strong><small>Point ship using nose/tail RCS. Aim the ±28° main gimbal with your cursor, then hold left mouse to burn.</small></div>
           <div class="control-grid">
-            <button type="button" data-thrust="prograde" class="thruster" aria-label="Hold for prograde thrust"><b>↑</b><strong>PROGRADE</strong><small>W</small></button>
-            <button type="button" data-thrust="retrograde" class="thruster" aria-label="Hold for retrograde thrust"><b>↓</b><strong>RETROGRADE</strong><small>S</small></button>
-            <button type="button" data-thrust="inward" class="thruster" aria-label="Hold for inward radial thrust"><b>↙</b><strong>RADIAL IN</strong><small>A</small></button>
-            <button type="button" data-thrust="outward" class="thruster" aria-label="Hold for outward radial thrust"><b>↗</b><strong>RADIAL OUT</strong><small>D</small></button>
+            <button type="button" data-thrust="rotate-left" class="thruster" aria-label="Hold to rotate counter-clockwise"><b>⟲</b><strong>ROTATE LEFT</strong><small>A / ←</small></button>
+            <button type="button" data-thrust="rotate-right" class="thruster" aria-label="Hold to rotate clockwise"><b>⟳</b><strong>ROTATE RIGHT</strong><small>D / →</small></button>
+            <button type="button" data-thrust="stabilize" class="thruster" aria-label="Hold to cancel spin"><b>◈</b><strong>STOP SPIN</strong><small>S / ↓</small></button>
+            <button type="button" data-thrust="main" class="thruster" aria-label="Hold for main engine thrust"><b>▲</b><strong>MAIN ENGINE</strong><small>W / LMB</small></button>
             <button type="button" id="fire-btn" class="fire-button" aria-label="Fire at selected target"><b>⌖</b><strong>FIRE</strong><small>SPACE</small></button>
           </div>
-          <div class="control-note">Click or tap a hostile ship to target it. Click empty space to aim manually. <button id="lock-btn" type="button">Auto-target nearest ↗</button></div>
+          <div class="control-note">Left-click near a contact to select it, or hold on empty space to thrust. Right/middle drag or Shift+drag pans. Mouse wheel zooms toward cursor. <button id="lock-btn" type="button">Lock nearest raider ↗</button></div>
         </section>
+      </section>
       </section>
 
       <aside class="sidebar" aria-label="Spacecraft instruments">
         <section class="panel ship-panel">
           <div class="panel-heading"><span>YOUR SHIP</span><span class="ship-class">SCOUT / MK-I</span></div>
           <div class="ship-name"><span class="ship-glyph">△</span><span>KESTREL-7<small id="status-text">Nominal orbit</small></span></div>
-          <div class="meter-title"><span>HP</span><b id="hull-value">100%</b></div><div class="meter"><div id="hull-bar" class="meter-fill green" style="width:100%"></div></div>
-          <div class="meter-title"><span>PROPELLANT</span><b id="fuel-value">100 / 100</b></div><div class="meter"><div id="fuel-bar" class="meter-fill cyan" style="width:100%"></div></div>
+          <div class="meter-title"><span>HULL INTEGRITY</span><b id="hull-value">100%</b></div><div class="meter"><div id="hull-bar" class="meter-fill green" style="width:100%"></div></div>
+          <div class="meter-title"><span>PROPELLANT</span><b id="fuel-value">200 / 200 kg</b></div><div class="meter"><div id="fuel-bar" class="meter-fill cyan" style="width:100%"></div></div>
           <div class="small-stats"><div><span>AMMO</span><strong id="ammo-value">36</strong></div><div><span>CREDITS</span><strong id="credits-value">0 <i>¤</i></strong></div><div><span>ΔV BUDGET</span><strong id="dv-value">—</strong></div></div>
         </section>
+        <section class="panel propulsion">
+          <div class="panel-heading"><span>PROPULSION</span><span>SCOUT MK-I</span></div>
+          <div class="metric-row"><span>Dry mass</span><strong id="dry-mass">900 kg</strong></div>
+          <div class="metric-row"><span>Total mass</span><strong id="total-mass">1,100 kg</strong></div>
+          <div class="metric-row"><span>Main thrust</span><strong id="main-thrust">1.6 MN</strong></div>
+          <div class="metric-row"><span>Mass flow</span><strong id="mass-flow">5 kg/s</strong></div>
+          <div class="metric-row"><span>Effective exhaust</span><strong id="exhaust-vel">320 km/s</strong></div>
+          <div class="metric-row"><span>Ship heading</span><strong id="ship-heading">0°</strong></div>
+          <div class="metric-row"><span>Angular speed</span><strong id="spin-value">0°/s</strong></div>
+          <div class="mini-note">Mass is conserved by ejecting propellant; acceleration rises as the ship becomes lighter. Extreme engine performance is fictional.</div>
+        </section>
         <section class="panel instruments">
+          <div class="panel-heading"><span>ORBITAL TELEMETRY</span><span class="status-pill">NEWTONIAN</span></div>
           <div class="metric-row"><span>Altitude</span><strong id="alt-value">—</strong></div>
           <div class="metric-row"><span>Speed</span><strong id="speed-value">—</strong></div>
           <div class="metric-row"><span>Periapsis</span><strong id="peri-value">—</strong></div>
           <div class="metric-row"><span>Apoapsis</span><strong id="apo-value">—</strong></div>
           <div class="metric-row"><span>Orbit period</span><strong id="period-value">—</strong></div>
           <div class="metric-row"><span>Predicted path</span><strong id="path-status">SAFE</strong></div>
+          <div class="mini-note">Distances are displayed in km and times in s. The fictional Kestrel body is extremely dense; gravity follows inverse-square Newtonian physics.</div>
         </section>
         <section class="panel targeting">
           <div class="panel-heading"><span>TARGET ACQUISITION</span><span id="target-state" class="status-pill hostile">HOSTILE</span></div>
@@ -77,11 +92,24 @@
         <section class="panel upgrades">
           <div class="panel-heading"><span>UPGRADES</span><span>FIELD MARKET</span></div>
           <div class="upgrade-entry"><div><strong>Predictive fire control</strong><small>Solves a lead shot using projected target motion.</small><span id="upgrade-status">40 ¤</span></div><button id="upgrade-btn" class="buy-btn">BUY</button></div>
+          <div class="upgrade-entry"><div><strong>Rendezvous computer</strong><small>Fuel-conscious route search, attitude control and automatic capture approach.</small><span id="nav-upgrade-status">60 ¤</span></div><button id="nav-upgrade-btn" class="buy-btn">BUY</button></div>
+        </section>
+        <section class="panel autopilot-panel">
+          <div class="panel-heading"><span>RENDEZVOUS COMPUTER</span><span id="autopilot-chip" class="status-pill">LOCKED</span></div>
+          <div class="mini-note">Select a salvage pod, raider or map waypoint. Planner samples coast times and solves a two-impulse intercept, favouring less Δv.</div>
+          <label for="nav-target" class="field-label">NAVIGATION TARGET</label>
+          <select id="nav-target" class="nav-target" aria-label="Rendezvous destination"></select>
+          <div class="metric-row"><span>Estimated total Δv</span><strong id="nav-dv">—</strong></div>
+          <div class="metric-row"><span>Arrival in</span><strong id="nav-eta">—</strong></div>
+          <div class="metric-row"><span>Propellant estimate</span><strong id="nav-fuel">—</strong></div>
+          <div class="metric-row"><span>Guidance status</span><strong id="nav-status">No plan</strong></div>
+          <div class="nav-buttons"><button id="nav-plan" class="wide-subtle-btn">Calculate route</button><button id="nav-engage" class="buy-btn" disabled>ENGAGE</button><button id="nav-abort" class="small-btn" disabled>ABORT</button></div>
+          <div class="control-note">Alt+click empty space to place a fixed-position orbital waypoint. Manual controls override the autopilot. Estimates assume instantaneous burns; real engines need correction.</div>
         </section>
         <section class="panel feed-panel"><div class="panel-heading"><span>COMMS & EVENTS</span><span class="live-label">●</span></div><div id="event-feed" class="event-feed" aria-live="polite"></div></section>
       </aside>
     </main>
-    <footer class="footer-note">Orbital Outlaws · Prototype 0.1</footer>
+    <footer class="footer-note">Orbital Outlaws · Prototype 0.2 <span>Real propellant mass · attitude thrusters · two-burn rendezvous guidance</span></footer>
   </div>
 </body>
 </html>
