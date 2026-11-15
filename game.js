@@ -1,5 +1,5 @@
 /**
- * ORBITAL OUTLAWS 0.1
+ * ORBITAL OUTLAWS 0.2
  * One central body, Newtonian inverse-square gravity, kick-drift-kick (velocity Verlet).
  * World distances and seconds are intentionally game-scaled to keep orbits playable.
  * All ships, floating salvage and ballistic projectiles share the same gravity solver.
@@ -12,6 +12,12 @@
   const ctx = canvas.getContext('2d', { alpha: false });
   const WORLD = Object.freeze({ mu: 310000, radius: 85, crashRadius: 91, outerRadius: 1200, projectileSpeed: 205 });
   const TWO_PI = Math.PI * 2;
+  const NAV = window.OrbitalNavigation;
+  if(!NAV)throw new Error('navigation.js must load before game.js');
+  // 1 world distance unit = 1 km; velocities in km/s. Engines are futuristic.
+  const ENGINE=Object.freeze({dryKg:900,propellantKg:200,thrustN:1600000,flowKgS:5,rcsN:2500,rcsFlowKgS:.04,leverM:7,shipLengthM:14,gimbalMax:28*Math.PI/180});
+  const exhaustKmS=ENGINE.thrustN/ENGINE.flowKgS/1000;
+
   const palette = { cyan: '#62d9f6', green:'#67e0aa', red:'#ff7184', yellow:'#edbe6b', purple:'#bd9efa' };
   let W = 840, H = 550, dpr = 1;
   let state;
@@ -28,10 +34,14 @@
     return {x:r*Math.cos(theta), y:r*Math.sin(theta), vx:-s*Math.sin(theta), vy:s*Math.cos(theta)};
   }
   function newShip(id, name, r, theta, color, isPlayer=false) {
-    return {...circularPosition(r,theta), id,name,color, isPlayer, hp:isPlayer?100:66, fuel:isPlayer?100:rand(70,100), fuelMax:isPlayer?100:100,
-      ammo:isPlayer?36:999, credits:0, thrustAccel:isPlayer?14:9.5, fuelRate:isPlayer?7.2:4.4,
-      gunCooldown: isPlayer?0:rand(2.2,4), aiThrustUntil:0, aiThrustKind:null, nextDecision:rand(4,9),
-      trail:[], trailT:0, alive:true, heading:0, thrustVector:null, shotCount:0 };
+    const orbit=circularPosition(r,theta);
+    return {...orbit,id,name,color,isPlayer,hp:isPlayer?100:66,
+      fuel:isPlayer?ENGINE.propellantKg:rand(120,170),fuelMax:isPlayer?ENGINE.propellantKg:170,
+      dryMass:isPlayer?ENGINE.dryKg:1050,ammo:isPlayer?36:999,credits:isPlayer?65:0,
+      thrustN:isPlayer?ENGINE.thrustN:1400000,flowKgS:isPlayer?ENGINE.flowKgS:4.8,
+      gunCooldown:isPlayer?0:rand(2.2,4),aiThrustUntil:0,aiThrustKind:null,nextDecision:rand(4,9),
+      trail:[],trailT:0,alive:true,heading:Math.atan2(orbit.vy,orbit.vx),omega:0,
+      gimbal:0,thrustVector:null,rcsFiring:0,shotCount:0};
   }
   function newPickup(r, angle, type='fuel', amount=25) {
     return {...circularPosition(r,angle), id:'pod-'+Math.random().toString(36).slice(2,8), type, amount,
@@ -54,7 +64,7 @@
     state = {t:0, player, enemies:[e1,e2], shots:[], pickups:[
       newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30)
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
-    orbitVisible:true, predictive:false, ended:false, paused:false, speed:1, nextEnemySpawn:75,
+    orbitVisible:true, predictive:false, navOwned:false, navPlan:null, autopilot:null, waypoint:null, panX:0,panY:0, pointerThrust:false, ended:false, paused:false, speed:1, nextEnemySpawn:75,
     playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false};
     lastFrame = performance.now(); accumulator=0;
     document.querySelectorAll('[data-thrust]').forEach(btn=>btn.classList.remove('pressed'));
@@ -63,9 +73,10 @@
     $('sim-speed').value='1';$('pause-btn').textContent='Ⅱ Pause';
     $('orbit-btn').classList.add('selected');$('orbit-btn').setAttribute('aria-pressed','true');
     updateZoom();
-    logEvent('Circular orbit established · no fuel needed to coast','good');
-    logEvent('Two pirate ships detected in sector','danger');
-    logEvent('Use RETROGRADE to enter a faster, lower orbit');
+    logEvent('Coast is free. Starter grant: 65 ¤ for testing upgrades.','good');
+    logEvent('Two pirate ships detected in sector.','danger');
+    logEvent('Rotate with A/D, stop spin with S; aim and hold W or left mouse for main thrust.');
+    updateTargetOptions();
     computePrediction();updateHud();
   }
   function accel(x,y) {
@@ -82,43 +93,116 @@
     body.vx = halfVx + .5*dt*(a2.x + (extra?.x || 0));
     body.vy = halfVy + .5*dt*(a2.y + (extra?.y || 0));
   }
-  function unit(x,y) {const m=magnitude(x,y)||1;return {x:x/m,y:y/m};}
-  function thrustVector(ship, pressed) {
-    if (!ship.fuel || pressed.length===0) return null;
-    const radial=unit(ship.x,ship.y), forward=unit(ship.vx,ship.vy);
-    let dx=0, dy=0;
-    for(const kind of pressed) {
-      if(kind==='prograde') {dx+=forward.x;dy+=forward.y;}
-      if(kind==='retrograde') {dx-=forward.x;dy-=forward.y;}
-      if(kind==='outward') {dx+=radial.x;dy+=radial.y;}
-      if(kind==='inward') {dx-=radial.x;dy-=radial.y;}
-    }
-    if(magnitude(dx,dy)<.01) return null;
-    const dir=unit(dx,dy);
-    return {x:dir.x*ship.thrustAccel,y:dir.y*ship.thrustAccel};
+  function unit(x,y){const m=magnitude(x,y)||1;return {x:x/m,y:y/m};}
+  function normAngle(a){return Math.atan2(Math.sin(a),Math.cos(a));}
+  function mass(ship){return ship.dryMass+ship.fuel;}
+  function burn(ship,dt,dir,rcs=false){
+    if(!dir||ship.fuel<=0)return null;
+    const flow=rcs?ENGINE.rcsFlowKgS:ship.flowKgS;
+    const rate=rcs?ENGINE.rcsN*2:ship.thrustN;
+    const used=Math.min(ship.fuel,flow*dt);
+    const before=mass(ship),after=before-used;
+    ship.fuel-=used;
+    const dv=(rate/flow/1000)*Math.log(before/after);
+    return {x:dir.x*dv/dt,y:dir.y*dv/dt,used,dv};
   }
-  function applyShipStep(ship, dt, pressed) {
-    if(!ship.alive) return;
-    const extra=thrustVector(ship, pressed);
+  function rcsControl(ship,dt,command){
+    const inertia=mass(ship)*ENGINE.shipLengthM**2/12;
+    const alpha=(2*ENGINE.rcsN*ENGINE.leverM)/inertia;
+    let sign=command==='rotate-left'?-1:command==='rotate-right'?1:0;
+    if(command==='stabilize' && Math.abs(ship.omega)>.00001) sign=-Math.sign(ship.omega);
+    ship.rcsFiring=0;
+    if(sign!==0 && ship.fuel>0){
+      const used=Math.min(ship.fuel,ENGINE.rcsFlowKgS*dt);
+      ship.fuel-=used;
+      const applied=alpha*sign*dt*(used/(ENGINE.rcsFlowKgS*dt));
+      if(command==='stabilize' && Math.sign(ship.omega+applied)!==Math.sign(ship.omega)) ship.omega=0;
+      else ship.omega+=applied;
+      ship.rcsFiring=sign;
+    }
+    ship.heading=normAngle(ship.heading+ship.omega*dt);
+  }
+  function autoAttitude(ship,dt,wanted){
+    const difference=normAngle(Math.atan2(wanted.y,wanted.x)-ship.heading);
+    const maxAlpha=(2*ENGINE.rcsN*ENGINE.leverM)/(mass(ship)*ENGINE.shipLengthM**2/12);
+    const omegaTarget=clamp(2.7*difference,-1.9,1.9);
+    const error=omegaTarget-ship.omega;
+    const command=Math.abs(error)<maxAlpha*dt*.4?'idle':error<0?'rotate-left':'rotate-right';
+    rcsControl(ship,dt,command);
+    ship.gimbal=clamp(normAngle(Math.atan2(wanted.y,wanted.x)-ship.heading),-ENGINE.gimbalMax,ENGINE.gimbalMax);
+    return Math.abs(normAngle(Math.atan2(wanted.y,wanted.x)-ship.heading))<.13 && Math.abs(ship.omega)<.35;
+  }
+  function manualAttitude(ship,dt){
+    let command='idle';
+    if(state.down.has('stabilize'))command='stabilize';
+    else if(state.down.has('rotate-left')&&!state.down.has('rotate-right'))command='rotate-left';
+    else if(state.down.has('rotate-right')&&!state.down.has('rotate-left'))command='rotate-right';
+    rcsControl(ship,dt,command);
+    if(state.gimbalTarget){
+      const desired=Math.atan2(state.gimbalTarget.y-ship.y,state.gimbalTarget.x-ship.x);
+      ship.gimbal=clamp(normAngle(desired-ship.heading),-ENGINE.gimbalMax,ENGINE.gimbalMax);
+    }else ship.gimbal=0;
+  }
+  function enemyThrustDirection(ship,pressed){
+    if(!pressed.length)return null;
+    const radial=unit(ship.x,ship.y),forward=unit(ship.vx,ship.vy);
+    const kind=pressed[0];
+    if(kind==='prograde')return forward;
+    if(kind==='retrograde')return {x:-forward.x,y:-forward.y};
+    if(kind==='outward')return radial;
+    if(kind==='inward')return {x:-radial.x,y:-radial.y};
+    return null;
+  }
+  function applyShipStep(ship,dt,pressed=[]){
+    if(!ship.alive)return;
+    let dir=null;
+    if(ship.isPlayer){
+      const requested=autopilotStep(dt);
+      if(requested){
+        if(autoAttitude(ship,dt,requested))dir=requested;
+      }else if(state.autopilot){
+        const a=state.autopilot;
+        const next=a.phase==='wait'?a.plan.dv1:a.phase==='coast'?a.plan.dv2:null;
+        if(next&&magnitude(next.x,next.y)>.01)autoAttitude(ship,dt,next);
+        else rcsControl(ship,dt,'stabilize');
+      }else{
+        manualAttitude(ship,dt);
+        if(state.down.has('main')){
+          const angle=ship.heading+ship.gimbal;dir={x:Math.cos(angle),y:Math.sin(angle)};
+        }
+      }
+    }else{
+      dir=enemyThrustDirection(ship,pressed);
+      if(dir)ship.heading=Math.atan2(dir.y,dir.x);
+    }
+    const result=dir?burn(ship,dt,dir):null;
+    const extra=result?{x:result.x,y:result.y}:null;
     ship.thrustVector=extra;
-    if(extra) ship.fuel=Math.max(0,ship.fuel-dt*ship.fuelRate);
+    if(ship.isPlayer&&result&&state.autopilot&&state.autopilot.phase==='burn1'){
+      const a=state.autopilot;
+      const lengthLeft=magnitude(a.remaining.x,a.remaining.y);
+      const projected=(result.x*a.remaining.x+result.y*a.remaining.y)/Math.max(.00001,lengthLeft)*dt;
+      const remaining=Math.max(0,lengthLeft-projected);
+      const k=remaining/Math.max(lengthLeft,.00001);
+      a.remaining.x*=k;a.remaining.y*=k;
+      if(remaining<Math.max(.12,result.dv*.65)){a.phase='coast';a.remaining={x:0,y:0};}
+    }
     stepBody(ship,dt,extra);
     ship.gunCooldown=Math.max(0,ship.gunCooldown-dt);
     ship.trailT+=dt;
-    if(ship.trailT>.16) {ship.trail.push({x:ship.x,y:ship.y});if(ship.trail.length>120)ship.trail.shift();ship.trailT=0;}
-    if(magnitude(ship.x,ship.y)<WORLD.crashRadius) {
-      if(ship.isPlayer) endGame('Your spacecraft intersected the surface of Kestrel.');
+    if(ship.trailT>.16){ship.trail.push({x:ship.x,y:ship.y});if(ship.trail.length>120)ship.trail.shift();ship.trailT=0;}
+    if(magnitude(ship.x,ship.y)<WORLD.crashRadius){
+      if(ship.isPlayer)endGame('Your spacecraft intersected the surface of Kestrel.');
       else destroyEnemy(ship,'fell into the gravity well');
     }
-    if(ship.isPlayer && magnitude(ship.x,ship.y)>WORLD.outerRadius) endGame('Your spacecraft escaped the playable sector.');
-    if(ship.isPlayer && ship.hp<=0) endGame('Hostile fire destroyed your spacecraft.');
+    if(ship.isPlayer&&magnitude(ship.x,ship.y)>WORLD.outerRadius)endGame('Your spacecraft escaped the playable sector.');
+    if(ship.isPlayer&&ship.hp<=0)endGame('Hostile fire destroyed your spacecraft.');
   }
   function step(dt) {
     if(state.ended)return;
     state.t+=dt;
     const player=state.player;
-    const pressed = ['prograde','retrograde','inward','outward'].filter(k=>state.down.has(k));
-    applyShipStep(player,dt,pressed);
+    applyShipStep(player,dt);
     if(state.ended)return;
     for(const enemy of state.enemies) {
       if(!enemy.alive)continue;
@@ -142,7 +226,7 @@
     for(const p of state.pickups) {
       if(!p.alive) continue;
       stepBody(p,dt);p.age+=dt;
-      if(magnitude(p.x-player.x,p.y-player.y)<19) collect(p);
+      if(magnitude(p.x-player.x,p.y-player.y)<19 && magnitude(p.vx-player.vx,p.vy-player.vy)<5) collect(p);
       if(magnitude(p.x,p.y)<WORLD.crashRadius || p.age>190) p.alive=false;
     }
     for(const shot of state.shots) {
@@ -159,7 +243,7 @@
             if(target.isPlayer)endGame('Hostile projectile destroyed your spacecraft.');
             else destroyEnemy(target,'destroyed by Kestrel-7');
           } else if(target.isPlayer && (state.t-(target.lastHitLog||0))>2.3) {
-            logEvent('Hull impact! HP '+Math.ceil(target.hp)+'%','danger');target.lastHitLog=state.t;
+            logEvent('Hull impact! Integrity '+Math.ceil(target.hp)+'%.','danger');target.lastHitLog=state.t;
           }
           break;
         }
@@ -189,15 +273,18 @@
     else logEvent(enemy.name+' '+reason+'.');
     const survivors=state.enemies.filter(e=>e.alive);
     if(state.targetId===enemy.id)state.targetId=survivors.length?survivors[0].id:null;
+    if(state.autopilot?.targetKey==='enemy:'+enemy.id)abortNav('Target destroyed.');
+    updateTargetOptions();
   }
   function collect(pod) {
     pod.alive=false;
     const p=state.player;
-    if(pod.type==='fuel') {p.fuel=Math.min(p.fuelMax,p.fuel+pod.amount);logEvent('Recovered '+pod.amount+' units of fuel.','good');}
+    if(pod.type==='fuel') {p.fuel=Math.min(p.fuelMax,p.fuel+pod.amount);logEvent('Recovered '+pod.amount+' kg propellant.','good');}
     if(pod.type==='ammo') {p.ammo+=pod.amount;logEvent('Recovered '+pod.amount+' ballistic rounds.','good');}
     if(pod.type==='credits') {p.credits+=pod.amount;logEvent('Recovered '+pod.amount+' salvage credits.','good');}
-    if(pod.type==='wreck') {p.credits+=50;p.ammo+=12;p.fuel=Math.min(p.fuelMax,p.fuel+25);logEvent('Wreck salvaged: +50 ¤, +25 fuel, +12 ammo.','good');}
-    sparks(pod.x,pod.y,palette.green,12);
+    if(pod.type==='wreck') {p.credits+=50;p.ammo+=12;p.fuel=Math.min(p.fuelMax,p.fuel+25);logEvent('Wreck salvaged: +50 ¤, +25 kg propellant, +12 ammo.','good');}
+    if(state.autopilot?.targetKey==='pickup:'+pod.id){state.autopilot=null;state.navPlan=null;logEvent('Rendezvous complete. Salvage secured!','good');}
+    sparks(pod.x,pod.y,palette.green,12);updateTargetOptions();
   }
   function sparks(x,y,color,n) {
     for(let i=0;i<n;i++){const a=rand(0,TWO_PI),v=rand(6,45);state.particles.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,color,life:rand(.35,1),maxLife:1});}
@@ -216,6 +303,95 @@
     for(const e of state.enemies)if(e.alive){const d=magnitude(e.x-state.player.x,e.y-state.player.y);if(d<dist){nearest=e;dist=d;}}
     if(nearest){state.targetId=nearest.id;state.aimMode='locked';logEvent('Locked nearest contact: '+nearest.name+'.');}
     else logEvent('No living targets in range.');
+  }
+  function navKeyExists(key){
+    if(key==='waypoint')return !!state.waypoint;
+    if(key?.startsWith('pickup:'))return state.pickups.some(p=>p.id===key.slice(7)&&p.alive);
+    if(key?.startsWith('enemy:'))return state.enemies.some(p=>p.id===key.slice(6)&&p.alive);
+    return false;
+  }
+  function navTarget(key){
+    if(key==='waypoint'&&state.waypoint)return {...state.waypoint,fixed:true,orbitSign:state.player.x*state.player.vy-state.player.y*state.player.vx>=0?1:-1};
+    if(key?.startsWith('pickup:'))return state.pickups.find(p=>p.id===key.slice(7)&&p.alive)||null;
+    if(key?.startsWith('enemy:'))return state.enemies.find(p=>p.id===key.slice(6)&&p.alive)||null;
+    return null;
+  }
+  function updateTargetOptions(preferred){
+    const select=$('nav-target');const previous=preferred||select.value;
+    const entries=[...state.pickups.filter(p=>p.alive).map(p=>({key:'pickup:'+p.id,text:(p.type==='wreck'?'Wreck':'Salvage '+p.type)+' · '+p.id.slice(-4)})),
+      ...state.enemies.filter(e=>e.alive).map(e=>({key:'enemy:'+e.id,text:e.name+' · hostile'}))];
+    if(state.waypoint)entries.unshift({key:'waypoint',text:'Map waypoint (fixed location)'});
+    select.replaceChildren();
+    for(const item of entries){const o=document.createElement('option');o.value=item.key;o.textContent=item.text;select.append(o);}
+    if(entries.some(item=>item.key===previous))select.value=previous;
+  }
+  function planNav(){
+    if(state.ended)return null;
+    const key=$('nav-target').value,target=navTarget(key);
+    if(!target){state.navPlan=null;logEvent('Select a valid target before planning.');return null;}
+    const plan=NAV.plan(state.player,target,{mu:WORLD.mu,inner:WORLD.crashRadius+7,outer:WORLD.outerRadius-10,
+      massKg:mass(state.player),propellantKg:state.player.fuel,exhaustKmS});
+    state.navPlan=plan?{...plan,targetKey:key,calculatedAt:state.t}:null;
+    if(plan)logEvent('Route plotted: '+plan.dv.toFixed(2)+' km/s total Δv, '+plan.eta.toFixed(0)+' s.','good');
+    else logEvent('No safe affordable transfer in sampled windows. Try later or change target.','danger');
+    updateHud();return state.navPlan;
+  }
+  function abortNav(message='Autopilot disengaged.'){
+    if(!state.autopilot)return;
+    state.autopilot=null;logEvent(message);updateHud();
+  }
+  function engageNav(){
+    if(!state.navOwned){logEvent('Buy the rendezvous computer to engage.');return;}
+    const plan=state.navPlan&&state.navPlan.targetKey===$('nav-target').value&&state.t-state.navPlan.calculatedAt<1?state.navPlan:planNav();
+    if(!plan)return;
+    state.autopilot={targetKey:plan.targetKey,plan,phase:'wait',startAt:state.t+plan.wait,
+      dueAt:state.t+plan.wait+plan.flight,remaining:{...plan.dv1}};
+    state.down.clear();logEvent('Rendezvous autopilot engaged.','good');updateHud();
+  }
+  function autopilotStep(dt){
+    const a=state.autopilot;if(!a)return null;
+    const target=navTarget(a.targetKey);
+    if(!target){abortNav('Navigation contact lost.');return null;}
+    const ship=state.player,range=magnitude(ship.x-target.x,ship.y-target.y),relative=magnitude(ship.vx-(target.vx||0),ship.vy-(target.vy||0));
+    if(a.targetKey.startsWith('enemy:')&&range<28&&relative<3){abortNav('Rendezvous range reached; hostile contact nearby!');return null;}
+    if(a.targetKey==='waypoint'&&range<24){abortNav('Waypoint reached.');return null;}
+    if(a.phase==='wait'){
+      if(state.t>=a.startAt){a.phase='burn1';}
+      else return null;
+    }
+    if(a.phase==='burn1'){
+      const m=magnitude(a.remaining.x,a.remaining.y);
+      if(m<.12){a.phase='coast';return null;}
+      return unit(a.remaining.x,a.remaining.y);
+    }
+    if(a.phase==='coast'){
+      // Burn 2 is a terminal relative-velocity match. Finite-burn correction is approximate.
+      const remaining=a.dueAt-state.t;
+      const brakeEstimate=magnitude(a.plan.dv2.x,a.plan.dv2.y)/(ship.thrustN/mass(ship)/1000);
+      if(remaining<Math.max(.9,brakeEstimate*.7)) a.phase='brake';
+      else return null;
+    }
+    if(a.phase==='brake'){
+      const future=target.fixed?NAV.targetAt(target,0,WORLD.mu,WORLD.crashRadius,WORLD.outerRadius):target;
+      const dx=future.x-ship.x,dy=future.y-ship.y;
+      const dvx=future.vx-ship.vx,dvy=future.vy-ship.vy;
+      const dist=magnitude(dx,dy);
+      if(dist<22&&magnitude(dvx,dvy)<3){
+        if(a.targetKey.startsWith('enemy:')||a.targetKey==='waypoint')abortNav('Relative velocity matched near destination.');
+        else {a.phase='holding';a.holdingAt=state.t;}
+        return null;
+      }
+      // PD terminal controller corrects the finite-thrust departure and AI movement.
+      const timeScale=clamp(dist/Math.max(3,magnitude(dvx,dvy)),2,10);
+      const correction={x:dvx+dx/timeScale,y:dvy+dy/timeScale};
+      if(magnitude(correction.x,correction.y)<.25)return null;
+      return unit(correction.x,correction.y);
+    }
+    if(a.phase==='holding'){
+      if(state.t-a.holdingAt>6)abortNav('Capture window missed. Replot the route.');
+      return null;
+    }
+    return null;
   }
   // Predict intercept by iterating a target's free orbital motion, the shooter's
   // existing velocity and approximate projectile gravity over a short flight.
@@ -285,31 +461,56 @@
     const p=state.player;const e=orbitalElements(p);
     $('sim-clock').textContent=formatTime(state.t);
     $('hull-value').textContent=Math.round(p.hp)+'%';$('hull-bar').style.width=clamp(p.hp,0,100)+'%';
-    $('fuel-value').textContent=`${Math.ceil(p.fuel)} / ${p.fuelMax}`;$('fuel-bar').style.width=(100*p.fuel/p.fuelMax)+'%';
+    $('fuel-value').textContent=`${p.fuel.toFixed(1)} / ${p.fuelMax} kg`;$('fuel-bar').style.width=(100*p.fuel/p.fuelMax)+'%';
     $('ammo-value').textContent=p.ammo;
     $('credits-value').innerHTML=p.credits+' <i>¤</i>';
-    $('dv-value').textContent=(p.fuel/p.fuelRate*p.thrustAccel).toFixed(0)+' u/s';
-    $('alt-value').textContent=(e.r-WORLD.radius).toFixed(1)+' u';
-    $('speed-value').textContent=e.v.toFixed(1)+' u/s';
-    $('peri-value').textContent=Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' u':'—';
-    $('apo-value').textContent=Number.isFinite(e.ra)?Math.max(0,e.ra-WORLD.radius).toFixed(1)+' u':'ESCAPE';
+    $('dv-value').textContent=(exhaustKmS*Math.log(mass(p)/p.dryMass)).toFixed(1)+' km/s';
+    $('alt-value').textContent=(e.r-WORLD.radius).toFixed(1)+' km';
+    $('speed-value').textContent=e.v.toFixed(1)+' km/s';
+    $('peri-value').textContent=Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' km':'—';
+    $('apo-value').textContent=Number.isFinite(e.ra)?Math.max(0,e.ra-WORLD.radius).toFixed(1)+' km':'ESCAPE';
     $('period-value').textContent=Number.isFinite(e.period)?e.period.toFixed(1)+' s':'UNBOUND';
     $('path-status').textContent=state.dangerPrediction?'IMPACT':e.e>=1?'UNBOUND':'BOUND';
     $('path-status').style.color=state.dangerPrediction?palette.red:e.e>=1?palette.yellow:palette.green;
-    $('status-text').textContent=state.ended?'Spacecraft lost':p.thrustVector?'Thrusters active':e.e>=1?'Escape trajectory':'Coasting (no fuel burn)';
+    $('status-text').textContent=state.ended?'Spacecraft lost':state.autopilot?'Autopilot '+state.autopilot.phase:p.thrustVector?'Main engine firing':p.rcsFiring?'RCS firing':e.e>=1?'Escape trajectory':'Coasting (fuel conserved)';
     $('status-text').style.color=state.ended?palette.red:p.thrustVector?palette.yellow:palette.green;
     const target=aliveTarget();
     $('target-name').textContent=state.aimMode==='manual'?'MANUAL AIM':target?target.name:'NO CONTACT';
     $('target-state').textContent=state.aimMode==='manual'?'FREE AIM':target?'HOSTILE':'SCANNING';
-    $('range-value').textContent=target?magnitude(target.x-p.x,target.y-p.y).toFixed(1)+' u':'—';
+    $('range-value').textContent=target?magnitude(target.x-p.x,target.y-p.y).toFixed(1)+' km':'—';
     $('target-hull').textContent=target?Math.ceil(target.hp)+' / 66':'—';
     $('target-indicator').textContent=state.aimMode==='manual'?'AIM MODE: MANUAL':target?'TRACKING: '+target.name:'NO TARGET';
     $('mission-status').textContent=state.enemies.filter(ship=>ship.alive).length+' hostiles in sector';
     $('upgrade-status').textContent=state.predictive?'Installed · lead shot active':'40 ¤';
     $('upgrade-btn').textContent=state.predictive?'OWNED':'BUY';
     $('upgrade-btn').disabled=state.predictive||p.credits<40||state.ended;
+    $('dry-mass').textContent=p.dryMass.toLocaleString()+' kg';
+    $('total-mass').textContent=mass(p).toFixed(1)+' kg';
+    $('main-thrust').textContent=(p.thrustN/1e6).toFixed(1)+' MN';
+    $('mass-flow').textContent=p.flowKgS+' kg/s';
+    $('exhaust-vel').textContent=exhaustKmS.toFixed(0)+' km/s';
+    $('ship-heading').textContent=(p.heading*180/Math.PI).toFixed(0)+'°';
+    $('spin-value').textContent=(p.omega*180/Math.PI).toFixed(1)+'°/s';
+    $('nav-upgrade-status').textContent=state.navOwned?'Installed':'60 ¤';
+    $('nav-upgrade-btn').textContent=state.navOwned?'OWNED':'BUY';
+    $('nav-upgrade-btn').disabled=state.navOwned||p.credits<60||state.ended;
+    $('autopilot-chip').textContent=state.navOwned?'ONLINE':'LOCKED';
+    $('nav-status').textContent=state.autopilot?state.autopilot.phase.toUpperCase():state.navPlan?'Route ready':'No plan';
+    $('nav-dv').textContent=state.navPlan?state.navPlan.dv.toFixed(2)+' km/s':'—';
+    $('nav-eta').textContent=state.navPlan?state.navPlan.eta.toFixed(0)+' s':'—';
+    $('nav-fuel').textContent=state.navPlan?(mass(p)*(1-Math.exp(-state.navPlan.dv/exhaustKmS))).toFixed(1)+' kg':'—';
+    $('nav-engage').disabled=!state.navOwned||!state.navPlan||!!state.autopilot||state.ended;
+    $('nav-abort').disabled=!state.autopilot;
+
   }
-  function updateZoom(){$('zoom-level').textContent=state.zoom.toFixed(1)+'×';}
+  function updateZoom(){$('zoom-level').textContent=state.zoom.toFixed(2)+'×';}
+  function zoomAt(factor,px=W/2,py=H/2){
+    const world=fromScreen(px,py);
+    state.zoom=clamp(state.zoom*factor,.35,6);
+    state.panX=px-W/2-world.x*scale();
+    state.panY=py-H/2-world.y*scale();
+    updateZoom();
+  }
   function fitCanvas(){
     const bounds=canvas.getBoundingClientRect();
     W=Math.max(200, bounds.width);H=Math.max(200,bounds.height);
@@ -320,8 +521,8 @@
     for(let i=0;i<150;i++)starfield.push({x:Math.random()*W,y:Math.random()*H,size:rand(.3,1.3),alpha:rand(.12,.55)});
   }
   function scale(){return Math.min(W/700,H/660)*state.zoom;}
-  function toScreen(x,y){const s=scale();return {x:W/2 + x*s,y:H/2+y*s};}
-  function fromScreen(x,y){const s=scale();return {x:(x-W/2)/s,y:(y-H/2)/s};}
+  function toScreen(x,y){const s=scale();return {x:W/2 + state.panX+x*s,y:H/2+state.panY+y*s};}
+  function fromScreen(x,y){const s=scale();return {x:(x-W/2-state.panX)/s,y:(y-H/2-state.panY)/s};}
   function pathWorld(points,stroke,lineWidth=1,dash=[]) {
     if(points.length<2)return;
     ctx.save();ctx.beginPath();const first=toScreen(points[0].x,points[0].y);ctx.moveTo(first.x,first.y);
@@ -336,7 +537,7 @@
     ctx.save();ctx.lineWidth=1;const center=toScreen(0,0);const s=scale();
     ctx.strokeStyle='#183149';ctx.setLineDash([3,7]);
     for(let r=150;r<=1050;r+=100){ctx.beginPath();ctx.ellipse(center.x,center.y,r*s,r*s,0,0,TWO_PI);ctx.stroke();
-      if(r<=550){ctx.fillStyle='#54778e';ctx.font='10px monospace';ctx.fillText(r+'u',center.x+r*s+4,center.y-4);}}
+      if(r<=550){ctx.fillStyle='#54778e';ctx.font='10px monospace';ctx.fillText(r+'km',center.x+r*s+4,center.y-4);}}
     ctx.setLineDash([]);ctx.strokeStyle='#25445c';ctx.beginPath();ctx.moveTo(0,center.y);ctx.lineTo(W,center.y);ctx.moveTo(center.x,0);ctx.lineTo(center.x,H);ctx.stroke();ctx.restore();
     drawCentralBody(center.x,center.y,s);
   }
@@ -357,21 +558,32 @@
   }
   function drawTrails(){
     if(state.orbitVisible){pathWorld(state.predicted, state.dangerPrediction?'rgba(255,113,132,.72)':'rgba(98,217,246,.63)',1.7,[5,5]);}
+    if(state.navPlan){pathWorld(state.navPlan.coastPath,'#67e0aa9a',2.1,[6,4]);const a=state.navPlan.arrival;if(a){const q=toScreen(a.x,a.y);ctx.strokeStyle=palette.green;ctx.beginPath();ctx.arc(q.x,q.y,11,0,TWO_PI);ctx.stroke();}}
+    if(state.waypoint){const q=toScreen(state.waypoint.x,state.waypoint.y);ctx.strokeStyle=palette.yellow;ctx.lineWidth=2;ctx.strokeRect(q.x-8,q.y-8,16,16);}
     for(const e of [...state.enemies,state.player])if(e.alive)pathWorld(e.trail,e.isPlayer?'#62d9f654':'#ff718433',1.5);
   }
   function drawShip(ship){
     if(!ship.alive)return;
-    const p=toScreen(ship.x,ship.y),s=Math.max(.67,Math.min(1.2,scale()*1.6));
-    const aim = ship.isPlayer? (state.aimMode==='manual'&&state.mouseTarget?unit(state.mouseTarget.x-ship.x,state.mouseTarget.y-ship.y):aliveTarget()?unit(aliveTarget().x-ship.x,aliveTarget().y-ship.y):unit(ship.vx,ship.vy)) : unit(ship.vx,ship.vy);
-    const a=Math.atan2(aim.y,aim.x)+Math.PI/2;
+    const p=toScreen(ship.x,ship.y),s=clamp(scale()*2.1,.8,1.85),a=ship.heading+Math.PI/2;
     ctx.save();ctx.translate(p.x,p.y);ctx.rotate(a);ctx.scale(s,s);
-    if(ship.thrustVector){const tv=ship.thrustVector;const flame=unit(-tv.x,-tv.y); const ang=Math.atan2(flame.y,flame.x)-a;
-      ctx.save();ctx.rotate(ang);ctx.fillStyle=ship.isPlayer?'#72d9ef':'#ec956c';ctx.beginPath();ctx.moveTo(0,-4);ctx.lineTo(21+Math.sin(state.t*40)*6,0);ctx.lineTo(0,4);ctx.fill();ctx.restore();}
+    if(ship.thrustVector){
+      const burnAngle=ship.isPlayer?ship.gimbal:0;
+      ctx.save();ctx.rotate(burnAngle);
+      ctx.fillStyle=ship.isPlayer?'#72d9ef':'#ec956c';
+      ctx.beginPath();ctx.moveTo(-5,10);ctx.lineTo(0,25+Math.sin(state.t*47)*4);ctx.lineTo(5,10);ctx.fill();ctx.restore();
+    }
+    if(ship.rcsFiring){ctx.fillStyle='#ffbc66';const sign=ship.rcsFiring;ctx.beginPath();ctx.moveTo(-sign*9,-8);ctx.lineTo(-sign*21,-4);ctx.lineTo(-sign*9,-1);ctx.fill();ctx.beginPath();ctx.moveTo(sign*9,7);ctx.lineTo(sign*21,12);ctx.lineTo(sign*9,14);ctx.fill();}
     ctx.fillStyle='#0a1f30';ctx.strokeStyle=ship.color;ctx.lineWidth=2;
-    ctx.beginPath();ctx.moveTo(0,-12);ctx.lineTo(9,10);ctx.lineTo(0,5);ctx.lineTo(-9,10);ctx.closePath();ctx.fill();ctx.stroke();
-    ctx.fillStyle=ship.color;ctx.beginPath();ctx.arc(0,1,2.5,0,TWO_PI);ctx.fill();ctx.restore();
+    ctx.beginPath();ctx.moveTo(0,-13);ctx.lineTo(9,11);ctx.lineTo(0,6);ctx.lineTo(-9,11);ctx.closePath();ctx.fill();ctx.stroke();
+    ctx.fillStyle=ship.color;ctx.beginPath();ctx.arc(0,1,2.5,0,TWO_PI);ctx.fill();
+    if(ship.isPlayer){
+      ctx.save();ctx.rotate(ship.gimbal);ctx.strokeStyle=palette.yellow;ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(0,8);ctx.lineTo(0,16);ctx.stroke();ctx.restore();
+      ctx.save();ctx.strokeStyle='#80b3ce88';ctx.setLineDash([2,5]);ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,35,-Math.PI/2-ENGINE.gimbalMax,-Math.PI/2+ENGINE.gimbalMax);ctx.stroke();ctx.restore();
+    }
+    ctx.restore();
     if(!ship.isPlayer){ctx.font='10px system-ui';ctx.fillStyle=ship.color;ctx.fillText(ship.name,p.x+13,p.y-12);ctx.fillStyle='#254052';ctx.fillRect(p.x+13,p.y-7,48,3);ctx.fillStyle=ship.color;ctx.fillRect(p.x+13,p.y-7,48*(ship.hp/66),3);}
-    if(ship.isPlayer){ctx.save();ctx.strokeStyle=palette.cyan;ctx.globalAlpha=.4;ctx.setLineDash([4,6]);ctx.beginPath();ctx.arc(p.x,p.y,19,0,TWO_PI);ctx.stroke();ctx.restore();}
+    if(ship.isPlayer){ctx.save();ctx.strokeStyle=palette.cyan;ctx.globalAlpha=.4;ctx.setLineDash([4,6]);ctx.beginPath();ctx.arc(p.x,p.y,22,0,TWO_PI);ctx.stroke();ctx.restore();}
   }
   function drawPickup(pod){const p=toScreen(pod.x,pod.y),s=clamp(scale(),.5,1.25),size=6*s+2;
     const color=pod.type==='fuel'?palette.green:pod.type==='ammo'?palette.purple:pod.type==='wreck'?palette.red:palette.yellow;
@@ -413,19 +625,20 @@
     draw();lastFrameId=requestAnimationFrame(frame);
   }
   function bindControls(){
-    const keyToAction={KeyW:'prograde',ArrowUp:'prograde',KeyS:'retrograde',ArrowDown:'retrograde',KeyA:'inward',ArrowLeft:'inward',KeyD:'outward',ArrowRight:'outward',Space:'fire'};
-    window.addEventListener('keydown',(e)=>{
+    const keyToAction={KeyW:'main',ArrowUp:'main',KeyS:'stabilize',ArrowDown:'stabilize',KeyA:'rotate-left',ArrowLeft:'rotate-left',KeyD:'rotate-right',ArrowRight:'rotate-right',Space:'fire'};
+    const manual=()=>{if(state.autopilot)abortNav('Manual pilot override.');};
+    window.addEventListener('keydown',e=>{
       if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName))return;
       const action=keyToAction[e.code];
-      if(action){e.preventDefault();state.down.add(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.add('pressed'));if(action==='fire')$('fire-btn').classList.add('pressed');}
+      if(action){e.preventDefault();if(action!=='fire')manual();state.down.add(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.add('pressed'));if(action==='fire')$('fire-btn').classList.add('pressed');}
       if(e.code==='KeyP'&&!e.repeat){e.preventDefault();togglePause();}
     });
-    window.addEventListener('keyup',(e)=>{
+    window.addEventListener('keyup',e=>{
       const action=keyToAction[e.code];if(action){e.preventDefault();state.down.delete(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.remove('pressed'));if(action==='fire')$('fire-btn').classList.remove('pressed');}
     });
-    window.addEventListener('blur',()=>{if(state){state.down.clear();document.querySelectorAll('.pressed').forEach(b=>b.classList.remove('pressed'));}});
+    window.addEventListener('blur',()=>{if(state){state.down.clear();state.pointerThrust=false;document.querySelectorAll('.pressed').forEach(b=>b.classList.remove('pressed'));}});
     function hold(button,action){
-      button.addEventListener('pointerdown',e=>{if(state.ended)return;e.preventDefault();state.down.add(action);button.classList.add('pressed');if(button.setPointerCapture)button.setPointerCapture(e.pointerId);});
+      button.addEventListener('pointerdown',e=>{if(state.ended)return;e.preventDefault();if(action!=='fire')manual();state.down.add(action);button.classList.add('pressed');if(button.setPointerCapture)button.setPointerCapture(e.pointerId);});
       const stop=()=>{state.down.delete(action);button.classList.remove('pressed');};
       button.addEventListener('pointerup',stop);button.addEventListener('pointercancel',stop);button.addEventListener('lostpointercapture',stop);
     }
@@ -434,29 +647,46 @@
     $('reset-btn').addEventListener('click',reset);
     $('retry-btn').addEventListener('click',reset);
     $('sim-speed').addEventListener('change',e=>state.speed=clamp(Number(e.target.value)||1,.5,4));
-    $('orbit-btn').addEventListener('click',()=>{
-      state.orbitVisible=!state.orbitVisible;$('orbit-btn').classList.toggle('selected',state.orbitVisible);$('orbit-btn').setAttribute('aria-pressed',String(state.orbitVisible));
-    });
-    $('zoom-in').addEventListener('click',()=>{state.zoom=clamp(state.zoom+.2,.6,2.2);updateZoom();});
-    $('zoom-out').addEventListener('click',()=>{state.zoom=clamp(state.zoom-.2,.6,2.2);updateZoom();});
+    $('orbit-btn').addEventListener('click',()=>{state.orbitVisible=!state.orbitVisible;$('orbit-btn').classList.toggle('selected',state.orbitVisible);$('orbit-btn').setAttribute('aria-pressed',String(state.orbitVisible));});
+    $('zoom-in').addEventListener('click',()=>zoomAt(1.25));
+    $('zoom-out').addEventListener('click',()=>zoomAt(1/1.25));
     $('next-target').addEventListener('click',selectNextTarget);
     $('lock-btn').addEventListener('click',lockNearest);
-    $('upgrade-btn').addEventListener('click',()=>{
-      if(state.predictive||state.player.credits<40||state.ended)return;
-      state.player.credits-=40;state.predictive=true;logEvent('Predictive fire control installed.','good');updateHud();
+    $('upgrade-btn').addEventListener('click',()=>{if(state.predictive||state.player.credits<40||state.ended)return;state.player.credits-=40;state.predictive=true;logEvent('Predictive fire control installed.','good');updateHud();});
+    $('nav-upgrade-btn').addEventListener('click',()=>{if(state.navOwned||state.player.credits<60||state.ended)return;state.player.credits-=60;state.navOwned=true;logEvent('Rendezvous intelligence installed.','good');updateHud();});
+    $('nav-plan').addEventListener('click',planNav);
+    $('nav-engage').addEventListener('click',engageNav);
+    $('nav-abort').addEventListener('click',()=>abortNav());
+    $('nav-target').addEventListener('change',()=>{state.navPlan=null;updateHud();});
+    let drag=null;
+    const coords=e=>{const b=canvas.getBoundingClientRect();return {px:e.clientX-b.left,py:e.clientY-b.top};};
+    canvas.addEventListener('contextmenu',e=>e.preventDefault());
+    canvas.addEventListener('wheel',e=>{e.preventDefault();const pt=coords(e);zoomAt(Math.exp(-e.deltaY*.0016),pt.px,pt.py);},{passive:false});
+    canvas.addEventListener('pointermove',e=>{
+      const pt=coords(e);
+      if(drag&&drag.id===e.pointerId){state.panX+=pt.px-drag.px;state.panY+=pt.py-drag.py;drag.px=pt.px;drag.py=pt.py;return;}
+      state.gimbalTarget=fromScreen(pt.px,pt.py);
+      if(state.aimMode==='manual')state.mouseTarget=state.gimbalTarget;
     });
     canvas.addEventListener('pointerdown',e=>{
       if(state.ended)return;
-      const bounds=canvas.getBoundingClientRect(),p=fromScreen(e.clientX-bounds.left,e.clientY-bounds.top);
+      const pt=coords(e),p=fromScreen(pt.px,pt.py);
+      if(e.button===1||e.button===2||e.shiftKey){e.preventDefault();drag={id:e.pointerId,px:pt.px,py:pt.py};canvas.setPointerCapture(e.pointerId);return;}
+      if(e.button!==0)return;
+      if(e.altKey){state.waypoint={x:p.x,y:p.y};updateTargetOptions('waypoint');state.navPlan=null;logEvent('Waypoint plotted at '+p.x.toFixed(0)+', '+p.y.toFixed(0)+' km.');updateHud();return;}
       let candidate=null,dist=Infinity;
-      for(const enemy of state.enemies)if(enemy.alive){const d=magnitude(p.x-enemy.x,p.y-enemy.y);if(d<Math.max(25,23/scale())&&d<dist){dist=d;candidate=enemy;}}
-      if(candidate){state.targetId=candidate.id;state.aimMode='locked';logEvent('Target lock: '+candidate.name);}
-      else{state.aimMode='manual';state.mouseTarget=p;logEvent('Manual firing solution selected.');}
+      for(const enemy of state.enemies)if(enemy.alive){const d=magnitude(p.x-enemy.x,p.y-enemy.y);if(d<Math.max(23,23/scale())&&d<dist){dist=d;candidate=enemy;}}
+      if(candidate){state.targetId=candidate.id;state.aimMode='locked';logEvent('Target lock: '+candidate.name);updateTargetOptions('enemy:'+candidate.id);return;}
+      for(const pickup of state.pickups)if(pickup.alive){const d=magnitude(p.x-pickup.x,p.y-pickup.y);if(d<Math.max(17,19/scale())&&d<dist){dist=d;candidate=pickup;}}
+      if(candidate&&candidate.type){updateTargetOptions('pickup:'+candidate.id);state.navPlan=null;logEvent('Navigation target selected: '+candidate.type+'.');return;}
+      e.preventDefault();manual();state.gimbalTarget=p;state.down.add('main');state.pointerThrust=true;canvas.setPointerCapture(e.pointerId);
     });
+    function endPointer(e){if(drag&&drag.id===e.pointerId)drag=null;if(state.pointerThrust){state.pointerThrust=false;state.down.delete('main');}}
+    canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',endPointer);canvas.addEventListener('lostpointercapture',endPointer);
     window.addEventListener('resize',fitCanvas);
     if(typeof ResizeObserver!=='undefined'){const ro=new ResizeObserver(fitCanvas);ro.observe(canvas);}
     document.addEventListener('visibilitychange',()=>{lastFrame=performance.now();accumulator=0;if(document.hidden&&state&&!state.paused&&!state.ended){state.paused=true;$('pause-btn').textContent='▶ Resume';}});
   }
-  function togglePause(){if(state.ended)return;state.paused=!state.paused;state.down.clear();$('pause-btn').textContent=state.paused?'▶ Resume':'Ⅱ Pause';}
+  function togglePause(){if(state.ended)return;state.paused=!state.paused;state.down.clear();state.pointerThrust=false;$('pause-btn').textContent=state.paused?'▶ Resume':'Ⅱ Pause';}
   bindControls();reset();fitCanvas();lastFrameId=requestAnimationFrame(frame);
 })();
