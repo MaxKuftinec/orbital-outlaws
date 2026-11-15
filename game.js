@@ -679,7 +679,7 @@
       if(candidate){state.targetId=candidate.id;state.aimMode='locked';logEvent('Target lock: '+candidate.name);updateTargetOptions('enemy:'+candidate.id);return;}
       for(const pickup of state.pickups)if(pickup.alive){const d=magnitude(p.x-pickup.x,p.y-pickup.y);if(d<Math.max(17,19/scale())&&d<dist){dist=d;candidate=pickup;}}
       if(candidate&&candidate.type){updateTargetOptions('pickup:'+candidate.id);state.navPlan=null;logEvent('Navigation target selected: '+candidate.type+'.');return;}
-      e.preventDefault();manual();state.gimbalTarget=p;state.down.add('main');state.pointerThrust=true;canvas.setPointerCapture(e.pointerId);
+      e.preventDefault();state.aimMode='manual';state.mouseTarget=p;state.gimbalTarget=p;logEvent('Manual weapon aim enabled. Hold SPACE to fire toward cursor.');updateHud();
     });
     function endPointer(e){if(drag&&drag.id===e.pointerId)drag=null;if(state.pointerThrust){state.pointerThrust=false;state.down.delete('main');}}
     canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',endPointer);canvas.addEventListener('lostpointercapture',endPointer);
