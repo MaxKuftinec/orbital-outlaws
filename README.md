@@ -1,8 +1,8 @@
-# Orbital Outlaws — Prototype v0.3
+# Orbital Outlaws — Prototype v0.4
 
 **Orbital Outlaws** is an experimental browser game about fighting and surviving in orbit under Newtonian gravity. The current prototype is single-player against AI raiders; multiplayer networking is not yet included.
 
-The game uses independently rotating spacecraft, propellant measured in kilograms, and a purchasable **rendezvous computer** for fuel-conscious orbital transfers. **v0.3 adds basic manual hull repairs, spare-parts salvage, and carried spare-parts mass**, without adding complex subsystem damage or repair drones.
+The game uses independently rotating spacecraft, propellant measured in kilograms, and a purchasable **rendezvous computer** for fuel-conscious orbital transfers. **v0.3 adds basic manual hull repairs, spare-parts salvage, and carried spare-parts mass**. **v0.4 adds AEGIS-01, a friendly armed escort, a reinforcement toggle (off by default), a curved ballistic-trajectory preview, and a purchasable target-position analyzer.**
 
 ## Play
 
@@ -42,6 +42,14 @@ On touch devices, hold the control buttons to rotate, thrust or fire. Tapping th
 Field repairs are available from the beginning. KESTREL-7 starts with **10 kg** of spare parts in a **24 kg** storage bay. Holding **R** repairs at **5 hull HP/s**, consuming **1 kg/s**, while the game is running. Repairs stop at **100 HP** or when parts are depleted; they do not work on a destroyed spacecraft. A repair button in the ship panel also works for touch users. Repairing can happen while coasting, manoeuvring, or using autopilot; it does not cancel navigation.
 
 Spare parts appear as blue `PARTS` salvage containers (**8 kg**) and are also recovered from wrecks (up to **6 kg**, limited by remaining storage). Carried parts contribute to inertial mass. When used, repair material becomes hull structure rather than vanishing: dry mass increases, spare-parts inventory decreases, and total ship mass is conserved (except when propellant is expelled). The repair constants are intentionally gameplay values, not an engineering model of real hull materials. No drones, individual subsystem damage, repair stations, or repair-cost markets yet.
+
+## Allies, ballistic targeting and object persistence (v0.4)
+
+**AEGIS-01** is a friendly escort spacecraft that shoots at raiders, carries limited ammunition, and can be destroyed. Enemy AI can engage the escort. The game starts with two raiders but **new pirates do not spawn unless you turn Reinforcements ON** using the button above the orbit map.
+
+The **cyan curved fire-control line is included by default**, reflecting the projectile trajectory in the gravitational field. Click empty space to aim freely, or left-click a raider to lock it; hold **SPACE** to fire and **W** to thrust. A **Target trajectory analyzer (25 credits)** adds a purple future target path and marker at the time the ballistic shot reaches the cursor-selected range. This assumes the opponent does not thrust during the prediction. The display uses a finite **12-second preview horizon** for performance; this is *not* a projectile lifetime.
+
+**Physical objects have no automatic expiry:** bullets, uncollected resource pods and floating wrecks persist. Objects are removed only by meaningful events such as a collision with the planet, hitting a vessel, or being collected. Bullets that escape the gravitational well continue on their outward trajectories, even outside the visible camera. Camera rendering culls off-screen bullets without deleting their simulated positions. Small impact/engine sparks are transient *visual effects* and still fade normally. Continuous firing can make the simulation more expensive over time; optimized persistent-debris simulation is future work.
 
 ## Ballistic weapon realism
 
@@ -101,7 +109,8 @@ With effective exhaust speed `vₑ`, the ideal propellant estimate is
 - Zoom-to-pointer, viewport panning, target locking, map waypoint selection.
 - Purchasable rendezvous intelligence and predictive fire-control upgrades.
 - Automatically planned/coasted transfers plus terminal proximity/velocity guidance.
-- Armed AI raiders, ballistic weapons, hull damage, salvage, credits and respawn after game over.
+- Armed AI raiders, friendly AEGIS-01 escort, ballistic-trajectory preview, optional reinforcements, hull damage, salvage, credits and respawn after game over.
+- Persistent projectiles and floating salvage/wrecks (no artificial object expiration).
 - Basic field repairs (hold R), spare-parts salvage, and spare-parts mass in the propulsion and Δv budget.
 - No online multiplayer, no GR black-hole simulation, no landing or persistent economy yet.
 
@@ -110,7 +119,7 @@ With effective exhaust speed `vₑ`, the ideal propellant estimate is
 With Node.js 18 or later:
 
 ```bash
-node --test tests/navigation.test.cjs
+node --test tests/*.test.cjs
 ```
 
 The test suite checks circular-orbit stability, predicted transfer accuracy, unsafe trajectory rejection and fuel affordability. See `navigation.js` for the isolated planner mathematics. Browser gameplay is implemented in `game.js`.
@@ -121,9 +130,10 @@ The test suite checks circular-orbit stability, predicted transfer accuracy, uns
 - `styles.css` — responsive visual layout.
 - `game.js` — physics loop, spacecraft controls, combat, salvage, HUD, canvas renderer and autopilot execution.
 - `navigation.js` — pure Newtonian trajectory propagation and two-impulse transfer search.
+- `ballistics.js` — shared-gravity projectile forecast and target-at-arrival computation.
 - `tests/navigation.test.cjs` — Node tests for the transfer planner.
+- `tests/ballistics.test.cjs` — Node tests for the ballistic preview and forecast horizon.
 - `orbital-outlaws.html` — self-contained offline game (same implementation, inline scripts and CSS).
-- `build_standalone.py` — regenerate the offline HTML from the modular source.
 
 ### Upcoming ideas
 
