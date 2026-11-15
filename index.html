@@ -8,6 +8,7 @@
   <title>Orbital Outlaws — Physics Combat Prototype</title>
   <link rel="stylesheet" href="styles.css">
   <script src="navigation.js" defer></script>
+  <script src="ballistics.js" defer></script>
   <script src="game.js" defer></script>
 </head>
 <body>
@@ -15,7 +16,7 @@
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
-        <div><div class="eyebrow">PHYSICS SANDBOX • PROTOTYPE 0.3</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+        <div><div class="eyebrow">PHYSICS SANDBOX • PROTOTYPE 0.4</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
       <div class="top-actions">
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">MISSION TIME</span><strong id="sim-clock">00:00</strong></div></div>
@@ -29,7 +30,7 @@
       <section class="arena-shell" aria-label="Orbital gameplay area">
         <div class="arena-head">
           <div><span class="section-kicker">SECTOR 01</span><div class="arena-title">Kestrel gravity well <span class="online"><span class="dot live"></span> LIVE PHYSICS</span></div></div>
-          <div class="arena-actions"><button id="orbit-btn" class="small-btn selected" aria-pressed="true">◌ Trajectory</button><button id="zoom-out" class="small-btn" aria-label="Zoom out">−</button><span id="zoom-level" class="zoom-text">1.0×</span><button id="zoom-in" class="small-btn" aria-label="Zoom in">+</button></div>
+          <div class="arena-actions"><button id="reinforce-btn" class="small-btn" aria-pressed="false" title="Allow new pirate spawns">Reinforcements: OFF</button><button id="orbit-btn" class="small-btn selected" aria-pressed="true">◌ Trajectory</button><button id="zoom-out" class="small-btn" aria-label="Zoom out">−</button><span id="zoom-level" class="zoom-text">1.0×</span><button id="zoom-in" class="small-btn" aria-label="Zoom in">+</button></div>
         </div>
         <div class="canvas-wrap">
           <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat."></canvas>
@@ -61,6 +62,7 @@
           <div class="meter-title"><span>PROPELLANT</span><b id="fuel-value">200 / 200 kg</b></div><div class="meter"><div id="fuel-bar" class="meter-fill cyan" style="width:100%"></div></div>
           <div class="small-stats"><div><span>AMMO</span><strong id="ammo-value">36</strong></div><div><span>CREDITS</span><strong id="credits-value">0 <i>¤</i></strong></div><div><span>ΔV BUDGET</span><strong id="dv-value">—</strong></div></div>
         </section>
+        <section class="panel ally-panel"><div class="panel-heading"><span>FRIENDLY ESCORT</span><span id="escort-status" class="status-pill">ONLINE</span></div><div class="ship-name" style="color:#67e0aa">★ AEGIS-01</div><div class="metric-row"><span>Hull integrity</span><strong id="escort-hull">80 / 80</strong></div><div class="metric-row"><span>Ammunition</span><strong id="escort-ammo">120</strong></div><div class="mini-note" id="escort-state">ENGAGING HOSTILES</div></section>
         <section class="panel propulsion">
           <div class="panel-heading"><span>PROPULSION</span><span>SCOUT MK-I</span></div>
           <div class="metric-row"><span>Dry mass</span><strong id="dry-mass">900 kg</strong></div>
@@ -88,16 +90,20 @@
           <div class="metric-row"><span>Range</span><strong id="range-value">—</strong></div>
           <div class="metric-row"><span>Hull</span><strong id="target-hull">—</strong></div>
           <div class="metric-row"><span>Weapon</span><strong>Ballistic rounds</strong></div>
+          <div class="metric-row"><span>Bullet reaches cursor range in</span><strong id="shot-time">—</strong></div>
+          <div class="metric-row"><span>Estimated separation at arrival</span><strong id="shot-miss">Requires analyzer</strong></div>
+          <div class="mini-note">Cyan curve: actual predicted ballistic shot. After upgrading: purple ghost shows where your selected target will be when the shot reaches the cursor range, assuming no new burn.</div>
           <button id="next-target" class="wide-subtle-btn">Next target ↗</button>
         </section>
         <section class="panel upgrades">
           <div class="panel-heading"><span>UPGRADES</span><span>FIELD MARKET</span></div>
           <div class="upgrade-entry"><div><strong>Predictive fire control</strong><small>Solves a lead shot using projected target motion.</small><span id="upgrade-status">40 ¤</span></div><button id="upgrade-btn" class="buy-btn">BUY</button></div>
+          <div class="upgrade-entry"><div><strong>Target trajectory analyzer</strong><small>Show enemy coast path and its future position at your cursor-selected bullet arrival time.</small><span id="trajectory-upgrade-status">25 ¤</span></div><button id="trajectory-upgrade-btn" class="buy-btn">BUY</button></div>
           <div class="upgrade-entry"><div><strong>Rendezvous computer</strong><small>Fuel-conscious route search, attitude control and automatic capture approach.</small><span id="nav-upgrade-status">60 ¤</span></div><button id="nav-upgrade-btn" class="buy-btn">BUY</button></div>
         </section>
         <section class="panel autopilot-panel">
           <div class="panel-heading"><span>RENDEZVOUS COMPUTER</span><span id="autopilot-chip" class="status-pill">LOCKED</span></div>
-          <div class="mini-note">Select a salvage pod, raider or map waypoint. Planner samples coast times and solves a two-impulse intercept, favouring less Δv.</div>
+          <div class="mini-note">Select a salvage pod, raider, friendly escort or map waypoint. Planner samples coast times and solves a two-impulse intercept, favouring less Δv.</div>
           <label for="nav-target" class="field-label">NAVIGATION TARGET</label>
           <select id="nav-target" class="nav-target" aria-label="Rendezvous destination"></select>
           <div class="metric-row"><span>Estimated total Δv</span><strong id="nav-dv">—</strong></div>
@@ -110,7 +116,7 @@
         <section class="panel feed-panel"><div class="panel-heading"><span>COMMS & EVENTS</span><span class="live-label">●</span></div><div id="event-feed" class="event-feed" aria-live="polite"></div></section>
       </aside>
     </main>
-    <footer class="footer-note">Orbital Outlaws · Prototype 0.3 <span>Real propellant mass · attitude thrusters · two-burn rendezvous guidance</span></footer>
+    <footer class="footer-note">Orbital Outlaws · Prototype 0.4 <span>Friendly escort · ballistic targeting · optional pirate reinforcements</span></footer>
   </div>
 </body>
 </html>
