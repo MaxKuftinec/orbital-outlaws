@@ -6,6 +6,7 @@ they never submit NPC positions, damage or rewards.
 from __future__ import annotations
 
 import math
+import secrets
 from .physics import State, propagate, apply_impulse
 
 MU = 310000.0
@@ -37,11 +38,13 @@ def ship(id: str, radius: float, angle: float, ally: bool = False) -> dict:
 
 
 def incoming_ship(id: str, angle: float, intent: str, ally: bool = False,
-                  mu: float = MU) -> dict:
-    """Start beyond the populated sector on an inbound hyperbolic approach.
+                  mu: float = MU, velocity_angle: float | None = None,
+                  velocity_speed: float | None = None) -> dict:
+    """Random 360-degree launch, followed by a separate intention-driven course burn.
 
-    Flyby ships retain their positive-energy trajectory. Orbit-intent ships
-    circularize with an actual propellant-consuming insertion impulse.
+    The spawn position is independent of velocity direction. The intended
+    orbital sense comes from random initial angular momentum, so clockwise
+    and counterclockwise are both possible.
     """
     if intent not in ('flyby', 'orbit'):
         raise ValueError('Unknown arrival intention')
@@ -49,51 +52,89 @@ def incoming_ship(id: str, angle: float, intent: str, ally: bool = False,
     radius = 950. + (number % 4) * 85.
     periapsis = 275. + (number % 4) * 24.
     v_inf = 12. + (number % 3) * 2.
-    tangential = periapsis * math.sqrt(v_inf*v_inf + 2*mu/periapsis)/radius
-    inbound_speed = math.sqrt(v_inf*v_inf + 2*mu/radius - tangential*tangential)
-    c, si = math.cos(angle), math.sin(angle)
+    direction = (2*math.pi*secrets.randbits(53)/2**53
+                 if velocity_angle is None else velocity_angle)
+    speed = (20 + 12*secrets.randbits(53)/2**53
+             if velocity_speed is None else velocity_speed)
+    x, y = radius*math.cos(angle), radius*math.sin(angle)
+    vx, vy = speed*math.cos(direction), speed*math.sin(direction)
+    orbit_direction = 1 if x*vy-y*vx >= 0 else -1
     vessel = ship(id, radius, angle, ally)
     vessel.update({'name':('AEGIS-'+id.rsplit('-',1)[-1]) if ally else id.upper(),
-                   'x':radius*c, 'y':radius*si,
-                   'vx':-inbound_speed*c-tangential*si,
-                   'vy':-inbound_speed*si+tangential*c,
-                   'heading':math.atan2(-inbound_speed*si+tangential*c,
-                                        -inbound_speed*c-tangential*si),
-                   'arrivalIntent':intent, 'arrivalPhase':'approach',
-                   'insertionRadius':periapsis, 'nextDecision':0.,
-                   'fuel':180., 'fuelMax':190.})
+                   'x':x, 'y':y, 'vx':vx, 'vy':vy,
+                   'heading':direction, 'launchDirection':direction,
+                   'arrivalIntent':intent, 'arrivalPhase':'launch',
+                   'courseBurnAt':2.5, 'orbitDirection':orbit_direction,
+                   'insertionRadius':periapsis, 'arrivalVInfinity':v_inf,
+                   'nextDecision':0., 'fuel':420., 'fuelMax':420.})
     return vessel
 
 
+def arrival_course(body: dict, mu: float) -> tuple[float, float]:
+    """Hyperbolic Kestrel approach with a specified periapsis and orbit sense."""
+    x,y=body['x'],body['y']
+    radius=math.hypot(x,y)
+    peri=body['insertionRadius']
+    vinf=body['arrivalVInfinity']
+    tangential=peri*math.sqrt(vinf*vinf+2*mu/peri)/radius
+    inward=math.sqrt(max(0.,vinf*vinf+2*mu/radius-tangential*tangential))
+    orbit_sign=body['orbitDirection']
+    return (-inward*x/radius-orbit_sign*tangential*y/radius,
+            -inward*y/radius+orbit_sign*tangential*x/radius)
+
+
 def resolve_arrival(sector: dict, body: dict, mu: float, when: float):
-    """Execute a physically meaningful capture burn instead of a slingshot."""
-    if body.get('arrivalPhase') != 'approach' or not body.get('alive', True):
+    """Intention-driven impulses: first aim an encounter, then optionally capture."""
+    if not body.get('alive', True):
         return
-    if body['arrivalIntent'] == 'flyby':
-        r = math.hypot(body['x'], body['y'])
-        radial = (body['x']*body['vx']+body['y']*body['vy'])/r
-        if radial > 0 and r > 650:
-            body['arrivalPhase'] = 'departed'
-            event(sector,when,body['name']+' completed its Kestrel flyby.', 'neutral')
+    if body.get('arrivalPhase') == 'launch':
+        if when < body['courseBurnAt']:
+            return
+        target_vx,target_vy=arrival_course(body,mu)
+        dvx,dvy=target_vx-body['vx'],target_vy-body['vy']
+        try:
+            result=apply_impulse(state_of(body),dvx,dvy,320.,reserve_kg=100.)
+        except ValueError:
+            body['arrivalPhase']='failed'
+            event(sector,when,body['name']+' lacks fuel for approach correction.', 'danger')
+            return
+        before=body['fuel']
+        body['vx'],body['vy'],body['fuel']=result.vx,result.vy,result.fuel_kg
+        body['arrivalPhase']='approach'
+        event(sector,when,f"{body['name']} executed {body['arrivalIntent']} approach burn "
+              f"(Δv {math.hypot(dvx,dvy):.1f} km/s; "
+              f"{before-result.fuel_kg:.1f} kg propellant).",'neutral')
+    if body.get('arrivalPhase') != 'approach':
         return
-    r = math.hypot(body['x'],body['y'])
-    if r > body['insertionRadius']+24:
+    radius=math.hypot(body['x'],body['y'])
+    radial=(body['x']*body['vx']+body['y']*body['vy'])/radius
+    if body['arrivalIntent']=='flyby':
+        if radial>0 and radius>650:
+            body['arrivalPhase']='departed'
+            event(sector,when,body['name']+' completed its Kestrel flyby.','neutral')
         return
-    tangent_x,tangent_y=-body['y']/r,body['x']/r
-    circular_speed=math.sqrt(mu/r)
+    if radius>body['insertionRadius']+24:
+        if radial>0 and radius>body['insertionRadius']+80:
+            body['arrivalPhase']='missed'
+            event(sector,when,body['name']+' missed its orbit insertion window.','danger')
+        return
+    tangent_x,tangent_y=-body['y']/radius,body['x']/radius
+    circular_speed=math.sqrt(mu/radius)*body['orbitDirection']
     dvx=circular_speed*tangent_x-body['vx']
     dvy=circular_speed*tangent_y-body['vy']
+    before=body['fuel']
     try:
         result=apply_impulse(state_of(body),dvx,dvy,320.,reserve_kg=8.)
     except ValueError:
         body['arrivalPhase']='failed'
-        event(sector,when,body['name']+' could not afford orbit insertion; flyby continues.', 'danger')
+        event(sector,when,body['name']+' could not afford orbit insertion; flyby continues.','danger')
         return
     body['vx'],body['vy'],body['fuel']=result.vx,result.vy,result.fuel_kg
     body['arrivalPhase']='orbiting'
-    event(sector,when,f"{body['name']} entered a {r:.0f} km orbit "
+    sense='counterclockwise' if body['orbitDirection']>0 else 'clockwise'
+    event(sector,when,f"{body['name']} entered a {radius:.0f} km {sense} orbit "
          f"(Δv {math.hypot(dvx,dvy):.1f} km/s; "
-         f"{180-result.fuel_kg:.1f} kg propellant used).",'good')
+         f"{before-result.fuel_kg:.1f} kg propellant).",'good')
 
 
 def new_sector(world_time: float, mu: float = MU) -> dict:
@@ -272,7 +313,7 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
             if was_alive and not body.get('alive',True):
                 body['hp']=0
                 event(sector,when,body['name']+' impacted Kestrel.','danger')
-            if body.get('alive',True) and body.get('arrivalPhase')=='approach':
+            if body.get('alive',True) and body.get('arrivalPhase') in ('launch','approach'):
                 resolve_arrival(sector,body,mu,when)
         for pickup in sector['pickups']:
             move(pickup,dt,mu)
