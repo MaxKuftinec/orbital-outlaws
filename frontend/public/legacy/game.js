@@ -614,13 +614,15 @@
     if(key?.startsWith('pickup:'))return state.pickups.find(p=>p.id===key.slice(7)&&p.alive)||null;
     if(key?.startsWith('enemy:'))return state.enemies.find(p=>p.id===key.slice(6)&&p.alive)||null;
     if(key==='ally'&&state.ally.alive)return state.ally;
+    if(key?.startsWith('ally:'))return (state.allies||[]).find(a=>a.id===key.slice(5)&&a.alive)||null;
     return null;
   }
   function updateTargetOptions(preferred){
     const select=$('nav-target');const previous=preferred||select.value;
     const entries=[...state.pickups.filter(p=>p.alive).map(p=>({key:'pickup:'+p.id,text:(p.type==='wreck'?'Wreck':'Salvage '+p.type)+' · '+p.id.slice(-4)})),
       ...state.enemies.filter(e=>e.alive).map(e=>({key:'enemy:'+e.id,text:e.name+' · hostile'})),
-      ...(state.ally.alive?[{key:'ally',text:'AEGIS-01 · friendly escort'}]:[])];
+      ...(state.ally.alive?[{key:'ally',text:'AEGIS-01 · friendly escort'}]:[]),
+      ...(state.allies||[]).filter(a=>a.alive).map(a=>({key:'ally:'+a.id,text:a.name+' · friendly visitor'}))];
     if(state.waypoint)entries.unshift({key:'waypoint',text:'Map waypoint (fixed location)'});
     select.replaceChildren();
     for(const item of entries){const o=document.createElement('option');o.value=item.key;o.textContent=item.text;select.append(o);}

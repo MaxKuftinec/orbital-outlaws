@@ -24,7 +24,9 @@ def circular(radius: float, angle: float, mu: float = MU) -> dict:
 def ship(id: str, radius: float, angle: float, ally: bool = False) -> dict:
     orbit = circular(radius, angle)
     return {**orbit, 'id': id, 'name': 'AEGIS-01' if ally else id.upper(),
-            'alive': True, 'isAlly': ally, 'hp': 80.0 if ally else 66.0,
+            'alive': True, 'isAlly': ally,
+            'color': '#67e0aa' if ally else '#ff7184',
+            'hp': 80.0 if ally else 66.0,
             'ammo': 120 if ally else 999, 'fuel': 140.0 if ally else 150.0,
             'fuelMax': 170.0, 'dryMass': 1050.0,
             'heading': math.atan2(orbit['vy'], orbit['vx']), 'omega': 0.,
@@ -51,7 +53,8 @@ def incoming_ship(id: str, angle: float, intent: str, ally: bool = False,
     inbound_speed = math.sqrt(v_inf*v_inf + 2*mu/radius - tangential*tangential)
     c, si = math.cos(angle), math.sin(angle)
     vessel = ship(id, radius, angle, ally)
-    vessel.update({'name':id.upper(), 'x':radius*c, 'y':radius*si,
+    vessel.update({'name':('AEGIS-'+id.rsplit('-',1)[-1]) if ally else id.upper(),
+                   'x':radius*c, 'y':radius*si,
                    'vx':-inbound_speed*c-tangential*si,
                    'vy':-inbound_speed*si+tangential*c,
                    'heading':math.atan2(-inbound_speed*si+tangential*c,
