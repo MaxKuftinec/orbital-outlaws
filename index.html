@@ -10,6 +10,8 @@
   <script src="navigation.js" defer></script>
   <script src="ballistics.js" defer></script>
   <script src="collisions.js" defer></script>
+  <script src="autopilot-safety.js" defer></script>
+  <script src="arrival.js" defer></script>
   <script src="game.js" defer></script>
 </head>
 <body>
@@ -17,11 +19,12 @@
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
-        <div><div class="eyebrow">PHYSICS SANDBOX • PROTOTYPE 0.5</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+        <div><div class="eyebrow">PHYSICS SANDBOX • PROTOTYPE 0.6</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
       <div class="top-actions">
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">MISSION TIME</span><strong id="sim-clock">00:00</strong></div></div>
         <label class="speed-label">Speed <select id="sim-speed" aria-label="Simulation speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+        <button id="settings-btn" type="button" class="action-btn" title="Change hotkeys">⚙ Controls</button>
         <button id="pause-btn" class="action-btn">Ⅱ Pause</button>
         <button id="reset-btn" class="action-btn muted">↻ Reset</button>
       </div>
@@ -35,14 +38,28 @@
         </div>
         <div class="canvas-wrap">
           <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat."></canvas>
-          <div class="nav-command" role="group" aria-label="Always available navigation console">
-            <div class="nav-command-head"><strong>◈ NAVIGATION CONSOLE</strong><span id="nav-quick-status">COMPUTER LOCKED</span></div>
+          <div class="nav-command" id="nav-command" role="group" aria-label="Navigation console">
+            <div class="nav-command-head"><button type="button" id="nav-toggle" class="console-toggle" aria-controls="nav-command-body" aria-expanded="true">◈ NAVIGATION <span id="nav-toggle-arrow">▴</span></button><span id="nav-quick-status">COMPUTER LOCKED</span></div>
+            <div id="nav-command-body" class="nav-command-body">
             <div class="nav-command-select"><select id="nav-target" class="nav-target" aria-label="Rendezvous destination"></select><button type="button" id="nav-next" class="small-btn" title="Next navigation target (N)" aria-label="Cycle navigation targets">↻</button></div>
             <div class="nav-command-actions"><button type="button" id="nav-plan" class="wide-subtle-btn" title="Calculate route (C)">CALCULATE</button><button type="button" id="nav-engage" class="buy-btn" title="Install navigation computer or engage route (E)">BUY NAV 60¤</button><button type="button" id="nav-abort" class="small-btn" title="Abort autopilot (X)" disabled>ABORT</button></div>
             <div class="nav-command-readout" id="nav-quick-metrics" aria-live="polite">Pick a contact · press C to calculate</div>
+            </div>
           </div>
+          <div class="telemetry-console collapsed" id="telemetry-console" role="group" aria-label="On-screen orbital telemetry">
+            <button type="button" class="console-toggle" id="telemetry-toggle" aria-controls="telemetry-console-body" aria-expanded="false">◉ TELEMETRY <span id="telemetry-toggle-arrow">▾</span></button>
+            <div class="telemetry-console-body" id="telemetry-console-body">
+              <div><span>Altitude</span><strong id="quick-alt">—</strong></div>
+              <div><span>Speed</span><strong id="quick-speed">—</strong></div>
+              <div><span>Periapsis</span><strong id="quick-peri">—</strong></div>
+              <div><span>Apoapsis</span><strong id="quick-apo">—</strong></div>
+              <div><span>Fuel reserve</span><strong id="quick-reserve">—</strong></div>
+              <div><span>Flight status</span><strong id="quick-flight">—</strong></div>
+            </div>
+          </div>
+          <button type="button" id="sos-btn" class="sos-btn" title="Ask AEGIS-01 for propellant">⚑ REQUEST FUEL ASSISTANCE</button>
           <div class="canvas-overlay top-left"><span class="tiny-dot blue"></span><span id="target-indicator">TRACKING: RAIDER-01</span></div>
-          <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom <span class="keyboard-tag">N/C/E/X</span> nav</div>
+          <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom <span class="keyboard-tag">N/C/E/X</span> nav <span class="keyboard-tag">H</span> help</div>
           <div id="game-over" class="game-over hidden" role="alertdialog" aria-modal="false" aria-labelledby="game-over-title"><span class="failure-mark">✕</span><h2 id="game-over-title">SHIP LOST</h2><p id="game-over-details">Your orbit ended.</p><button id="retry-btn" class="primary-btn">Try again ↻</button></div>
         </div>
         <div class="mission-strip"><span class="objective-icon">◎</span><span><strong>OBJECTIVE</strong> · Stay in orbit. Outmaneuver raiders. Collect salvage.</span><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
@@ -69,7 +86,7 @@
           <div class="meter-title"><span>PROPELLANT</span><b id="fuel-value">200 / 200 kg</b></div><div class="meter"><div id="fuel-bar" class="meter-fill cyan" style="width:100%"></div></div>
           <div class="small-stats"><div><span>AMMO</span><strong id="ammo-value">36</strong></div><div><span>CREDITS</span><strong id="credits-value">0 <i>¤</i></strong></div><div><span>ΔV BUDGET</span><strong id="dv-value">—</strong></div></div>
         </section>
-        <section class="panel ally-panel"><div class="panel-heading"><span>FRIENDLY ESCORT</span><span id="escort-status" class="status-pill">ONLINE</span></div><div class="ship-name" style="color:#67e0aa">★ AEGIS-01</div><div class="metric-row"><span>Hull integrity</span><strong id="escort-hull">80 / 80</strong></div><div class="metric-row"><span>Ammunition</span><strong id="escort-ammo">120</strong></div><div class="mini-note" id="escort-state">ENGAGING HOSTILES</div></section>
+        <section class="panel ally-panel"><div class="panel-heading"><span>FRIENDLY ESCORT</span><span id="escort-status" class="status-pill">ONLINE</span></div><div class="ship-name" style="color:#67e0aa">★ AEGIS-01</div><div class="metric-row"><span>Hull integrity</span><strong id="escort-hull">80 / 80</strong></div><div class="metric-row"><span>Ammunition</span><strong id="escort-ammo">120</strong></div><div class="metric-row"><span>Propellant</span><strong id="escort-fuel">—</strong></div><div class="mini-note" id="escort-state">ENGAGING HOSTILES</div><button type="button" class="wide-subtle-btn" id="escort-help-btn">⚑ Request fuel assistance</button></section>
         <section class="panel propulsion">
           <div class="panel-heading"><span>PROPULSION</span><span>SCOUT MK-I</span></div>
           <div class="metric-row"><span>Dry mass</span><strong id="dry-mass">900 kg</strong></div>
@@ -120,7 +137,16 @@
         <section class="panel feed-panel"><div class="panel-heading"><span>COMMS & EVENTS</span><span class="live-label">●</span></div><div id="event-feed" class="event-feed" aria-live="polite"></div></section>
       </aside>
     </main>
-    <footer class="footer-note">Orbital Outlaws · Prototype 0.5 <span>On-map navigation · extended transfer scan · continuous spacecraft collisions</span></footer>
+    <div id="settings-modal" class="settings-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="settings-panel">
+        <div class="settings-top"><div><div class="section-kicker">COMMAND CONFIGURATION</div><h2 id="settings-title">Keyboard controls</h2></div><button type="button" id="settings-close" class="action-btn" aria-label="Close settings">✕</button></div>
+        <p class="mini-note">Click a control, then press its new key. Conflicting key assignments are rejected. Changes are saved on this browser.</p>
+        <div id="hotkey-list" class="hotkey-list"></div>
+        <div id="hotkey-feedback" role="status" class="hotkey-feedback"></div>
+        <div class="settings-bottom"><button type="button" id="hotkey-reset" class="small-btn">Restore defaults</button><button type="button" id="settings-done" class="buy-btn">Done</button></div>
+      </div>
+    </div>
+    <footer class="footer-note">Orbital Outlaws · Prototype 0.6 <span>Full-width orbit · configurable controls · fuel-safe guidance · allied rescue</span></footer>
   </div>
 </body>
 </html>

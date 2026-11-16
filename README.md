@@ -1,4 +1,4 @@
-# Orbital Outlaws — Prototype v0.5
+# Orbital Outlaws — Prototype v0.6
 
 **Orbital Outlaws** is an experimental browser game about fighting and surviving in orbit under Newtonian gravity. The current prototype is single-player against AI raiders; multiplayer networking is not yet included.
 
@@ -17,11 +17,11 @@ python -m http.server 8080
 
 | Input | Action |
 | --- | --- |
-| Hold **A / ←** | Fire RCS to rotate counter-clockwise |
-| Hold **D / →** | Fire RCS to rotate clockwise |
-| Hold **S / ↓** | Fire RCS to stop spinning |
+| Hold **A** (configurable) | Fire RCS to rotate counter-clockwise |
+| Hold **D** (configurable) | Fire RCS to rotate clockwise |
+| Hold **S** (configurable) | Fire RCS to stop spinning |
 | **Move mouse** over arena | Aim the main engine's limited ±28° nozzle gimbal; cannot rotate the whole ship |
-| Hold **W / ↑** | Fire the main engine in the ship's forward/gimbaled direction |
+| Hold **W** (configurable) | Fire the main engine in the ship's forward/gimbaled direction |
 | Hold **Space** / FIRE button | Shoot ballistic projectiles at the locked hostile or manual aim point |
 | **Left-click** a hostile | Lock it as the gun target; **Space** fires |
 | **Left-click** empty arena | Activate manual weapon aiming; moving the cursor adjusts aim, and **Space** fires |
@@ -31,6 +31,10 @@ python -m http.server 8080
 | **Wheel** over arena | Zoom toward cursor; `+` / `−` buttons also zoom |
 | Hold **R** / **HOLD R · REPAIR** button | Repair hull at 5 HP/s using 1 kg of spare parts per second. Full repair to 100% is possible; no repair after death |
 | **P** | Pause/resume |
+| **H** | Ask AEGIS-01 for fuel rescue |
+| **V / T** | Collapse or open map navigation / telemetry consoles |
+| **N / C / E / X** | Cycle targets / calculate route / engage / abort |
+| **⚙ Controls** | Remap keyboard keys; saved locally in this browser |
 | Simulation **Speed** | 0.5×, 1×, 2×, 4× |
 
 On touch devices, hold the control buttons to rotate, thrust or fire. Tapping the arena selects a contact or enables manual targeting; it does not burn propellant.
@@ -151,3 +155,17 @@ The test suite checks circular-orbit stability, predicted transfer accuracy, uns
 More advanced orbital rendezvous (including multi-revolution, finite-burn optimal control and recovery from changing target trajectories), upgraded RCS and engines, different rocket types, guided missiles, lasers, long-term debris, multiplayer networking and eventually relativistic geodesics near compact objects.
 
 Navigation console shortcuts: **N** next target, **C** calculate, **E** purchase/engage, **X** abort. The existing **W**, **A**, **D**, **S**, **R**, and **SPACE** controls remain unchanged.
+
+
+## v0.6 — flight deck, rescue, fuel-safe guidance and arrivals
+
+- The orbital canvas spans the full horizontal viewport. Detailed panels move underneath. Open or collapse on-map navigation with V and orbital telemetry with T.
+- The ⚙ Controls settings dialog lets players rebind actions, checks for key conflicts and saves assignments to browser localStorage.
+- H or REQUEST FUEL ASSISTANCE asks AEGIS-01 to rendezvous with KESTREL-7 and transfer up to 35 kg of its own fuel. Ships must match position and relative velocity before transfer. If the ally lacks surplus fuel, it first searches for an affordable salvage fuel pod, then flies to the player. Both legs can fail if no affordable route exists; fuel is never teleported.
+- Autopilot now protects a 36 kg emergency reserve on the 200 kg starting tank. It estimates fuel using m_prop = m0 × (1 − exp(−Δv/v_exhaust)), requires a 1.65× execution allowance, then aborts if burns exceed the allowance, hit the protected reserve or take 28 seconds beyond the planned arrival. This is a conservative fail-safe, NOT a proof of optimal finite-thrust guidance; plans can still miss and require replanning. Manual thrust is NOT reserve-limited.
+- Optional new reinforcements spawn at about 1450 km on inbound trajectories, outside the old 1200 km boundary. Initial scripted raiders remain within the sector. Player spacecraft can escape beyond 1200 km without an artificial game-over.
+- Planets, moons, civilized stations, surface landing, docking, markets and food are future world-expansion features; not included in v0.6.
+
+### Development tests
+
+Run `node --test tests/*.test.cjs` in Node.js 18+. Additional v0.6 tests cover autonomous fuel reserve limits and outside-sector inbound vessel states.

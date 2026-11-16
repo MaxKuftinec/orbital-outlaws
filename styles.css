@@ -41,3 +41,40 @@
 .nav-command-readout{margin-top:7px;color:#b9c9d3;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 @media(max-width:720px){.nav-command{top:8px;right:8px;width:min(285px,calc(100% - 16px));padding:8px}.nav-command-head{font-size:9px}.nav-command-head span{font-size:8px}.nav-command-readout{font-size:9px}}
 @media(max-width:410px){.nav-command{top:6px;right:6px;width:min(262px,calc(100% - 12px));}.nav-command-actions button{font-size:9px}.canvas-wrap .top-left{max-width:32%;overflow:hidden;text-overflow:ellipsis}}
+
+/* v0.6 — flight-first, viewport-width layout. */
+.app-shell{max-width:none;width:100%;padding:15px clamp(10px,1.5vw,28px) 16px}
+.game-layout{display:flex;flex-direction:column;align-items:stretch;gap:15px}
+.arena-shell{width:100%}
+.canvas-wrap canvas{width:100%;height:clamp(520px,calc(100dvh - 213px),880px)}
+.sidebar{width:100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start}
+.sidebar>.panel{min-width:0}
+@media(max-width:1200px){.sidebar{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:850px){.sidebar{grid-template-columns:repeat(2,minmax(0,1fr))}.canvas-wrap canvas{height:clamp(440px,70dvh,680px)}}
+@media(max-width:560px){.sidebar{grid-template-columns:1fr}.canvas-wrap canvas{height:clamp(470px,72dvh,640px)}.app-shell{padding:9px 7px}}
+.nav-command{top:12px;right:12px}
+.nav-command-body{display:block}
+.nav-command.collapsed .nav-command-body{display:none}
+.nav-command.collapsed{width:190px;padding:8px 10px}
+.nav-command.collapsed .nav-command-head>span{display:none}
+.console-toggle{background:transparent;color:#8dd9ee;border:0;padding:3px;cursor:pointer;font-size:11px;font-weight:800;letter-spacing:.8px;text-align:left}
+.console-toggle:hover{color:white}
+.telemetry-console{position:absolute;z-index:4;top:12px;left:12px;width:214px;max-width:calc(100% - 24px);border:1px solid #3c5870;background:#071726ee;border-radius:10px;padding:9px 11px;backdrop-filter:blur(9px);box-shadow:0 9px 23px #01060980}
+.telemetry-console.collapsed{width:auto;min-width:120px}
+.telemetry-console-body{display:grid;grid-template-columns:1fr;gap:5px;margin-top:9px}
+.telemetry-console-body>div{display:flex;justify-content:space-between;gap:9px;font-size:11px;border-top:1px solid #1d364a;padding-top:5px}
+.telemetry-console-body span{color:#94aabb}.telemetry-console-body strong{font-variant-numeric:tabular-nums}
+.telemetry-console.collapsed .telemetry-console-body{display:none}
+.sos-btn{position:absolute;z-index:4;bottom:14px;right:13px;border:1px solid #9d7953;border-radius:8px;background:#493323ea;color:#ffe1b0;padding:10px 12px;font-size:11px;font-weight:800;box-shadow:0 3px 20px #0007;cursor:pointer}
+.sos-btn:disabled{opacity:.45;cursor:not-allowed}
+.settings-backdrop{position:fixed;inset:0;z-index:100;background:#020912dc;display:flex;align-items:center;justify-content:center;padding:16px}
+.settings-backdrop.hidden{display:none}
+.settings-panel{background:#0d2030;border:1px solid #45647b;border-radius:15px;padding:20px;width:min(610px,100%);max-height:88dvh;overflow:auto;box-shadow:0 18px 70px #000a}
+.settings-top,.settings-bottom{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.settings-top h2{margin:5px 0 2px}.settings-bottom{margin-top:15px}
+.hotkey-list{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:13px}
+.hotkey-entry{display:flex;justify-content:space-between;align-items:center;gap:5px;border:1px solid #233e50;border-radius:8px;padding:6px 8px;background:#112a3b;color:#cedde7;font-size:12px}
+.hotkey-entry button{flex:none;min-width:80px;border:1px solid #47657a;border-radius:5px;background:#1c3649;color:#93e6f1;padding:7px;font-size:11px}
+.hotkey-entry button.capturing{background:#4f3c1a;color:#ffe0a0}
+.hotkey-feedback{min-height:22px;margin-top:10px;color:#f5c48b;font-size:11px}
+@media(max-width:600px){.hotkey-list{grid-template-columns:1fr}.settings-panel{padding:12px}.telemetry-console{top:7px;left:7px}.nav-command{top:7px;right:7px;max-width:calc(100% - 140px)}.sos-btn{font-size:9px;bottom:7px;right:7px}}
