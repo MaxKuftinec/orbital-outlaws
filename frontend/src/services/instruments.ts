@@ -16,5 +16,5 @@ export interface NavigationView {
   locked: boolean; phase: string; deltaV: string; eta: string
   fuel: string; status: string; quick: string; metrics: string
   engageText: string; engageDisabled: boolean; abortDisabled: boolean
-  selected: string
+  selected: string; reserveKg: number
 }
