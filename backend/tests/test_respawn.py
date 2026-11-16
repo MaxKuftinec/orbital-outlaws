@@ -6,7 +6,7 @@ from app.models import EncounterSnapshot
 from app.store import WorldStore
 
 
-def test_dev_respawn_keeps_sector_and_economy_but_creates_random_outer_ship(postgres_url):
+def test_dev_respawn_preserves_sector_but_resets_economy_and_creates_random_outer_ship(postgres_url):
     store=WorldStore(postgres_url)
     store.ensure_world()
     pilot=uuid4().hex
@@ -23,7 +23,7 @@ def test_dev_respawn_keeps_sector_and_economy_but_creates_random_outer_ship(post
         saved.snapshot=sector
     respawn=store.respawn_player(pilot)
     assert respawn['hp']==100
-    assert respawn['progress_preserved'] is True
+    assert respawn['progress_preserved'] is False
     assert respawn['sector_preserved'] is True
     assert respawn['arrival_control']=='manual'
     assert respawn['spawn_radius_km']>900
@@ -31,7 +31,9 @@ def test_dev_respawn_keeps_sector_and_economy_but_creates_random_outer_ship(post
     assert 20<=math.hypot(state['vx'],state['vy'])<=32
     assert state['fuel_kg']==200
     assert state['mass_kg']==1110
-    assert store.player_progress(pilot)==progress_before
+    assert store.player_progress(pilot)['credits']==65
+    assert store.player_progress(pilot)['upgrades']=={}
+    assert progress_before['credits']<65
     resumed=WorldStore(postgres_url).player_encounter(pilot)['snapshot']
     assert resumed['player']['alive'] is True
     assert resumed['player']['hp']==100
