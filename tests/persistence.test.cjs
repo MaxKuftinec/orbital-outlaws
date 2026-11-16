@@ -45,7 +45,7 @@ const welcome={type:'welcome',flight:{state:{x:123,heading:.3}},
 
 test('WebSocket receives server-authoritative flight, sector, credits and technologies',()=>{
   const h=harness();
-  assert.match(h.sockets[0].url,/^ws:\/\/localhost:5173\/api\/players\/12345678123412341234123456789abc\/live$/);
+  assert.match(h.sockets[0].url,/^ws:\/\/localhost:5173\/players\/12345678123412341234123456789abc\/live$/);
   h.sockets[0].emit(welcome);
   assert.equal(h.states[0].state.x,123);
   assert.equal(h.states[0].clientSampleMs,1000);
