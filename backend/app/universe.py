@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 import secrets
-from .physics import State, propagate, apply_impulse
+from .physics import State, propagate, apply_impulse, orbital_envelope
 
 MU = 310000.0
 BODY_RADIUS = 91.0
@@ -255,6 +255,45 @@ def change_velocity(body: dict, toward: dict, mu: float,
     body['fuel'] = s.fuel_kg
 
 
+def guide_fuel_donor(donor: dict, recipient: dict, mu: float) -> bool:
+    """Fuel-limited lead pursuit for cooperative rendezvous.
+
+    A bounded velocity correction is applied only if the resulting osculating
+    trajectory keeps the donor clear of the central body. This is a coarse
+    orbital-controller heuristic, not teleportation or an ideal transfer solver.
+    """
+    if donor.get('fuel', 0.) <= 30.:
+        return False
+    dx = recipient['x'] - donor['x']
+    dy = recipient['y'] - donor['y']
+    separation = math.hypot(dx, dy)
+    if separation > 5000.:
+        return False
+    relative_x = recipient['vx']-donor['vx']
+    relative_y = recipient['vy']-donor['vy']
+    closing = math.hypot(relative_x,relative_y)
+    horizon = max(4., min(40., separation/max(4., closing)))
+    # Velocity matching takes priority as proximity increases.
+    desired_x = relative_x + dx/horizon
+    desired_y = relative_y + dy/horizon
+    magnitude = math.hypot(desired_x, desired_y)
+    if magnitude < .04:
+        return False
+    # Allow purposeful rendezvous corrections, unlike slow combat steering.
+    pulse = min(1.75,magnitude)
+    dvx,dvy = desired_x*pulse/magnitude,desired_y*pulse/magnitude
+    try:
+        result = apply_impulse(state_of(donor),dvx,dvy,320.,reserve_kg=30.)
+        peri,_ = orbital_envelope(result,mu)
+        if peri < BODY_RADIUS + 12.:
+            return False
+    except (ValueError,OverflowError):
+        return False
+    donor['vx'],donor['vy'],donor['fuel'] = result.vx,result.vy,result.fuel_kg
+    donor['heading'] = math.atan2(dvy,dvx)
+    return True
+
+
 def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list[dict],
                    when: float, mu: float, effects: dict):
     """Incremental autonomous support: select donors, match velocity, then transfer mass.
@@ -318,8 +357,8 @@ def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list
                   f"{recipient['name']} (matched velocity, {relative:.2f} km/s).", 'good')
             continue
         if when >= order.get('nextDecision', 0):
-            change_velocity(donor, recipient, mu, min_fuel=30., max_range=5000.)
-            order['nextDecision'] = when + 7.
+            guide_fuel_donor(donor, recipient, mu)
+            order['nextDecision'] = when + 5.
         remaining.append(order)
     sector['assistance'] = remaining
 
