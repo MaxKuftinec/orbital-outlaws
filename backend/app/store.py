@@ -7,7 +7,7 @@ from __future__ import annotations
 import math, time, json, copy, secrets
 from sqlalchemy import create_engine, select, and_, or_
 from sqlalchemy.orm import sessionmaker
-from .models import Base, World, Entity, Event, FlightControl, PlayerProgress, SalvageClaim, EncounterSnapshot
+from .models import Base, World, Entity, Event, FlightControl, PlayerProgress, PlayerSettings, SalvageClaim, EncounterSnapshot
 from .physics import State, propagate, orbital_envelope, apply_impulse
 from .flight import advance, LEASE_S
 from .universe import new_sector, advance_sector, player_fire as fire_projectile, incoming_ship, event as sector_event
@@ -69,6 +69,7 @@ class WorldStore:
                 db.add(entity)
                 db.add(FlightControl(entity_id=entity_id))
                 db.add(PlayerProgress(entity_id=entity_id,credits=65,upgrades={}))
+                db.add(PlayerSettings(entity_id=entity_id,reserve_kg=36.))
                 db.add(Event(world_id='kestrel', entity_id=entity_id,
                              at_s=entity.checkpoint_s, kind='spawn', payload={},
                              after=state.as_dict(), idempotency_key='spawn:'+entity_id))
@@ -76,6 +77,9 @@ class WorldStore:
                 raise ValueError('Not a player entity')
             elif not db.get(PlayerProgress,entity_id):
                 db.add(PlayerProgress(entity_id=entity_id,credits=65,upgrades={}))
+            if entity and not db.get(PlayerSettings,entity_id) and not any(
+                    isinstance(obj,PlayerSettings) and obj.entity_id==entity_id for obj in db.new):
+                db.add(PlayerSettings(entity_id=entity_id,reserve_kg=36.))
         return self.get_entity('kestrel', entity_id)
 
     def player_encounter(self, pilot_id: str):
@@ -244,7 +248,9 @@ class WorldStore:
             if separation > 18 or relative >= 2.5:
                 raise ValueError(f'Rendezvous required: {separation:.1f} km and {relative:.1f} km/s '
                                  '(limits: 18 km and 2.5 km/s)')
-            moved = min(requested_kg, max(0., current.fuel_kg-25.),
+            settings = db.get(PlayerSettings, entity_id)
+            reserve = settings.reserve_kg if settings else 36.
+            moved = min(requested_kg, max(0., current.fuel_kg-reserve),
                         max(0., ally.get('fuelMax', 170.)-ally['fuel']))
             if moved < .1: raise ValueError('No surplus fuel or recipient tank full')
             state = State(current.x, current.y, current.vx, current.vy,
@@ -377,7 +383,26 @@ class WorldStore:
         with self.sessions() as db:
             progress=db.get(PlayerProgress,'pilot-'+pilot_id)
             if not progress:raise LookupError('Unknown pilot')
-            return {'credits':progress.credits,'upgrades':progress.upgrades}
+            settings=db.get(PlayerSettings,'pilot-'+pilot_id)
+            return {'credits':progress.credits,'upgrades':progress.upgrades,
+                    'reserve_kg':settings.reserve_kg if settings else 36.}
+
+    def set_player_reserve(self, pilot_id: str, reserve_kg: float):
+        """User-configured protection for autopilot and outgoing donations."""
+        if not math.isfinite(reserve_kg) or not 0 <= reserve_kg <= 200:
+            raise ValueError('Fuel reserve must be between 0 and 200 kg')
+        entity_id='pilot-'+pilot_id
+        with self.sessions.begin() as db:
+            if not db.get(Entity,entity_id):
+                raise LookupError('Unknown pilot')
+            settings=db.scalars(select(PlayerSettings).where(
+                PlayerSettings.entity_id==entity_id).with_for_update()).first()
+            if not settings:
+                settings=PlayerSettings(entity_id=entity_id,reserve_kg=reserve_kg)
+                db.add(settings)
+            else:
+                settings.reserve_kg=reserve_kg
+        return self.player_progress(pilot_id)
 
     def player_purchase(self,pilot_id: str,upgrade: str):
         if upgrade not in self.PRICES:raise ValueError('Unknown upgrade')
@@ -392,7 +417,7 @@ class WorldStore:
                 owned[upgrade]=True
                 progress.upgrades=owned
             result={'credits':progress.credits,'upgrades':dict(progress.upgrades)}
-        return result
+        return self.player_progress(pilot_id)
 
     def player_salvage(self,pilot_id: str,claim_id: str,amount: int):
         # DEVELOPMENT ONLY: client reports pickups until server controls salvage.
