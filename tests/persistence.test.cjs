@@ -95,3 +95,11 @@ test('client can buy technology, but cannot claim kills, enemy positions or cred
   assert.deepEqual(h.statuses,[true,false]);
   assert.equal(h.handle.purchase('nav'),false);
 });
+
+test('pilot can request a persistent protected propellant reserve',()=>{
+  const h=harness();h.sockets[0].emit(welcome);
+  assert.equal(h.handle.setReserve(74),true);
+  assert.deepEqual(h.sent.at(-1),{type:'reserve',kg:74});
+  h.sockets[0].emit({type:'progress',progress:{credits:65,upgrades:{},reserve_kg:74}});
+  assert.equal(h.progress.at(-1).reserve_kg,74);
+});
