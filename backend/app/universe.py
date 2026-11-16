@@ -155,7 +155,7 @@ def new_sector(world_time: float, mu: float = MU) -> dict:
             'allies': [], 'player': {'hp': 100., 'ammo': 36, 'repairParts': 10.,
                                     'alive': True, 'gunReady': world_time},
             'events': [], 'reinforcements': False, 'nextEnemySpawn': world_time+75,
-            'playerKills': 0, 'collisionCooldown': {}}
+            'playerKills': 0, 'collisionCooldown': {}, 'assistance': []}
 
 
 def event(sector: dict, when: float, message: str, category='neutral'):
@@ -233,11 +233,12 @@ def fire(sector: dict, shooter: dict, target: dict, at: float, faction: str,
     return True
 
 
-def change_velocity(body: dict, toward: dict, mu: float):
-    if body.get('fuel', 0) < 1:
+def change_velocity(body: dict, toward: dict, mu: float,
+                    min_fuel: float = 1., max_range: float = 550.):
+    if body.get('fuel', 0) <= min_fuel:
         return
     dist = distance(body, toward)
-    if dist > 550:
+    if dist > max_range:
         return
     dx = toward['x']-body['x']
     dy = toward['y']-body['y']
@@ -246,12 +247,81 @@ def change_velocity(body: dict, toward: dict, mu: float):
     dvx = max(-.08, min(.08, .18*dx/length+.015*(toward['vx']-body['vx'])))
     dvy = max(-.08, min(.08, .18*dy/length+.015*(toward['vy']-body['vy'])))
     try:
-        s = apply_impulse(state_of(body), dvx, dvy, 320.)
+        s = apply_impulse(state_of(body), dvx, dvy, 320., reserve_kg=min_fuel)
     except ValueError:
         return
     for field in ('vx', 'vy'):
         body[field] = getattr(s, field)
     body['fuel'] = s.fuel_kg
+
+
+def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list[dict],
+                   when: float, mu: float, effects: dict):
+    """Incremental autonomous support: select donors, match velocity, then transfer mass.
+
+    Neither an NPC nor a client can mint propellant. Each donor retains a reserve;
+    every transfer occurs only at a verified low-relative-speed rendezvous.
+    """
+    orders = sector.setdefault('assistance', [])
+    groups = [(allies, 'friendly'), (enemies, 'raider')]
+    involved = {o['recipient'] for o in orders}
+    involved.update(o['donor'] for o in orders if o.get('donor'))
+    for fleet, faction in groups:
+        if len(fleet) < 2:
+            continue
+        for recipient in fleet:
+            capacity = recipient.get('fuelMax', 170.)
+            if not recipient.get('alive', True) or recipient['id'] in involved or recipient.get('fuel', 0) >= .18*capacity:
+                continue
+            donors = [b for b in fleet if b['id'] not in involved and b['id'] != recipient['id']
+                      and b.get('alive', True) and b.get('fuel', 0) > max(55., .35*b.get('fuelMax', 170.))]
+            if donors:
+                donor = min(donors, key=lambda b: distance(b, recipient))
+                orders.append({'recipient': recipient['id'], 'donor': donor['id'],
+                               'faction': faction, 'createdAt': when, 'nextDecision': when})
+                involved.update((recipient['id'], donor['id']))
+                event(sector, when, f"{donor['name']} responding to {recipient['name']}'s low-fuel alert.", 'neutral')
+
+    fleet = [player, *allies, *enemies]
+    by_id = {body['id']: body for body in fleet}
+    remaining = []
+    for order in orders:
+        recipient = by_id.get(order['recipient'])
+        if not recipient or not recipient.get('alive', True) or when-order['createdAt'] > 900:
+            continue
+        if not order.get('donor'):
+            candidates = [a for a in allies if a.get('alive', True) and
+                          a['id'] != recipient['id'] and a.get('fuel', 0) > 55.]
+            if candidates:
+                donor = min(candidates, key=lambda a: distance(a, recipient))
+                order['donor'] = donor['id']
+            else:
+                remaining.append(order)
+                continue
+        donor = by_id.get(order['donor'])
+        if not donor or not donor.get('alive', True):
+            order['donor'] = None
+            remaining.append(order)
+            continue
+        surplus = max(0., donor.get('fuel', 0.) - 30.)
+        need = max(0., recipient.get('fuelMax', 200.)-recipient.get('fuel', 0.))
+        if surplus < 2 or need < 1:
+            continue
+        relative = math.hypot(donor['vx']-recipient['vx'], donor['vy']-recipient['vy'])
+        if distance(donor, recipient) <= 18. and relative < 2.5:
+            moved = min(35., surplus, need)
+            donor['fuel'] -= moved
+            recipient['fuel'] += moved
+            if recipient.get('isPlayer'):
+                effects['fuel'] += moved
+            event(sector, when, f"{donor['name']} transferred {moved:.1f} kg propellant to "
+                  f"{recipient['name']} (matched velocity, {relative:.2f} km/s).", 'good')
+            continue
+        if when >= order.get('nextDecision', 0):
+            change_velocity(donor, recipient, mu, min_fuel=30., max_range=5000.)
+            order['nextDecision'] = when + 7.
+        remaining.append(order)
+    sector['assistance'] = remaining
 
 
 def advance_sector(sector: dict, seconds: float, start_player: State, mu: float = MU):
@@ -283,6 +353,8 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
                 previous['shot-'+str(index)]={k:shot[k] for k in ('x','y')}
 
         # Decisions and firing happen before motion; offline events are durable.
+        support_orders(sector, player, allies, sector['enemies'], when, mu, effects)
+        active_donors = {o.get('donor') for o in sector.get('assistance', [])}
         enemy_list=[b for b in sector['enemies'] if b.get('alive',True)]
         for ally in allies:
             if not ally.get('alive',True) or ally.get('arrivalPhase')=='approach':
@@ -300,7 +372,8 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
             target=min(candidates,key=lambda b:distance(b,enemy))
             if enemy.get('arrivalPhase') not in ('approach','departed','failed'):
                 if when>=enemy.get('nextDecision',0):
-                    change_velocity(enemy,target,mu)
+                    if enemy['id'] not in active_donors:
+                        change_velocity(enemy,target,mu)
                     enemy['nextDecision']=when+7.
             if distance(enemy,target)<310:
                 fire(sector,enemy,target,when,'raider')
@@ -379,8 +452,18 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
             for pickup in sector['pickups']:
                 if not pickup.get('alive',True):
                     continue
-                if distance(player,pickup)>19 or math.hypot(
-                    pickup['vx']-player['vx'],pickup['vy']-player['vy'])>=5:
+                start_player_pos = previous.get('player')
+                start_pickup_pos = previous.get(pickup['id'])
+                encountered = (start_player_pos and start_pickup_pos and
+                               hit_swept(start_player_pos, player, start_pickup_pos, pickup, 19.))
+                if not encountered and distance(player, pickup) > 19.:
+                    continue
+                relative_speed = math.hypot(pickup['vx']-player['vx'], pickup['vy']-player['vy'])
+                if relative_speed >= 5.:
+                    if when-pickup.get('lastFastPassAt', -1e9) > 12.:
+                        pickup['lastFastPassAt'] = when
+                        event(sector, when, f"Salvage {pickup['id']} flyby at {relative_speed:.1f} km/s "
+                              "(capture requires relative speed below 5 km/s).", 'neutral')
                     continue
                 kind=pickup['type'];amount=pickup['amount']
                 gains=[]
