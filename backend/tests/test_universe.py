@@ -48,42 +48,63 @@ def test_combat_is_repeatable_given_the_same_world_time_and_initial_state():
 
 
 
-def test_inbound_flyby_is_hyperbolic_and_orbit_intent_spends_propellant():
+def test_random_launch_velocity_is_independent_of_position_and_can_be_retrograde():
     from app.universe import incoming_ship, resolve_arrival
     from app.physics import orbital_envelope
-    import math
-    mu=310000
-    flyby=incoming_ship('raider-09', 0.6, 'flyby')
-    orbit=incoming_ship('ally-07', 0.4, 'orbit', True)
-    for vessel in (flyby,orbit):
-        r=math.hypot(vessel['x'],vessel['y'])
-        assert r>900
-        assert vessel['x']*vessel['vx']+vessel['y']*vessel['vy']<0
-        assert (vessel['vx']**2+vessel['vy']**2)/2-mu/r>0
-
+    mu = 310000
+    directions = [0., math.pi/2, math.pi, 3*math.pi/2]
+    for direction in directions:
+        visitor=incoming_ship('raider-09', 0.6, 'flyby', velocity_angle=direction,
+                              velocity_speed=27.)
+        assert math.isclose(math.atan2(visitor['vy'],visitor['vx'])%(2*math.pi),
+                            direction,abs_tol=1e-10)
+        assert math.isclose(math.hypot(visitor['vx'],visitor['vy']),27.,abs_tol=1e-10)
+        assert visitor['arrivalPhase']=='launch'
+        assert math.hypot(visitor['x'],visitor['y'])>900
+    cw=incoming_ship('ally-07', 0., 'orbit', True,
+                     velocity_angle=-math.pi/2,velocity_speed=26.)
+    ccw=incoming_ship('ally-08', 0., 'orbit', True,
+                      velocity_angle=math.pi/2,velocity_speed=26.)
+    assert cw['orbitDirection']==-1
+    assert ccw['orbitDirection']==1
     sector={'events':[]}
-    target=orbit['insertionRadius']
-    orbit['x']=target
-    orbit['y']=0
-    orbit['vx']=0
-    orbit['vy']=math.sqrt(14**2+2*mu/target)
-    old_fuel=orbit['fuel']
-    resolve_arrival(sector,orbit,mu,33)
-    assert orbit['arrivalPhase']=='orbiting'
-    assert orbit['fuel']<old_fuel
-    r=math.hypot(orbit['x'],orbit['y'])
-    assert abs(math.hypot(orbit['vx'],orbit['vy'])-math.sqrt(mu/r))<1e-8
-    assert abs(orbit['x']*orbit['vx']+orbit['y']*orbit['vy'])<1e-8
-    assert 'entered' in sector['events'][-1]['message']
+    for vessel in (cw,ccw):
+        initial_fuel=vessel['fuel']
+        resolve_arrival(sector,vessel,mu,3.)
+        assert vessel['arrivalPhase']=='approach'
+        assert vessel['fuel']<initial_fuel
+        assert vessel['x']*vessel['vx']+vessel['y']*vessel['vy']<0
+        assert math.copysign(1,vessel['x']*vessel['vy']-vessel['y']*vessel['vx'])==vessel['orbitDirection']
+        # Fast-forward to insertion radius; capture must match the chosen sense.
+        radius=vessel['insertionRadius']
+        vessel['x'],vessel['y']=radius,0.
+        vessel['vx']=-1.
+        vessel['vy']=vessel['orbitDirection']*math.sqrt(14**2+2*mu/radius)
+        remaining=vessel['fuel']
+        resolve_arrival(sector,vessel,mu,33.)
+        assert vessel['arrivalPhase']=='orbiting'
+        assert vessel['fuel']<remaining
+        assert math.isclose(vessel['vx'],0.,abs_tol=1e-9)
+        assert math.isclose(vessel['vy'],vessel['orbitDirection']*math.sqrt(mu/radius),
+                            abs_tol=1e-9)
+        peri,apo=orbital_envelope(State(vessel['x'],vessel['y'],vessel['vx'],vessel['vy']),
+                                  mu)
+        assert math.isclose(peri,apo,abs_tol=1e-6)
 
-    flyby['x']=target
-    flyby['y']=0
-    flyby['vx']=0
-    flyby['vy']=math.sqrt(14**2+2*mu/target)
-    old_flyby_fuel=flyby['fuel']
-    resolve_arrival(sector,flyby,mu,33)
+
+def test_flyby_does_not_capture_after_its_course_adjustment():
+    from app.universe import incoming_ship, resolve_arrival
+    flyby=incoming_ship('raider-06',-.25,'flyby',
+                        velocity_angle=2.7,velocity_speed=25.)
+    sector={'events':[]}
+    resolve_arrival(sector,flyby,310000,3.)
     assert flyby['arrivalPhase']=='approach'
-    assert flyby['fuel']==old_flyby_fuel
+    after_course_fuel=flyby['fuel']
+    flyby['x'],flyby['y']=720.,0.
+    flyby['vx'],flyby['vy']=25.,3.
+    resolve_arrival(sector,flyby,310000,33.)
+    assert flyby['arrivalPhase']=='departed'
+    assert flyby['fuel']==after_course_fuel
 
 
 def test_salvage_events_report_exact_amounts_and_capacity_limited_gains():
@@ -131,5 +152,5 @@ def test_incoming_ship_reaches_real_orbit_insertion_during_offline_simulation():
     v=math.hypot(arrived['vx'],arrived['vy'])
     assert v*v/2-310000/r<0
     assert passing['arrivalIntent']=='flyby'
-    assert passing['fuel']==180
+    assert 0 < passing['fuel'] < 420
     assert passing['arrivalPhase']=='departed'

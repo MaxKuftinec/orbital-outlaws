@@ -24,5 +24,6 @@ def test_each_dev_trigger_adds_one_inbound_ship_and_persists_both_factions(postg
     assert len(saved['allies']) == 2
     for body in saved['allies'] + saved['enemies'][len(before['enemies']):]:
         assert (body['x']**2 + body['y']**2)**.5 > 900
-        assert body['arrivalPhase'] == 'approach'
-        assert body['x']*body['vx']+body['y']*body['vy'] < 0
+        assert body['arrivalPhase'] == 'launch'
+        assert 20 <= (body['vx']**2+body['vy']**2)**.5 <= 32
+        assert body['courseBurnAt'] >= saved['t']
