@@ -1,36 +1,56 @@
-<script setup lang="ts">
-import { onMounted, ref } from 'vue'
+<script lang="ts">
+import { defineComponent } from 'vue'
 
-const backendOnline = ref(false)
-const persistentOnline = ref(false)
-window.addEventListener('orbital-persistence', ((e: CustomEvent) => { persistentOnline.value = e.detail.online }) as EventListener)
-const startupError = ref('')
-const legacyFiles = ['navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js', 'arrival.js', 'persistence.js', 'workspace.js', 'game.js']
+const legacyFiles = [
+  'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
+  'arrival.js', 'persistence.js', 'workspace.js', 'game.js'
+]
 
-function loadLegacyScript(filename: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = `/legacy/${filename}`
-    script.onload = () => resolve()
-    script.onerror = () => reject(new Error(`Could not load ${filename}`))
-    document.head.appendChild(script)
-  })
-}
-
-onMounted(async () => {
-  ;(window as typeof window & { ORBITAL_API_BASE_URL?: string }).ORBITAL_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
-  try {
-    // Mount Vue's cockpit before installing game.js DOM listeners
-    for (const filename of legacyFiles) await loadLegacyScript(filename)
-  } catch (error) {
-    startupError.value = error instanceof Error ? error.message : String(error)
-  }
-  try {
-    const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
-    const response = await fetch(base ? `${base}/` : '/backend-health')
-    backendOnline.value = response.ok
-  } catch {
-    backendOnline.value = false
+export default defineComponent({
+  name: 'OrbitalCockpit',
+  data() {
+    return {
+      backendOnline: false,
+      persistentOnline: false,
+      startupError: ''
+    }
+  },
+  mounted() {
+    window.addEventListener('orbital-persistence', this.updatePersistence as EventListener)
+    ;(window as typeof window & { ORBITAL_API_BASE_URL?: string }).ORBITAL_API_BASE_URL =
+      import.meta.env.VITE_API_BASE_URL ?? ''
+    this.startCockpit()
+  },
+  beforeUnmount() {
+    window.removeEventListener('orbital-persistence', this.updatePersistence as EventListener)
+  },
+  methods: {
+    updatePersistence(event: Event) {
+      this.persistentOnline = Boolean((event as CustomEvent).detail?.online)
+    },
+    loadLegacyScript(filename: string): Promise<void> {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = '/legacy/' + filename
+        script.onload = () => resolve()
+        script.onerror = () => reject(new Error('Could not load ' + filename))
+        document.head.appendChild(script)
+      })
+    },
+    async startCockpit() {
+      try {
+        for (const filename of legacyFiles) await this.loadLegacyScript(filename)
+      } catch (error) {
+        this.startupError = error instanceof Error ? error.message : String(error)
+      }
+      try {
+        const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+        const response = await fetch(base ? base + '/' : '/backend-health')
+        this.backendOnline = response.ok
+      } catch {
+        this.backendOnline = false
+      }
+    }
   }
 })
 </script>
@@ -43,7 +63,7 @@ onMounted(async () => {
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
-        <div><div class="eyebrow">PROTOTYPE 0.10</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+        <div><div class="eyebrow">PROTOTYPE 0.11</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
       <div class="top-actions"><v-chip :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Live · flight and upgrades saved' : backendOnline ? 'Backend online · connecting flight' : 'Local gameplay · backend offline' }}</v-chip>
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">ENCOUNTER TIME</span><strong id="sim-clock">00:00</strong></div></div>
@@ -147,6 +167,7 @@ onMounted(async () => {
           <div class="panel-heading"><span>UPGRADES</span><span>FIELD MARKET</span></div>
           <div class="upgrade-entry"><div><strong>Predictive fire control</strong><small>Solves a lead shot using projected target motion.</small><span id="upgrade-status">40 ¤</span></div><button id="upgrade-btn" class="buy-btn">BUY</button></div>
           <div class="upgrade-entry"><div><strong>Target trajectory analyzer</strong><small>Show enemy coast path and its future position at your cursor-selected bullet arrival time.</small><span id="trajectory-upgrade-status">25 ¤</span></div><button id="trajectory-upgrade-btn" class="buy-btn">BUY</button></div>
+          <div class="upgrade-entry"><div><strong>Ephemeris computer</strong><small>Project the selected object's unpowered orbit, with +60s and +120s position markers. Requires a purchased license.</small><span id="ephemeris-upgrade-status">45 ¤</span></div><button id="ephemeris-upgrade-btn" class="buy-btn">BUY</button></div>
           <div class="upgrade-entry"><div><strong>Rendezvous computer</strong><small>Fuel-conscious route search, attitude control and automatic capture approach.</small><span id="nav-upgrade-status">60 ¤</span></div><button id="nav-upgrade-btn" class="buy-btn">BUY</button></div>
         </section>
         <section class="panel autopilot-panel">
@@ -170,7 +191,7 @@ onMounted(async () => {
         <div class="settings-bottom"><button type="button" id="hotkey-reset" class="small-btn">Restore defaults</button><button type="button" id="settings-done" class="buy-btn">Done</button></div>
       </div>
     </div>
-    <footer class="footer-note">Orbital Outlaws · Vue preview 0.10 <span>Live orbital flight · persistent upgrades · local combat preview</span></footer>
+    <footer class="footer-note">Orbital Outlaws · Vue preview 0.11 <span>Autonomous server-side sector · persistent upgrades · configurable panels</span></footer>
   </div>
 
   <v-alert v-if="startupError" color="error" variant="tonal" class="game-startup-error">{{ startupError }}</v-alert>
