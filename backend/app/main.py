@@ -1,9 +1,12 @@
 from __future__ import annotations
 import os
+import asyncio
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from functools import lru_cache
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from starlette.concurrency import run_in_threadpool
+from pydantic import ValidationError
 from pydantic import BaseModel, Field
 from .physics import State
 from .store import WorldStore
@@ -21,7 +24,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app=FastAPI(title='Orbital Outlaws',version='0.8.1',lifespan=lifespan)
+app=FastAPI(title='Orbital Outlaws',version='0.9.0',lifespan=lifespan)
 
 
 def require_dev_commands():
@@ -35,6 +38,46 @@ class PlayerInput(BaseModel):
     turn: int = Field(default=0, ge=-1, le=1)
     stabilize: bool = False
     gimbal: float = Field(default=0, ge=-0.4886921906, le=0.4886921906)
+
+
+
+@app.websocket('/api/players/{pilot_id}/live')
+async def pilot_live(ws: WebSocket,pilot_id: str):
+    # Anonymous pilot IDs and client-reported salvage are permitted ONLY in local dev.
+    if os.getenv('ORBITAL_DEV_COMMANDS')!='1' or len(pilot_id)!=32 or any(c not in '0123456789abcdef' for c in pilot_id):
+        await ws.close(code=1008)
+        return
+    await ws.accept()
+    database=store()
+    try:
+        flight=await run_in_threadpool(database.connect_player,pilot_id)
+        progress=await run_in_threadpool(database.player_progress,pilot_id)
+        await ws.send_json({'type':'welcome','flight':flight,'progress':progress})
+        while True:
+            try:
+                message=await asyncio.wait_for(ws.receive_json(),timeout=.1)
+            except asyncio.TimeoutError:
+                flight=await run_in_threadpool(database.get_entity,'kestrel','pilot-'+pilot_id)
+                await ws.send_json({'type':'snapshot','flight':flight})
+                continue
+            try:
+                kind=message.get('type')
+                if kind=='input':
+                    body=PlayerInput.model_validate(message)
+                    flight=await run_in_threadpool(database.player_input,pilot_id,body.thrust,body.turn,body.stabilize,body.gimbal)
+                    await ws.send_json({'type':'snapshot','flight':flight})
+                elif kind=='purchase':
+                    progress=await run_in_threadpool(database.player_purchase,pilot_id,str(message.get('upgrade','')))
+                    await ws.send_json({'type':'progress','progress':progress})
+                elif kind=='salvage':
+                    progress=await run_in_threadpool(database.player_salvage,pilot_id,str(message.get('id','')),int(message.get('credits',0)))
+                    await ws.send_json({'type':'progress','progress':progress})
+                else:
+                    raise ValueError('Unknown message type')
+            except (ValueError,ValidationError,LookupError) as exc:
+                await ws.send_json({'type':'error','message':str(exc)})
+    except WebSocketDisconnect:
+        pass
 
 
 @app.post('/api/players/{pilot_id}')

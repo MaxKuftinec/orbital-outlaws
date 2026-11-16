@@ -49,3 +49,17 @@ class FlightControl(Base):
     stabilize: Mapped[bool]=mapped_column(Boolean,default=False)
     gimbal: Mapped[float]=mapped_column(Float,default=0)
     expires_s: Mapped[float]=mapped_column(Float,default=0)
+
+
+class PlayerProgress(Base):
+    __tablename__='player_progress'
+    entity_id: Mapped[str]=mapped_column(ForeignKey('entities.id'),primary_key=True)
+    credits: Mapped[int]=mapped_column(Integer,nullable=False,default=65)
+    upgrades: Mapped[dict]=mapped_column(JSON,nullable=False,default=dict)
+
+
+class SalvageClaim(Base):
+    __tablename__='salvage_claims'
+    entity_id: Mapped[str]=mapped_column(ForeignKey('entities.id'),primary_key=True)
+    claim_id: Mapped[str]=mapped_column(String(128),primary_key=True)
+    amount: Mapped[int]=mapped_column(Integer,nullable=False)

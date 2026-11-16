@@ -7,7 +7,7 @@ from __future__ import annotations
 import math, time
 from sqlalchemy import create_engine, select, and_, or_
 from sqlalchemy.orm import sessionmaker
-from .models import Base, World, Entity, Event, FlightControl
+from .models import Base, World, Entity, Event, FlightControl, PlayerProgress, SalvageClaim
 from .physics import State, propagate, orbital_envelope, apply_impulse
 from .flight import advance, LEASE_S
 
@@ -68,12 +68,52 @@ class WorldStore:
                                 periapsis_km=peri, apoapsis_km=apo)
                 db.add(entity)
                 db.add(FlightControl(entity_id=entity_id))
+                db.add(PlayerProgress(entity_id=entity_id,credits=65,upgrades={}))
                 db.add(Event(world_id='kestrel', entity_id=entity_id,
                              at_s=entity.checkpoint_s, kind='spawn', payload={},
                              after=state.as_dict(), idempotency_key='spawn:'+entity_id))
             elif entity.kind != 'player':
                 raise ValueError('Not a player entity')
+            elif not db.get(PlayerProgress,entity_id):
+                db.add(PlayerProgress(entity_id=entity_id,credits=65,upgrades={}))
         return self.get_entity('kestrel', entity_id)
+
+    PRICES={'predictive':40,'trajectory':25,'nav':60}
+
+    def player_progress(self,pilot_id: str):
+        with self.sessions() as db:
+            progress=db.get(PlayerProgress,'pilot-'+pilot_id)
+            if not progress:raise LookupError('Unknown pilot')
+            return {'credits':progress.credits,'upgrades':progress.upgrades}
+
+    def player_purchase(self,pilot_id: str,upgrade: str):
+        if upgrade not in self.PRICES:raise ValueError('Unknown upgrade')
+        with self.sessions.begin() as db:
+            progress=db.scalars(select(PlayerProgress).where(
+                PlayerProgress.entity_id=='pilot-'+pilot_id).with_for_update()).one()
+            owned=dict(progress.upgrades)
+            if not owned.get(upgrade):
+                price=self.PRICES[upgrade]
+                if progress.credits<price:raise ValueError('Insufficient credits')
+                progress.credits-=price
+                owned[upgrade]=True
+                progress.upgrades=owned
+            result={'credits':progress.credits,'upgrades':dict(progress.upgrades)}
+        return result
+
+    def player_salvage(self,pilot_id: str,claim_id: str,amount: int):
+        # DEVELOPMENT ONLY: client reports pickups until server controls salvage.
+        if not 1<=len(claim_id)<=128 or not 1<=amount<=50:
+            raise ValueError('Invalid salvage claim')
+        entity_id='pilot-'+pilot_id
+        with self.sessions.begin() as db:
+            progress=db.scalars(select(PlayerProgress).where(
+                PlayerProgress.entity_id==entity_id).with_for_update()).one()
+            if not db.get(SalvageClaim,(entity_id,claim_id)):
+                db.add(SalvageClaim(entity_id=entity_id,claim_id=claim_id,amount=amount))
+                progress.credits+=amount
+            result={'credits':progress.credits,'upgrades':dict(progress.upgrades)}
+        return result
 
     def player_input(self, pilot_id: str, thrust: bool, turn: int, stabilize: bool, gimbal: float):
         """Advance using the previous leased input, then atomically set the next input."""
