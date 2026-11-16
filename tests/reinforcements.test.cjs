@@ -41,10 +41,12 @@ test('reinforcement spawn creates an inbound spacecraft without runtime errors',
   assert.match(logs[0].message, /Inbound ship detected/);
 });
 
-test('Vue gameplay copy stays synced; offline standalone remains separately playable', () => {
+test('live Vue game uses separated renderer; offline standalone remains independently playable', () => {
   const legacy = fs.readFileSync(path.join(root, 'frontend', 'public', 'legacy', 'game.js'), 'utf8');
   const standalone = fs.readFileSync(path.join(root, 'orbital-outlaws.html'), 'utf8');
-  assert.equal(legacy, game);
+  assert.ok(legacy.includes('window.OrbitalRenderer.create('));
+  assert.ok(!legacy.includes('function drawBackground('), 'rendering migrated out of the live gameplay file');
+  assert.ok(game.includes('function drawBackground('), 'standalone simulation retains legacy drawing');
   assert.ok(standalone.includes('function spawnEnemy()'), 'standalone must still contain enemy spawning');
   assert.ok(standalone.includes('const spawnRadiusKm=1450;'), 'standalone keeps the reinforcement fix');
 });
