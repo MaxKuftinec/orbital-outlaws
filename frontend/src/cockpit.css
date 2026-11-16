@@ -11,7 +11,7 @@
 #canvas-workspace:fullscreen{width:100vw;height:100dvh;max-width:none;border-radius:0;background:#050d18}
 #canvas-workspace:fullscreen #orbit-canvas{width:100%;height:100%;min-height:0;max-height:none}
 #canvas-workspace::backdrop{background:#050d18}
-#canvas-workspace .fullscreen-btn{position:absolute;z-index:30;right:12px;top:10px;border:1px solid #35677f;border-radius:7px;background:#0a2738ed;color:#c8f2fa;padding:8px 11px;font-size:11px;font-weight:750;box-shadow:0 4px 14px #0008}
+#canvas-workspace .fullscreen-btn{position:absolute;z-index:1000;right:12px;top:10px;border:1px solid #35677f;border-radius:7px;background:#0a2738ed;color:#c8f2fa;padding:8px 11px;font-size:11px;font-weight:750;box-shadow:0 4px 14px #0008}
 #canvas-workspace .fullscreen-btn:hover{background:#16425a}
 #canvas-workspace .nav-command{top:51px;right:12px}
 #canvas-workspace .telemetry-console{top:10px;left:12px}
