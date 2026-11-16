@@ -26,7 +26,7 @@
   const palette = { cyan: '#62d9f6', green:'#67e0aa', red:'#ff7184', yellow:'#edbe6b', purple:'#bd9efa' };
   let W = 840, H = 550, dpr = 1;
   let state;
-  let persistentFlight = false, flightOnline = false;
+  let persistentFlight = false, flightOnline = false, pilotLink = null;
   let flightHistory = [], correction = null;
   let lastFrame = performance.now(), accumulator = 0, nextHud = 0;
   let lastFrameId;
@@ -67,6 +67,7 @@
   function escapeHtml(str) { return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
   function reset() {
     const oldPilot = persistentFlight && state ? state.player : null;
+    const oldTech = persistentFlight && state ? {predictive:state.predictive,trajectoryIntel:state.trajectoryIntel,navOwned:state.navOwned} : null;
     const player = newShip('player','KESTREL-7',260,-0.67,palette.cyan,true);
     if(oldPilot){
       for(const key of ['x','y','vx','vy','heading','omega','fuel'])player[key]=oldPilot[key];
@@ -79,14 +80,17 @@
     state = {t:0, player, ally, enemies:[e1,e2], shots:[], pickups:[
       newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30),newPickup(295,1.1,'parts',8)
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
-    orbitVisible:true, predictive:false, trajectoryIntel:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, paused:false, speed:1, nextEnemySpawn:75,
+    orbitVisible:true, predictive:false, trajectoryIntel:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
     collisionCooldown:new Map(), playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false};
+    if(oldTech){Object.assign(state,oldTech);player.credits=oldPilot.credits;}
+    // Seeded salvage keeps one stable claim ID across encounter resets.
+    state.pickups.filter(p=>p.type==='credits').forEach((pod,i)=>pod.id='starter-credits-'+i);
     lastFrame = performance.now(); accumulator=0;
     document.querySelectorAll('[data-thrust]').forEach(btn=>btn.classList.remove('pressed'));
     $('fire-btn').classList.remove('pressed');
     $('repair-btn').classList.remove('pressed');
     $('game-over').classList.add('hidden');
-    $('sim-speed').value='1';$('pause-btn').textContent='Ⅱ Pause';
+ 
     $('orbit-btn').classList.add('selected');$('orbit-btn').setAttribute('aria-pressed','true');
     updateZoom();
     logEvent('Coast is free. Starter grant: 65 ¤ for testing upgrades.','good');
@@ -126,9 +130,9 @@
     const p=state.player,target=state.gimbalTarget;
     const desired=target?Math.atan2(target.y-p.y,target.x-p.x):p.heading;
     return {
-      thrust:!state.paused&&!state.ended&&state.down.has('main'),
-      turn:state.paused||state.ended?0:Number(state.down.has('rotate-right'))-Number(state.down.has('rotate-left')),
-      stabilize:!state.paused&&!state.ended&&state.down.has('stabilize'),
+      thrust:!state.ended&&state.down.has('main'),
+      turn:state.ended?0:Number(state.down.has('rotate-right'))-Number(state.down.has('rotate-left')),
+      stabilize:!state.ended&&state.down.has('stabilize'),
       gimbal:state.down.has('main')?clamp(normAngle(desired-p.heading),-ENGINE.gimbalMax,ENGINE.gimbalMax):0
     };
   }
@@ -471,9 +475,21 @@
       else {p.fuel=Math.min(p.fuelMax,p.fuel+pod.amount);logEvent('Recovered '+pod.amount+' kg propellant.','good');}
     }
     if(pod.type==='ammo') {p.ammo+=pod.amount;logEvent('Recovered '+pod.amount+' ballistic rounds.','good');}
-    if(pod.type==='credits') {p.credits+=pod.amount;logEvent('Recovered '+pod.amount+' salvage credits.','good');}
+    if(pod.type==='credits') {
+      if(persistentFlight){
+        if(!pilotLink?.salvage(pod.id,pod.amount))logEvent('Salvage requires an active server connection.','danger');
+        else logEvent('Salvage credits submitted (local-dev reward).','good');
+      }else {p.credits+=pod.amount;logEvent('Recovered '+pod.amount+' salvage credits.','good');}
+    }
     if(pod.type==='parts') {const received=Math.min(pod.amount,REPAIR.capacityKg-p.repairParts);p.repairParts+=received;logEvent(received>0?'Recovered '+received.toFixed(1)+' kg repair materials.':'Repair storage already full.','good');}
-    if(pod.type==='wreck') {p.credits+=50;p.ammo+=12;if(!persistentFlight)p.fuel=Math.min(p.fuelMax,p.fuel+25);const parts=Math.min(6,REPAIR.capacityKg-p.repairParts);p.repairParts+=parts;logEvent('Wreck salvaged (combat loot remains local).','good');}
+    if(pod.type==='wreck') {
+      if(persistentFlight){
+        if(!pilotLink?.salvage(pod.id,50))logEvent('Wreck reward requires the server.','danger');
+      }else {p.credits+=50;p.fuel=Math.min(p.fuelMax,p.fuel+25);}
+      p.ammo+=12;
+      const parts=Math.min(6,REPAIR.capacityKg-p.repairParts);p.repairParts+=parts;
+      logEvent('Wreck salvaged. Ammo/repair parts are still local.','good');
+    }
     if(state.autopilot?.targetKey==='pickup:'+pod.id){state.autopilot=null;state.navPlan=null;logEvent('Rendezvous complete. Salvage secured!','good');}
     sparks(pod.x,pod.y,palette.green,12);updateTargetOptions();
   }
@@ -529,8 +545,14 @@
     logEvent('Navigation target: '+select.selectedOptions[0].textContent);
     updateHud();
   }
+  function purchaseUpgrade(upgrade){
+    if(!persistentFlight)return false;
+    if(!pilotLink?.purchase(upgrade))logEvent('Connect to the flight server to purchase upgrades.','danger');
+    return true;
+  }
   function purchaseOrEngage(){
     if(state.ended)return;
+    if(!state.navOwned&&purchaseUpgrade('nav'))return;
     if(!state.navOwned){
       if(state.player.credits<60){logEvent('Rendezvous computer costs 60 credits.','danger');return;}
       state.player.credits-=60;state.navOwned=true;logEvent('Rendezvous computer installed. Calculate a route, then engage.','good');updateHud();return;
@@ -760,10 +782,16 @@
   }
   function endGame(reason) {
     if(state.ended)return;
-    state.ended=true;state.paused=true;state.down.clear();
+    if(persistentFlight){
+      if(state.t-(state.lastLocalLoss??-100)>5)logEvent('Local combat loss (not yet persistent): '+reason,'danger');
+      state.lastLocalLoss=state.t;
+      state.player.hp=100;
+      return;
+    }
+    state.ended=true;state.down.clear();
     $('game-over-details').textContent=`${reason} Survived ${formatTime(state.t)}. Raider kills: ${state.playerKills}.`;
     $('game-over').classList.remove('hidden');
-    $('pause-btn').textContent='Ⅱ Pause';logEvent('MISSION FAILED: '+reason,'danger');
+    logEvent('MISSION FAILED: '+reason,'danger');
   }
   function orbitalElements(b){
     const r=magnitude(b.x,b.y),v2=b.vx*b.vx+b.vy*b.vy,h=b.x*b.vy-b.y*b.vx,eps=v2/2-WORLD.mu/r;
@@ -856,7 +884,7 @@
     $('nav-eta').textContent=state.navPlan?state.navPlan.eta.toFixed(0)+' s':'—';
     $('nav-fuel').textContent=state.navPlan?SAFE.requiredFuel(mass(p),state.navPlan.dv,exhaustKmS).toFixed(1)+' kg (ideal)':'—';
     $('nav-engage').textContent=state.navOwned?'ENGAGE':'BUY NAV 60¤';
-    $('nav-engage').disabled=persistentFlight||state.ended||(!state.navOwned&&p.credits<60)||(state.navOwned&&(!state.navPlan||!!state.autopilot));
+    $('nav-engage').disabled=(persistentFlight&&state.navOwned)||state.ended||(!state.navOwned&&p.credits<60)||(state.navOwned&&(!state.navPlan||!!state.autopilot));
     $('nav-abort').disabled=!state.autopilot;
     $('nav-quick-status').textContent=state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED';
     $('nav-quick-metrics').textContent=state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${state.navPlan.safety.estimatedKg.toFixed(1)} kg ideal · ${state.navPlan.safety.reserveKg.toFixed(0)} kg reserved`: 'Pick a contact · press C to calculate';
@@ -984,14 +1012,13 @@
     if(!state)return;ctx.setTransform(dpr,0,0,dpr,0,0);drawBackground();drawTrails();
     for(const pod of state.pickups)drawPickup(pod);
     drawShots();for(const e of state.enemies)drawShip(e);drawShip(state.ally);drawShip(state.player);drawAim();drawParticles();
-    if(state.paused&&!state.ended){ctx.fillStyle='#0513207f';ctx.fillRect(0,0,W,H);ctx.fillStyle='#e1f2fc';ctx.textAlign='center';ctx.font='bold 25px system-ui';ctx.fillText('PAUSED',W/2,H/2);ctx.textAlign='left';}
     if(state.ended){ctx.fillStyle='#060e1870';ctx.fillRect(0,0,W,H);}
   }
   function frame(now){
     const realDelta=Math.min(Math.max((now-lastFrame)/1000,0),.06);
     lastFrame=now;
-    if(state&&!state.paused&&!state.ended){
-      accumulator+=realDelta*state.speed;
+    if(state&&!state.ended){
+      accumulator+=realDelta;
       let steps=0;
       while(accumulator>=.015 && steps<22){step(.015);accumulator-=.015;steps++;if(state.ended)break;}
       if(steps>=22)accumulator=0;
@@ -1003,10 +1030,10 @@
   }
 
   const DEFAULT_KEYS=Object.freeze({main:'KeyW',left:'KeyA',right:'KeyD',stabilize:'KeyS',fire:'Space',repair:'KeyR',
-    nextNav:'KeyN',planNav:'KeyC',engageNav:'KeyE',abortNav:'KeyX',pause:'KeyP',sos:'KeyH',navConsole:'KeyV',telemetryConsole:'KeyT'});
+    nextNav:'KeyN',planNav:'KeyC',engageNav:'KeyE',abortNav:'KeyX',sos:'KeyH',navConsole:'KeyV',telemetryConsole:'KeyT'});
   const KEY_LABELS={main:'Main engine',left:'Rotate counter-clockwise',right:'Rotate clockwise',stabilize:'Stop rotation',
     fire:'Fire weapon',repair:'Field repair',nextNav:'Next nav target',planNav:'Calculate transfer',
-    engageNav:'Buy / engage autopilot',abortNav:'Abort autopilot',pause:'Pause simulation',sos:'Request ally fuel',
+    engageNav:'Buy / engage autopilot',abortNav:'Abort autopilot',sos:'Request ally fuel',
     navConsole:'Show / hide navigation',telemetryConsole:'Show / hide telemetry'};
   function loadHotkeys(){
     try{
@@ -1090,7 +1117,6 @@
           if(command==='planNav')planNav();
           if(command==='engageNav')purchaseOrEngage();
           if(command==='abortNav')abortNav();
-          if(command==='pause')togglePause();
           if(command==='sos')requestFuelHelp();
           if(command==='navConsole')toggleConsole('nav');
           if(command==='telemetryConsole')toggleConsole('telemetry');
@@ -1107,19 +1133,17 @@
       button.addEventListener('pointerup',stop);button.addEventListener('pointercancel',stop);button.addEventListener('lostpointercapture',stop);
     }
     document.querySelectorAll('[data-thrust]').forEach(b=>hold(b,b.dataset.thrust));hold($('fire-btn'),'fire');hold($('repair-btn'),'repair');
-    $('pause-btn').addEventListener('click',togglePause);
     $('reset-btn').addEventListener('click',reset);
     $('retry-btn').addEventListener('click',reset);
-    $('sim-speed').addEventListener('change',e=>state.speed=clamp(Number(e.target.value)||1,.5,4));
     $('orbit-btn').addEventListener('click',()=>{state.orbitVisible=!state.orbitVisible;$('orbit-btn').classList.toggle('selected',state.orbitVisible);$('orbit-btn').setAttribute('aria-pressed',String(state.orbitVisible));});
     $('zoom-in').addEventListener('click',()=>zoomAt(1.25));
     $('zoom-out').addEventListener('click',()=>zoomAt(1/1.25));
     $('next-target').addEventListener('click',selectNextTarget);
     $('lock-btn').addEventListener('click',lockNearest);
-    $('upgrade-btn').addEventListener('click',()=>{if(state.predictive||state.player.credits<40||state.ended)return;state.player.credits-=40;state.predictive=true;logEvent('Predictive fire control installed.','good');state.lastBallistic=-999;updateHud();});
-    $('trajectory-upgrade-btn').addEventListener('click',()=>{if(state.trajectoryIntel||state.player.credits<25||state.ended)return;state.player.credits-=25;state.trajectoryIntel=true;state.lastBallistic=-999;logEvent('Target trajectory analyzer installed. Coasting prediction online.','good');updateHud();});
+    $('upgrade-btn').addEventListener('click',()=>{if(state.predictive||state.ended)return;if(purchaseUpgrade('predictive'))return;if(state.player.credits<40)return;state.player.credits-=40;state.predictive=true;logEvent('Predictive fire control installed.','good');state.lastBallistic=-999;updateHud();});
+    $('trajectory-upgrade-btn').addEventListener('click',()=>{if(state.trajectoryIntel||state.ended)return;if(purchaseUpgrade('trajectory'))return;if(state.player.credits<25)return;state.player.credits-=25;state.trajectoryIntel=true;state.lastBallistic=-999;logEvent('Target trajectory analyzer installed.','good');updateHud();});
     $('reinforce-btn').addEventListener('click',()=>{state.reinforcements=!state.reinforcements;state.nextEnemySpawn=state.t+rand(35,55);logEvent('Hostile reinforcements '+(state.reinforcements?'enabled.':'disabled.'),state.reinforcements?'danger':'good');updateHud();});
-    $('nav-upgrade-btn').addEventListener('click',()=>{if(state.navOwned||state.player.credits<60||state.ended)return;state.player.credits-=60;state.navOwned=true;logEvent('Rendezvous intelligence installed.','good');updateHud();});
+    $('nav-upgrade-btn').addEventListener('click',()=>{if(state.navOwned||state.ended)return;if(purchaseUpgrade('nav'))return;if(state.player.credits<60)return;state.player.credits-=60;state.navOwned=true;logEvent('Rendezvous intelligence installed.','good');updateHud();});
     $('nav-plan').addEventListener('click',planNav);
     $('nav-engage').addEventListener('click',purchaseOrEngage);
     $('nav-next').addEventListener('click',cycleNavigationTarget);
@@ -1163,12 +1187,11 @@
     canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',endPointer);canvas.addEventListener('lostpointercapture',endPointer);
     window.addEventListener('resize',fitCanvas);
     if(typeof ResizeObserver!=='undefined'){const ro=new ResizeObserver(fitCanvas);ro.observe(canvas);}
-    document.addEventListener('visibilitychange',()=>{lastFrame=performance.now();accumulator=0;if(document.hidden&&state&&!state.paused&&!state.ended){state.paused=true;$('pause-btn').textContent='▶ Resume';}});
+    document.addEventListener('visibilitychange',()=>{lastFrame=performance.now();accumulator=0;if(document.hidden){state.down.clear();state.pointerThrust=false;}});
   }
-  function togglePause(){if(state.ended)return;state.paused=!state.paused;state.down.clear();state.pointerThrust=false;$('pause-btn').textContent=state.paused?'▶ Resume':'Ⅱ Pause';}
   bindControls();updateHotkeyHints();reset();fitCanvas();lastFrameId=requestAnimationFrame(frame);
   if(window.OrbitalPersistence){
-    window.OrbitalPersistence.attach({
+    pilotLink=window.OrbitalPersistence.attach({
       controls:flightControls,
       onState:result=>{
         const p=state.player;
@@ -1176,12 +1199,23 @@
         state.lastPrediction=-999;
         state.lastBallistic=-999;
       },
-      onError:message=>logEvent('Persistent flight unavailable: '+message.slice(0,90),'danger'),
+      onProgress:progress=>{
+        const previous={predictive:state.predictive,trajectoryIntel:state.trajectoryIntel,navOwned:state.navOwned};
+        state.player.credits=progress.credits;
+        state.predictive=Boolean(progress.upgrades.predictive);
+        state.trajectoryIntel=Boolean(progress.upgrades.trajectory);
+        state.navOwned=Boolean(progress.upgrades.nav);
+        if(!previous.predictive&&state.predictive)logEvent('Predictive fire control installed persistently.','good');
+        if(!previous.trajectoryIntel&&state.trajectoryIntel)logEvent('Trajectory analyzer installed persistently.','good');
+        if(!previous.navOwned&&state.navOwned)logEvent('Rendezvous technology installed persistently.','good');
+        state.lastBallistic=-999;updateHud();
+      },
+      onError:message=>logEvent('Flight server: '+message.slice(0,110),'danger'),
       onConnected:online=>{
         flightOnline=online;
         if(online){
           persistentFlight=true;
-          state.speed=1;$('sim-speed').value='1';$('sim-speed').disabled=true;
+          state.speed=1;
           $('reset-btn').textContent='↻ Reset encounter';
           $('reset-btn').title='Resets local combat only; persistent ship position and fuel are preserved.';
           state.autopilot=null;
