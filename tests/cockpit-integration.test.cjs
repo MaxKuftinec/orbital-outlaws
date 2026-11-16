@@ -69,7 +69,8 @@ test('new ephemeris is a separate purchase and projects an object orbit',()=>{
   const market=fs.readFileSync(path.join(root,'frontend/src/components/TechnologyMarket.vue'),'utf8');
   assert.match(app,/<TechnologyMarket\s*\/>/);
   assert.match(market,/ephemeris-upgrade-btn/);
-  assert.match(game,/purchaseUpgrade\('ephemeris'\)/);
+  assert.match(game,/ephemeris:\{flag:'ephemerisOwned',price:45/);
+  assert.match(game,/purchaseUpgrade\(key\)/);
   assert.match(game,/function drawEphemeris\(\)/);
   assert.match(game,/NAV\.propagate\(target,180/);
 });
@@ -86,8 +87,9 @@ test('panel headings are the only minimize controls, and Panels is left of Fulls
 
 test('all four upgrades use distinct Dota-like square icon atlas regions',()=>{
   const market=fs.readFileSync(path.join(root,'frontend/src/components/TechnologyMarket.vue'),'utf8');
-  for(const kind of ['predictive','trajectory','rendezvous','ephemeris'])
+  for(const kind of ['predictive','trajectory','nav','ephemeris'])
     assert.match(market,new RegExp("key: '"+kind+"'"));
+  assert.match(market,/tech-icon--/);
   const css=fs.readFileSync(path.join(root,'frontend/src/cockpit.css'),'utf8');
   assert.match(css,/ability-icons\.webp/);
   assert.match(css,/background-size:200% 200%/);
