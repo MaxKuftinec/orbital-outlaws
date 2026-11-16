@@ -1400,6 +1400,11 @@
       onState:result=>{
         const p=state.player;
         reconcileFlight(p,result.state,result.clientSampleMs||performance.now());
+        if(!persistentFlight && Math.hypot(p.x,p.y)>850){
+          // On a first connection, include the outer launch region in the viewport.
+          state.zoom=.55;state.panX=-p.x*scale()*.55;state.panY=-p.y*scale()*.55;
+          updateZoom();
+        }
         state.lastPrediction=-999;
         state.lastBallistic=-999;
       },
