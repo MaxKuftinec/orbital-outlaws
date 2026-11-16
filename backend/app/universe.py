@@ -395,8 +395,8 @@ def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list
             recipient['transferHeatMJ']=recipient.get('transferHeatMJ',0.)+thermal_mj
             if recipient.get('isPlayer'):
                 effects['fuel'] += moved
-                effects['player_dvx'] += dvx
-                effects['player_dvy'] += dvy
+                effects['player_dvx'] = effects.get('player_dvx',0.) + dvx
+                effects['player_dvy'] = effects.get('player_dvy',0.) + dvy
                 recipient['mass_kg'] = receiver_mass + moved
             event(sector, when, f"{donor['name']} transferred {moved:.1f} kg propellant to "
                   f"{recipient['name']} ({relative:.2f} km/s relative; {thermal_mj:.1f} MJ damped).", 'good')

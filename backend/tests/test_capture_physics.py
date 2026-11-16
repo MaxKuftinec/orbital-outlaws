@@ -99,6 +99,8 @@ def test_captured_cargo_persists_as_mass_in_authoritative_player_checkpoint(post
     pilot=uuid4().hex
     store.connect_player(pilot)
     store.player_encounter(pilot)
+    # Move the simulated checkpoint beyond the newly created pilot's spawn event.
+    time.sleep(.7)
     eid='pilot-'+pilot
     velocity=math.sqrt(310000/300.)
     with store.sessions.begin() as db:
@@ -107,7 +109,7 @@ def test_captured_cargo_persists_as_mass_in_authoritative_player_checkpoint(post
         saved=db.get(EncounterSnapshot,eid)
         state=State(300.,0.,0.,velocity,1000.,100.)
         peri,apo=orbital_envelope(state,world.mu)
-        ship.checkpoint_s=store.now(world)
+        ship.checkpoint_s=store.now(world)-.45
         ship.checkpoint=state.as_dict()
         ship.periapsis_km,ship.apoapsis_km=peri,apo
         sector=copy.deepcopy(saved.snapshot)
