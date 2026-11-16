@@ -45,7 +45,7 @@ onMounted(async () => {
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
         <div><div class="eyebrow">PROTOTYPE 0.7</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
-      <div class="top-actions"><v-chip :color="backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Persistent flight · server authoritative' : backendOnline ? 'Backend online · local flight until connected' : 'Local gameplay · backend offline' }}</v-chip>
+      <div class="top-actions"><v-chip :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Persistent flight · server authoritative' : backendOnline ? 'Backend online · local flight until connected' : 'Local gameplay · backend offline' }}</v-chip>
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">MISSION TIME</span><strong id="sim-clock">00:00</strong></div></div>
         <label class="speed-label">Speed <select id="sim-speed" aria-label="Simulation speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
         <v-btn density="compact" variant="tonal"  id="settings-btn" type="button" class="action-btn" title="Change hotkeys">⚙ Controls</v-btn>

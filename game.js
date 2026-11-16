@@ -1126,6 +1126,7 @@
         state.lastPrediction=-999;
         state.lastBallistic=-999;
       },
+      onError:message=>logEvent('Persistent flight unavailable: '+message.slice(0,90),'danger'),
       onConnected:online=>{
         if(online){
           persistentFlight=true;

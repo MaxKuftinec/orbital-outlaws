@@ -11,7 +11,7 @@
     }
     return id;
   }
-  function attach({controls, onState, onConnected}){
+  function attach({controls, onState, onConnected, onError}){
     const url = base + '/api/players/' + pilotId();
     let connected = false, busy = false, previous = '', lastPoll = 0, lastError = '';
     async function request(path, init){
@@ -42,7 +42,7 @@
         }
         lastError = '';
       }catch(error){
-        if(String(error)!==lastError){console.warn('Persistent flight unavailable:',error);lastError=String(error);}
+        if(String(error)!==lastError){console.warn('Persistent flight unavailable:',error);lastError=String(error);if(onError)onError(lastError);}
         if(connected){connected=false;onConnected(false);}
       }finally{busy=false;}
     }
