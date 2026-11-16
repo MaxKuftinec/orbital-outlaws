@@ -92,3 +92,32 @@ test('all four upgrades use distinct Dota-like square icon atlas regions',()=>{
   assert.equal(atlas.toString('ascii',0,4),'RIFF');
   assert.equal(atlas.toString('ascii',8,12),'WEBP');
 });
+
+
+test('Comms uses a real Options API Vue component and never receives legacy HTML injection',()=>{
+  const comms=fs.readFileSync(path.join(root,'frontend/src/components/CommsPanel.vue'),'utf8');
+  const bridge=fs.readFileSync(path.join(root,'frontend/src/services/comms.ts'),'utf8');
+  assert.match(app,/import CommsPanel from '\.\/components\/CommsPanel\.vue'/);
+  assert.match(app,/<CommsPanel\s*\/>/);
+  assert.match(comms,/defineComponent\(/);
+  assert.match(comms,/data\(\)/);
+  assert.match(comms,/v-for="\(entry, index\) in entries"/);
+  assert.match(comms,/data-vue-managed="true"/);
+  assert.match(bridge,/export const COMMS_EVENT = 'orbital-comms'/);
+  assert.match(game,/new CustomEvent\('orbital-comms'/);
+  assert.match(game,/legacyFeed\.dataset\.vueManaged!=='true'/);
+});
+
+test('reinforcement button is removed from the cockpit',()=>{
+  assert.doesNotMatch(app,/id="reinforce-btn"/);
+  assert.doesNotMatch(game,/\$\('reinforce-btn'\)/);
+});
+
+test('Rendezvous has a new single-icon monitor image independent of the atlas',()=>{
+  const css=fs.readFileSync(path.join(root,'frontend/src/cockpit.css'),'utf8');
+  assert.match(css,/tech-icon\.tech-icon--rendezvous\{/);
+  assert.match(css,/rendezvous-monitor\.webp/);
+  const icon=fs.readFileSync(path.join(root,'frontend/public/tech/rendezvous-monitor.webp'));
+  assert.equal(icon.toString('ascii',0,4),'RIFF');
+  assert.equal(icon.toString('ascii',8,12),'WEBP');
+});

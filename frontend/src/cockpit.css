@@ -173,3 +173,10 @@
   .upgrades .upgrade-entry{grid-template-columns:56px minmax(0,1fr) auto;gap:8px}
   .upgrades .upgrade-entry .tech-icon{width:56px;height:56px}
 }
+
+
+/* Rendezvous: its own glowing intercept monitor, rather than a generic gate icon. */
+.upgrades .upgrade-entry .tech-icon.tech-icon--rendezvous{
+  background-image:url('/tech/rendezvous-monitor.webp');
+  background-position:center;background-size:cover;
+}

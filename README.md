@@ -1,4 +1,4 @@
-# Orbital Outlaws — v0.11 autonomous sector / configurable cockpit
+# Orbital Outlaws — v0.12 autonomous sector / Vue cockpit migration
 
 A persistent 2D Newtonian orbital combat prototype using **Vue 3 + Vuetify (Options API)**, **FastAPI**, **PostgreSQL** and a bidirectional **WebSocket**.
 
@@ -51,7 +51,7 @@ W: main engine. A/D: rotate via RCS. S: stabilize. Space: fire (server validates
 
 The **Rendezvous Computer** automatically computes and executes a planned transfer while the tab remains open. During autopilot, mouse hover **does not control the engine gimbal**; navigation owns its attitude and thrust target. Manual gimbal control resumes when autopilot disengages. Guidance is still client-side; its inputs are applied by the authoritative server.
 
-Technology purchases are persistent in PostgreSQL. Each has a compact, painted ability-style icon, supplied as a single optimized WebP atlas rather than large banner artwork:
+Technology purchases are persistent in PostgreSQL. Each has a compact ability-style icon. The **Rendezvous Computer** now shows a glowing guidance monitor tracking a craft, target and interception point, separate from the shared WebP atlas used by the other icons:
 
 | Technology | Credits | Capability |
 | --- | ---: | --- |
@@ -61,6 +61,25 @@ Technology purchases are persistent in PostgreSQL. Each has a compact, painted a
 | **Ephemeris computer** | **45 ¤** | Predict selected object's unpowered orbit and show +60s/+120s markers |
 
 Trajectory predictions assume **unpowered Kepler motion**. Future burns, impacts or NPC decisions can invalidate them.
+
+### Spawn a raider from FastAPI (development only)
+
+The cockpit no longer displays a Reinforcements toggle. Spawn **one** autonomous raider per POST through FastAPI's Swagger UI at http://127.0.0.1:8000/docs, or PowerShell:
+
+```powershell
+# Get the current pilot ID in the browser DevTools console:
+# localStorage.getItem('orbital-outlaws.pilot.v1')
+$pilot = "YOUR_32_CHARACTER_PILOT_ID"
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/dev/players/$pilot/raiders"
+```
+
+Each successful request appends exactly one uniquely named raider to that pilot's persistent sector; it will appear in the next WebSocket snapshot. The pilot must already exist. This endpoint requires `ORBITAL_DEV_COMMANDS=1`; it has **no user authentication**, so keep the backend bound to a trusted development network and never enable these commands on a public service.
+
+### Gradual Vue migration
+
+The first extracted Options API component is `frontend/src/components/CommsPanel.vue`. The legacy game dispatches a typed `orbital-comms` event through the small `services/comms.ts` interface. Vue now renders the log with reactive state and text interpolation rather than `innerHTML`. Docking and collapsing keep working, as they operate on the component's panel element.
+
+The remaining ship, telemetry, navigation, marketplace and canvas are still in the legacy compatibility layer. Next steps are extracting the Ship HUD and Technology Market into Vue components, giving them reactive snapshot props, then separating the renderer/input and protocol adapters from `game.js`. Pure orbital physics and server-side simulation stay framework independent.
 
 ### HUD customization
 

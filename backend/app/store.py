@@ -143,6 +143,9 @@ class WorldStore:
     def spawn_raider(self, pilot_id: str) -> dict:
         """One server-created, persisted raider per explicit local dev request."""
         entity_id = 'pilot-' + pilot_id
+        with self.sessions() as db:
+            if db.get(Entity, entity_id) is None:
+                raise LookupError('Unknown pilot')
         # Catch up before editing; this prevents overwriting offline combat progress.
         self.player_encounter(pilot_id)
         with self.sessions.begin() as db:

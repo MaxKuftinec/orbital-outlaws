@@ -24,7 +24,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app=FastAPI(title='Orbital Outlaws',version='0.11.0',lifespan=lifespan)
+app=FastAPI(title='Orbital Outlaws',version='0.12.0',lifespan=lifespan)
 
 
 def require_dev_commands():
@@ -47,7 +47,7 @@ class PlayerInput(BaseModel):
 
 @app.websocket('/api/players/{pilot_id}/live')
 async def pilot_live(ws: WebSocket,pilot_id: str):
-    # Anonymous pilot IDs and client-reported salvage are permitted ONLY in local dev.
+    # Anonymous pilot IDs are permitted ONLY in trusted local development.
     if os.getenv('ORBITAL_DEV_COMMANDS')!='1' or len(pilot_id)!=32 or any(c not in '0123456789abcdef' for c in pilot_id):
         await ws.close(code=1008)
         return
