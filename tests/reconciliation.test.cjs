@@ -38,7 +38,7 @@ test('a server snapshot never snaps heading; correction converges across frames'
   assert.ok(result.mass>1109.59&&result.mass<1110);
 });
 
-test('browser predicts continuous flight between HTTP requests', () => {
+test('browser predicts continuous flight between network snapshots', () => {
   assert.match(game,/if\(flightOnline\)\{\s*\/\/ Immediate local prediction[\s\S]*?applyShipStep\(player,dt\);\s*applyFlightCorrection\(player,dt\);/);
   assert.match(game,/flightHistory\.push\(/);
   assert.match(game,/controls:flightControls/);

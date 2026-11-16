@@ -14,7 +14,7 @@ function harness(){
     constructor(url){this.url=url;this.readyState=1;sockets.push(this);}
     send(raw){sent.push(JSON.parse(raw));}
     emit(packet){this.onmessage({data:JSON.stringify(packet)});}
-    close(){this.readyState=3;this.onclose?.();}
+    close(){this.readyState=3;this.onclose?.({code:1000});}
   }
   const window={
     ORBITAL_API_BASE_URL:'',
