@@ -16,7 +16,7 @@ Create an existing PostgreSQL database first:
 ```powershell
 cd backend
 python -m venv .venv
-..venvScriptsActivate.ps1
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
