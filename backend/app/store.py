@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from .models import Base, World, Entity, Event, FlightControl, PlayerProgress, SalvageClaim, EncounterSnapshot
 from .physics import State, propagate, orbital_envelope, apply_impulse
 from .flight import advance, LEASE_S
+from .universe import new_sector, advance_sector, player_fire as fire_projectile
 
 
 class WorldStore:
@@ -78,48 +79,102 @@ class WorldStore:
                 db.add(PlayerProgress(entity_id=entity_id,credits=65,upgrades={}))
         return self.get_entity('kestrel', entity_id)
 
-    def player_encounter(self,pilot_id: str):
-        with self.sessions() as db:
-            saved=db.get(EncounterSnapshot,'pilot-'+pilot_id)
-            if not saved:return None
-            snapshot=copy.deepcopy(saved.snapshot)
-            elapsed=max(0.,time.time()-saved.saved_at_utc)
-            world=db.get(World,'kestrel')
-            for body in [*snapshot.get('enemies',[]),snapshot.get('ally'),*snapshot.get('pickups',[])]:
-                if not isinstance(body,dict) or not body.get('alive',True):continue
-                try:
-                    state=propagate(State(body['x'],body['y'],body['vx'],body['vy'],
-                                          heading=body.get('heading',0),
-                                          omega=body.get('omega',0)),elapsed,world.mu)
-                except (ValueError,OverflowError,KeyError,TypeError):
-                    continue
-                for field in ('x','y','vx','vy','heading','omega'):
-                    if field in body:body[field]=getattr(state,field)
-                if math.hypot(state.x,state.y)<91:body['alive']=False
-            snapshot['t']=snapshot.get('t',0)+elapsed
-            return {'saved_at_utc':saved.saved_at_utc,'snapshot':snapshot}
-
-    def save_encounter(self,pilot_id: str,snapshot: dict):
-        """Development-only NPC checkpoint. Never considered authoritative combat."""
-        if (not isinstance(snapshot,dict)
-                or not isinstance(snapshot.get('enemies'),list)
-                or len(snapshot['enemies'])>60
-                or not isinstance(snapshot.get('pickups'),list)
-                or len(snapshot['pickups'])>200
-                or not isinstance(snapshot.get('ally'),dict)
-                or len(json.dumps(snapshot))>180_000):
-            raise ValueError('Invalid encounter snapshot')
+    def player_encounter(self, pilot_id: str):
+        """Advance a sector through every elapsed second, even if no client was online."""
+        entity_id = 'pilot-' + pilot_id
         with self.sessions.begin() as db:
-            entity_id='pilot-'+pilot_id
-            saved=db.get(EncounterSnapshot,entity_id)
+            world = db.get(World, 'kestrel')
+            entity = db.scalars(select(Entity).where(Entity.id == entity_id).with_for_update()).one()
+            saved = db.scalars(select(EncounterSnapshot).where(
+                EncounterSnapshot.entity_id == entity_id).with_for_update()).first()
+            now = time.time()
+            current_world_s = max(0., now - world.epoch_utc)
             if not saved:
-                saved=EncounterSnapshot(entity_id=entity_id)
+                saved = EncounterSnapshot(entity_id=entity_id, saved_at_utc=now,
+                                          snapshot=new_sector(current_world_s, world.mu))
                 db.add(saved)
-            saved.saved_at_utc=time.time()
-            saved.snapshot=snapshot
-        return {'saved_at_utc':saved.saved_at_utc}
+            elif saved.snapshot.get('version') != 3:
+                # Transition the previous v0.10 pilot checkpoint once. From this
+                # point forward only the backend writes encounters.
+                old = saved.snapshot
+                new = new_sector(current_world_s, world.mu)
+                new['enemies'] = old.get('enemies', new['enemies'])
+                new['ally'] = old.get('ally', new['ally'])
+                new['pickups'] = old.get('pickups', new['pickups'])
+                new['reinforcements'] = old.get('reinforcements', False)
+                new['playerKills'] = old.get('playerKills', 0)
+                saved.snapshot = new
+                saved.saved_at_utc = now
+            elapsed = max(0., now - saved.saved_at_utc)
+            if elapsed >= .05:
+                start_s = max(0., saved.saved_at_utc - world.epoch_utc)
+                _, _, _, start_player = self._at(db, 'kestrel', entity_id, start_s)
+                snapshot, effects = advance_sector(
+                    copy.deepcopy(saved.snapshot), elapsed, start_player, world.mu)
+                if effects['credits']:
+                    progress = db.scalars(select(PlayerProgress).where(
+                        PlayerProgress.entity_id == entity_id).with_for_update()).one()
+                    progress.credits += effects['credits']
+                if effects['fuel'] or effects['player_dvx'] or effects['player_dvy']:
+                    _, _, _, end_player = self._at(db, 'kestrel', entity_id, current_world_s)
+                    added_fuel = effects['fuel']
+                    new_state = State(
+                        end_player.x, end_player.y,
+                        end_player.vx + effects['player_dvx'],
+                        end_player.vy + effects['player_dvy'],
+                        end_player.mass_kg + added_fuel,
+                        end_player.fuel_kg + added_fuel,
+                        end_player.heading, end_player.omega)
+                    peri, apo = orbital_envelope(new_state, world.mu)
+                    entity.checkpoint_s = current_world_s
+                    entity.checkpoint = new_state.as_dict()
+                    entity.periapsis_km, entity.apoapsis_km = peri, apo
+                    entity.version += 1
+                    db.add(Event(world_id='kestrel', entity_id=entity_id,
+                                 at_s=current_world_s, kind='sector_interaction',
+                                 payload=effects, after=new_state.as_dict(),
+                                 idempotency_key='sector:'+str(__import__('uuid').uuid4())))
+                saved.snapshot = snapshot
+                saved.saved_at_utc = now
+            return {'saved_at_utc':saved.saved_at_utc,
+                    'snapshot':copy.deepcopy(saved.snapshot)}
 
-    PRICES={'predictive':40,'trajectory':25,'nav':60}
+    def player_fire(self, pilot_id: str, dx: float, dy: float):
+        self.player_encounter(pilot_id)
+        entity_id='pilot-'+pilot_id
+        with self.sessions.begin() as db:
+            world=db.get(World,'kestrel')
+            saved=db.scalars(select(EncounterSnapshot).where(
+                EncounterSnapshot.entity_id == entity_id).with_for_update()).one()
+            _,_,_,player=self._at(db,'kestrel',entity_id,self.now(world))
+            snapshot=copy.deepcopy(saved.snapshot)
+            fired=fire_projectile(snapshot,player,self.now(world),dx,dy)
+            if fired:
+                saved.snapshot=snapshot
+                saved.saved_at_utc=time.time()
+            return fired
+
+    def player_repair(self, pilot_id: str):
+        self.player_encounter(pilot_id)
+        entity_id='pilot-'+pilot_id
+        with self.sessions.begin() as db:
+            saved=db.scalars(select(EncounterSnapshot).where(
+                EncounterSnapshot.entity_id == entity_id).with_for_update()).one()
+            snapshot=copy.deepcopy(saved.snapshot)
+            p=snapshot['player']
+            if p['hp']>=100 or p['repairParts']<=0 or not p['alive']:
+                return False
+            hp=min(1.,100-p['hp'],5*p['repairParts'])
+            p['hp']+=hp
+            p['repairParts']-=hp/5
+            saved.snapshot=snapshot
+            saved.saved_at_utc=time.time()
+            return True
+
+    def save_encounter(self, pilot_id: str, snapshot: dict):
+        raise ValueError('Client-owned NPC snapshots are disabled; FastAPI owns sector state')
+
+    PRICES={'predictive':40,'trajectory':25,'nav':60,'ephemeris':45}
 
     def player_progress(self,pilot_id: str):
         with self.sessions() as db:
@@ -158,6 +213,7 @@ class WorldStore:
 
     def player_input(self, pilot_id: str, thrust: bool, turn: int, stabilize: bool, gimbal: float):
         """Advance using the previous leased input, then atomically set the next input."""
+        self.player_encounter(pilot_id)
         entity_id = 'pilot-' + pilot_id
         with self.sessions.begin() as db:
             entity = db.scalars(select(Entity).where(Entity.id==entity_id).with_for_update()).one()
