@@ -121,6 +121,19 @@ def player_input(pilot_id: str, command: PlayerInput):
         raise HTTPException(404,str(exc)) from exc
 
 
+
+@app.post('/api/dev/players/{pilot_id}/raiders', status_code=201)
+def spawn_dev_raider(pilot_id: str):
+    """Explicit dev-only enemy spawn. Intentionally absent from the game UI."""
+    require_dev_commands()
+    if len(pilot_id) != 32 or any(ch not in '0123456789abcdef' for ch in pilot_id):
+        raise HTTPException(400, 'Expected 32-character pilot ID')
+    try:
+        return store().spawn_raider(pilot_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
 @app.get('/')
 def health():
     return {'status':'ok','architecture':'lazy-orbits','authority':'player-flight-only'}

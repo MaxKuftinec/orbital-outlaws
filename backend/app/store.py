@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from .models import Base, World, Entity, Event, FlightControl, PlayerProgress, SalvageClaim, EncounterSnapshot
 from .physics import State, propagate, orbital_envelope, apply_impulse
 from .flight import advance, LEASE_S
-from .universe import new_sector, advance_sector, player_fire as fire_projectile
+from .universe import new_sector, advance_sector, player_fire as fire_projectile, ship as spawn_npc, event as sector_event
 
 
 class WorldStore:
@@ -138,6 +138,33 @@ class WorldStore:
                 saved.saved_at_utc = now
             return {'saved_at_utc':saved.saved_at_utc,
                     'snapshot':copy.deepcopy(saved.snapshot)}
+
+
+    def spawn_raider(self, pilot_id: str) -> dict:
+        """One server-created, persisted raider per explicit local dev request."""
+        entity_id = 'pilot-' + pilot_id
+        # Catch up before editing; this prevents overwriting offline combat progress.
+        self.player_encounter(pilot_id)
+        with self.sessions.begin() as db:
+            saved = db.scalars(select(EncounterSnapshot).where(
+                EncounterSnapshot.entity_id == entity_id).with_for_update()).one()
+            sector = copy.deepcopy(saved.snapshot)
+            existing = {body['id'] for body in sector['enemies']}
+            number = int(sector.get('nextRaiderId', 3))
+            while f'raider-{number:02d}' in existing:
+                number += 1
+            sector['nextRaiderId'] = number + 1
+            angle = (number * 2.399963229728653) % (2 * math.pi) - math.pi
+            radius = 330 + (number % 5) * 28
+            enemy = spawn_npc(f'raider-{number:02d}', radius, angle)
+            enemy['nextDecision'] = sector['t'] + 3
+            sector['enemies'].append(enemy)
+            sector_event(sector, sector['t'], f"{enemy['name']} entered the sector.", 'danger')
+            saved.snapshot = sector
+            saved.saved_at_utc = time.time()
+            return {'enemy': {'id': enemy['id'], 'name': enemy['name'],
+                              'x': enemy['x'], 'y': enemy['y']},
+                    'enemy_count': len(sector['enemies'])}
 
     def player_fire(self, pilot_id: str, dx: float, dy: float):
         self.player_encounter(pilot_id)

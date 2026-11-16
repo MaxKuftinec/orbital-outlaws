@@ -47,7 +47,7 @@ def new_sector(world_time: float, mu: float = MU) -> dict:
                 pod('starter-fuel-1', 312, .75, 'fuel', 32),
                 pod('starter-credits-1', 365, 1.7, 'credits', 30),
                 pod('starter-parts-0', 295, 1.1, 'parts', 8)],
-            'shots': [], 'shotCounter': 0, 'player': {'hp': 100., 'ammo': 36, 'repairParts': 10.,
+            'shots': [], 'shotCounter': 0, 'nextRaiderId': 3, 'player': {'hp': 100., 'ammo': 36, 'repairParts': 10.,
                                     'alive': True, 'gunReady': world_time},
             'events': [], 'reinforcements': False, 'nextEnemySpawn': world_time+75,
             'playerKills': 0, 'collisionCooldown': {}}

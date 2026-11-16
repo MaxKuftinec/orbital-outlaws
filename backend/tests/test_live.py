@@ -22,6 +22,9 @@ class StubStore:
         return {'id':entity,'version':self.version,'state':{
             'x':260,'heading':0,'fuel_kg':200}}
 
+    def spawn_raider(self, pilot_id):
+        return {'enemy': {'id': 'raider-03', 'name': 'RAIDER-03'}, 'enemy_count': 3}
+
     def player_progress(self, pilot_id):
         return {'credits':self.credits,'upgrades':dict(self.upgrades)}
 
@@ -98,3 +101,17 @@ def test_websocket_denies_public_development_access(monkeypatch):
         with pytest.raises(WebSocketDisconnect):
             with client.websocket_connect('/api/players/'+'b'*32+'/live'):
                 pass
+
+
+def test_dev_spawn_raider_is_explicitly_guarded(monkeypatch):
+    import app.main as main
+    monkeypatch.setattr(main, 'store', lambda: StubStore())
+    url = '/api/dev/players/' + 'c' * 32 + '/raiders'
+    with TestClient(app) as client:
+        monkeypatch.delenv('ORBITAL_DEV_COMMANDS', raising=False)
+        assert client.post(url).status_code == 403
+        monkeypatch.setenv('ORBITAL_DEV_COMMANDS', '1')
+        spawned = client.post(url)
+        assert spawned.status_code == 201, spawned.text
+        assert spawned.json()['enemy']['id'] == 'raider-03'
+        assert client.post('/api/dev/players/not-a-pilot/raiders').status_code == 400
