@@ -1,59 +1,119 @@
-# Orbital Outlaws — v0.10 fullscreen cockpit and rendezvous prototype
+# Orbital Outlaws — v0.11 autonomous sector / configurable cockpit
 
-**Live flight and progression are persistent, and pilot-scoped NPC encounters are checkpointed.** The Vue cockpit uses a bidirectional **WebSocket** to receive authoritative PostgreSQL-backed orbital snapshots, send controls, purchase technology and submit development-only salvage credit claims. The browser predicts the ship every 15 ms and smoothly reconciles snapshots. **Combat resolution, projectiles, NPC AI, ammunition, repairs and physical salvage are still simulated locally.** This is not yet a fully authoritative multiplayer universe.
+A persistent 2D Newtonian orbital combat prototype using **Vue 3 + Vuetify (Options API)**, **FastAPI**, **PostgreSQL** and a bidirectional **WebSocket**.
 
-## Start the backend (Windows PowerShell)
+## Current architecture
 
-Create a PostgreSQL database first, then in the project:
+- **Backend authority:** Flight state, RCS/thrust fuel, projectile creation, ammunition, hull damage, NPC target decisions, finite NPC maneuver impulses, swept projectile/ship collisions, salvage and credits.
+- **Offline time:** The universe clock uses real wall-clock time. A pilot-sector checkpoint is **caught up by FastAPI on the next connection/query**. NPC decisions and collisions are resolved during the catch-up even if nobody kept a browser open. This is lazy offline simulation, not a dedicated continuously running background worker per pilot.
+- **Frontend prediction:** Browser renders player controls immediately at ~60 FPS and interpolates authoritative NPC positions. The client never submits NPC positions, kills or credit claims.
+- **Still limited:** Sectors are **per pilot**, not yet shared multiplayer space. Long-disconnect catch-up uses adaptive numerical timesteps and is a gameplay approximation, not an exact global causal event queue. There is no player authentication yet. These endpoints are development-only.
+
+### Start backend
+
+Create an existing PostgreSQL database first:
 
 ```powershell
 cd backend
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+..venvScriptsActivate.ps1
 pip install -r requirements.txt
 ```
 
-Create or edit `backend/.env`:
+Edit `backend/.env`:
 
 ```dotenv
 DATABASE_URL=postgresql+psycopg://USER:PASSWORD@localhost:5432/orbital_outlaws
 ORBITAL_DEV_COMMANDS=1
 ```
 
-Run `uvicorn app.main:app --reload --port 8000`. FastAPI **GET `/`** remains the health endpoint. SQLAlchemy creates the `player_progress`, `salvage_claims` and `encounter_snapshots` tables in the *existing* database. No SQLite is used.
+Then run:
 
-## Start the frontend
+```powershell
+uvicorn app.main:app --reload --port 8000
+```
+
+The backend keeps **GET `/`** as the health endpoint. `Base.metadata.create_all` creates missing game tables but not the database itself. Existing databases aren't destroyed or automatically reset. Production schema changes should use Alembic migrations.
+
+### Start frontend
 
 ```powershell
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-Open http://localhost:5173. Vite proxies WebSocket upgrades on `/api` and the health check `/backend-health` to FastAPI `/`.
+Open http://localhost:5173. Vite proxies WebSocket `/api` to FastAPI and maps `/backend-health` to the backend root.
 
-The game has **no Pause or time-speed multiplier**. The universe clock continues on the server even when nobody has the tab open. Unpowered motion is calculated lazily from orbital checkpoints. W/A/D/S and the gimbal are predicted immediately on the browser, with server snapshots ~10 Hz and held-control lease renewals ~5 Hz. Inputs expire after 0.4 seconds without renewal.
+## Gameplay
 
-Credits begin at 65 ¤. Buying **Predictive (40 ¤)**, **Trajectory (25 ¤)** or **Navigation (60 ¤)** is checked by PostgreSQL and persists through refresh. The starter credit pickups and wreck credit rewards are submitted as idempotent claims; unacknowledged claims are retried on reconnect. The same pickup ID can only be credited once per pilot, even if a local encounter is reset. The **technology remains owned after refreshing**. Rendezvous guidance now sends real control commands through WebSocket; its physics and fuel remain server-authoritative. Ammo and repair parts remain local.
+W: main engine. A/D: rotate via RCS. S: stabilize. Space: fire (server validates ammo/cooldown). R: repair (server validates spare parts and hull). Aim with cursor, right/middle drag the map, mouse wheel to zoom.
 
-**Enemy continuity:** live browser encounters are checkpointed to PostgreSQL about once a second. Refreshing restores the **same raiders**, including destroyed ships and salvage. Offline NPC movement advances along their last gravity-only Kepler trajectories; AI, combat and collisions do not resolve while offline. These checkpoints are per pilot, not authoritative multiplayer world state.
+The **Rendezvous Computer** automatically computes and executes a planned transfer while the tab remains open. During autopilot, mouse hover **does not control the engine gimbal**; navigation owns its attitude and thrust target. Manual gimbal control resumes when autopilot disengages. Guidance is still client-side; its inputs are applied by the authoritative server.
 
-### Navigation and fullscreen cockpit
+Technology purchases are persistent in PostgreSQL:
 
-The **Engage button works after purchasing Rendezvous Computer**, and can calculate a route automatically even if you did not press Calculate first. Guidance translates desired directions into server-authoritative thrust and RCS commands. If no safe route is available for the target or fuel reserve, the event log explains the failure. **Guidance needs an active, visible cockpit** and stops if you disconnect or hide the tab; it is not a persistent server-side autopilot.
+| Technology | Credits | Capability |
+| --- | ---: | --- |
+| Predictive fire control | 40 ¤ | Lead-shot assistance |
+| Target trajectory analyzer | 25 ¤ | Target motion relative to a ballistic shot |
+| Rendezvous computer | 60 ¤ | Assisted orbital transfers and capture |
+| **Ephemeris computer** | **45 ¤** | Predict selected object's unpowered orbit and show +60s/+120s markers |
 
-Click **⛶ Fullscreen** in the canvas for a fullscreen cockpit (Escape exits). Drag **⠿** on Navigation, Telemetry or Your Ship to reposition those panels. Their positions are saved locally and Your Ship now sits inside the canvas even in the normal layout. **Recenter view** replaces persistent-mode Reset and does not restart NPCs or flight.
+Trajectory predictions assume **unpowered Kepler motion**. Future burns, impacts or NPC decisions can invalidate them.
 
-### Important security boundary
+### HUD customization
 
-**Do not expose this backend publicly with `ORBITAL_DEV_COMMANDS=1`.** Player IDs are stored in the browser and are **not authenticated**; WebSocket purchase, flight and credit claims are development-only. **Salvage claims are reported by the browser and can be forged.** Persistent credits are useful for playtesting, but they are **not cheat-resistant** until we move pickup acquisition, NPCs, and combat to server authority. This milestone is not production multiplayer.
+Every cockpit panel (including Comms, Upgrades, Navigation and Your Ship) has controls to:
 
-The earlier HTTP API is retained for debugging and read-only queries; live gameplay uses WebSocket. The offline `orbital-outlaws.html` is an older standalone v0.6 local-only build and retains its original controls.
+- **↙ / ↗ Dock/undock**: move between sidebar and map.
+- **− / ▢ Minimize/expand**: collapse an individual panel.
+- **⠿ Drag** when inside the canvas (keyboard arrow keys also work on focused drag handles).
 
-## Tests
+Click **⛶ Fullscreen** to make the canvas fill your display; Escape exits. Use **☷ Panels** to move any panel into the fullscreen map, even when it is currently docked outside. Panel layout persists in browser storage. **☷ Panels → Restore default layout** resets the HUD only.
+
+## Restart versus reset
+
+**Restart without losing data**: stop FastAPI/Vite with Ctrl+C and start them again. PostgreSQL game state stays unchanged. Refreshing the page also resumes the same pilot.
+
+**Reset one pilot (ship, sector, hull, credits and technology)**: open browser DevTools console and copy the result of:
+
+```js
+localStorage.getItem('orbital-outlaws.pilot.v1')
+```
+
+Stop active gameplay for that pilot, then from `backend/` run:
+
+```powershell
+python -m app.reset_dev --pilot YOUR_32_CHARACTER_ID --confirm RESET-PILOT
+```
+
+Reload the page. Keeping the browser's pilot ID makes a **fresh ship for that same pilot**.
+
+**Reset the ENTIRE development universe** (destructive to *all* pilots): stop FastAPI and run from `backend/`:
+
+```powershell
+python -m app.reset_dev --world --confirm RESET-WORLD
+```
+
+This drops and recreates Orbital Outlaws PostgreSQL tables, and clears **all** player and economy records. Use only with a dedicated local development database; the command requires `ORBITAL_DEV_COMMANDS=1` and an explicit confirmation phrase.
+
+**New pilot without deleting old data**: browser DevTools:
+
+```js
+localStorage.removeItem('orbital-outlaws.pilot.v1')
+location.reload()
+```
+
+**Reset only local UI preferences**: use the HUD's Restore default layout, or clear `orbital-outlaws.hud-layout.v2` in localStorage. Controls → Restore defaults resets key bindings. Neither changes PostgreSQL.
+
+## Testing
+
+GitHub Actions runs a PostgreSQL service and verifies the backend, Node regressions and Vue production build.
 
 ```powershell
 cd backend
+$env:TEST_DATABASE_URL = "postgresql+psycopg://USER:PASSWORD@localhost:5432/orbital_outlaws_test"
 python -m pytest -q
 cd ..
 node --test tests/*.test.cjs
@@ -61,11 +121,8 @@ cd frontend
 npm run build
 ```
 
-For database integration tests, set `TEST_DATABASE_URL` to a **separate PostgreSQL testing database**. Without it, integration tests are skipped; WebSocket protocol tests use an in-memory stub.
+Use a **separate** PostgreSQL test database. Without `TEST_DATABASE_URL`, database integration tests are skipped. A running Postgres instance is required for the full suite.
 
-## Next milestones
+## Security and next architecture milestone
 
-1. Server-authoritative NPC decisions and collision/combat event scheduling, replacing the temporary browser-reported NPC checkpoints.
-2. Persist ammunition, hull, repairs, NPCs and other game-world entities.
-3. Authenticated player accounts and migration scripts.
-4. Scalable region subscriptions, prediction/reconciliation and multiplayer contention handling.
+The development live WebSocket uses anonymous browser pilot IDs; **never expose `ORBITAL_DEV_COMMANDS=1` publicly**. Authentication, shared world-region authority, continuous multi-sector NPC scheduling, efficient causal collision/event queues, and mature migration tooling remain future work. The offline `orbital-outlaws.html` is an older local-only build, not the v0.11 connected client.

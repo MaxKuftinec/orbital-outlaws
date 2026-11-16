@@ -54,3 +54,12 @@ The existing rendezvous planner now converts guidance to the same RCS/thrust Web
 The development-only `encounter_snapshots` table stores each pilot's local NPCs, pickups, killed enemies and reinforcement settings. The WebSocket resumes that checkpoint on reconnect, using lazy Kepler coasting during the elapsed wall time. It does not execute NPC AI, projectiles, collisions or combat while offline, nor share NPC authority between different pilots. This is a transitional continuity mechanism, not the final multiplayer world state.
 
 Fullscreen Navigation, Telemetry and Ship panels are floating canvas HUD windows whose positions remain a browser-side UI preference, outside the server's simulation state.
+
+
+## v0.11 autonomous pilot sectors
+
+\`backend/app/universe.py\` runs authoritative pilot-sector NPC decisions, limited impulsive maneuvers, projectile creation, Newtonian motion, swept projectile/body and ship/ship collision tests, hull/ammo changes, physical salvage and event logs. The state is persisted in PostgreSQL \`encounter_snapshots\`. The server advances it over elapsed wall time when \`player_encounter\` is called; no browser-provided snapshot, kill count, or credit claim is trusted. Active clients receive sector snapshots over the existing WebSocket and render smooth local extrapolation.
+
+This initial version is pilot-scoped. Player flight and propellant remain in \`entities\`/\`flight_controls\`, and sector collisions may append a \`sector_interaction\` checkpoint/event to the player entity. NPC offline catch-up uses adaptive finite slices rather than a globally scheduled exact spacetime event queue. It does not yet guarantee synchronized inter-player causality, and is not a production-scale server simulation.
+
+\`backend/app/reset_dev.py\` provides explicitly confirmed pilot/world database resets. The frontend Options API shell (matching the Axore Vue convention) supports independent docking, minimizing and dragging for every HUD panel; layout is local browser state and not part of the universe.
