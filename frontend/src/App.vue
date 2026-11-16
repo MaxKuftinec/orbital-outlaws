@@ -1,0 +1,174 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+
+const backendOnline = ref(false)
+const startupError = ref('')
+const legacyFiles = ['navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js', 'arrival.js', 'game.js']
+
+function loadLegacyScript(filename: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script')
+    script.src = `/legacy/${filename}`
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error(`Could not load ${filename}`))
+    document.head.appendChild(script)
+  })
+}
+
+onMounted(async () => {
+  try {
+    // Mount Vue's cockpit before installing game.js DOM listeners.
+    for (const filename of legacyFiles) await loadLegacyScript(filename)
+  } catch (error) {
+    startupError.value = error instanceof Error ? error.message : String(error)
+  }
+  try {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? ''}/api/health`)
+    backendOnline.value = response.ok
+  } catch {
+    backendOnline.value = false
+  }
+})
+</script>
+
+<template>
+<v-app class="orbital-vuetify">
+  <v-main>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="identity">
+        <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
+        <div><div class="eyebrow">PHYSICS SANDBOX • VUE MIGRATION • PROTOTYPE 0.7</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+      </div>
+      <div class="top-actions"><v-chip :color="backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ backendOnline ? 'Backend ready (foundation)' : 'Local gameplay · backend offline' }}</v-chip>
+        <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">MISSION TIME</span><strong id="sim-clock">00:00</strong></div></div>
+        <label class="speed-label">Speed <select id="sim-speed" aria-label="Simulation speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+        <v-btn density="compact" variant="tonal"  id="settings-btn" type="button" class="action-btn" title="Change hotkeys">⚙ Controls</v-btn>
+        <v-btn density="compact" variant="tonal"  id="pause-btn" class="action-btn">Ⅱ Pause</v-btn>
+        <v-btn density="compact" variant="tonal"  id="reset-btn" class="action-btn muted">↻ Reset</v-btn>
+      </div>
+    </header>
+
+    <main class="game-layout">
+      <section class="arena-shell" aria-label="Orbital gameplay area">
+        <div class="arena-head">
+          <div><span class="section-kicker">SECTOR 01</span><div class="arena-title">Kestrel gravity well <span class="online"><span class="dot live"></span> LIVE PHYSICS</span></div></div>
+          <div class="arena-actions"><v-btn density="compact" variant="tonal"  id="reinforce-btn" class="small-btn" aria-pressed="false" title="Allow new pirate spawns">Reinforcements: OFF</v-btn><v-btn density="compact" variant="tonal"  id="orbit-btn" class="small-btn selected" aria-pressed="true">◌ Trajectory</v-btn><v-btn density="compact" variant="tonal"  id="zoom-out" class="small-btn" aria-label="Zoom out">−</v-btn><span id="zoom-level" class="zoom-text">1.0×</span><v-btn density="compact" variant="tonal"  id="zoom-in" class="small-btn" aria-label="Zoom in">+</v-btn></div>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat."></canvas>
+          <div class="nav-command" id="nav-command" role="group" aria-label="Navigation console">
+            <div class="nav-command-head"><button type="button" id="nav-toggle" class="console-toggle" aria-controls="nav-command-body" aria-expanded="true">◈ NAVIGATION <span id="nav-toggle-arrow">▴</span></button><span id="nav-quick-status">COMPUTER LOCKED</span></div>
+            <div id="nav-command-body" class="nav-command-body">
+            <div class="nav-command-select"><select id="nav-target" class="nav-target" aria-label="Rendezvous destination"></select><button type="button" id="nav-next" class="small-btn" title="Next navigation target (N)" aria-label="Cycle navigation targets">↻</button></div>
+            <div class="nav-command-actions"><button type="button" id="nav-plan" class="wide-subtle-btn" title="Calculate route (C)">CALCULATE</button><button type="button" id="nav-engage" class="buy-btn" title="Install navigation computer or engage route (E)">BUY NAV 60¤</button><button type="button" id="nav-abort" class="small-btn" title="Abort autopilot (X)" disabled>ABORT</button></div>
+            <div class="nav-command-readout" id="nav-quick-metrics" aria-live="polite">Pick a contact · press C to calculate</div>
+            </div>
+          </div>
+          <div class="telemetry-console collapsed" id="telemetry-console" role="group" aria-label="On-screen orbital telemetry">
+            <button type="button" class="console-toggle" id="telemetry-toggle" aria-controls="telemetry-console-body" aria-expanded="false">◉ TELEMETRY <span id="telemetry-toggle-arrow">▾</span></button>
+            <div class="telemetry-console-body" id="telemetry-console-body">
+              <div><span>Altitude</span><strong id="quick-alt">—</strong></div>
+              <div><span>Speed</span><strong id="quick-speed">—</strong></div>
+              <div><span>Periapsis</span><strong id="quick-peri">—</strong></div>
+              <div><span>Apoapsis</span><strong id="quick-apo">—</strong></div>
+              <div><span>Fuel reserve</span><strong id="quick-reserve">—</strong></div>
+              <div><span>Flight status</span><strong id="quick-flight">—</strong></div>
+            </div>
+          </div>
+          <button type="button" id="sos-btn" class="sos-btn" title="Ask AEGIS-01 for propellant">⚑ REQUEST FUEL ASSISTANCE</button>
+          <div class="canvas-overlay top-left"><span class="tiny-dot blue"></span><span id="target-indicator">TRACKING: RAIDER-01</span></div>
+          <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom <span class="keyboard-tag">N/C/E/X</span> nav <span class="keyboard-tag">H</span> help</div>
+          <div id="game-over" class="game-over hidden" role="alertdialog" aria-modal="false" aria-labelledby="game-over-title"><span class="failure-mark">✕</span><h2 id="game-over-title">SHIP LOST</h2><p id="game-over-details">Your orbit ended.</p><button id="retry-btn" class="primary-btn">Try again ↻</button></div>
+        </div>
+        <div class="mission-strip"><span class="objective-icon">◎</span><span><strong>OBJECTIVE</strong> · Stay in orbit. Outmaneuver raiders. Collect salvage.</span><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
+        <section class="flight-controls" aria-label="Spacecraft flight controls">
+          <div class="control-description"><strong>ATTITUDE & PROPULSION</strong><small>Point ship using nose/tail RCS. Aim the ±28° main gimbal with your cursor, then hold W to burn. Left-click selects targets or manual gun aim.</small></div>
+          <div class="control-grid">
+            <button type="button" data-thrust="rotate-left" class="thruster" aria-label="Hold to rotate counter-clockwise"><b>⟲</b><strong>ROTATE LEFT</strong><small>A / ←</small></button>
+            <button type="button" data-thrust="rotate-right" class="thruster" aria-label="Hold to rotate clockwise"><b>⟳</b><strong>ROTATE RIGHT</strong><small>D / →</small></button>
+            <button type="button" data-thrust="stabilize" class="thruster" aria-label="Hold to cancel spin"><b>◈</b><strong>STOP SPIN</strong><small>S / ↓</small></button>
+            <button type="button" data-thrust="main" class="thruster" aria-label="Hold for main engine thrust"><b>▲</b><strong>MAIN ENGINE</strong><small>W / ↑</small></button>
+            <button type="button" id="fire-btn" class="fire-button" aria-label="Fire at selected target"><b>⌖</b><strong>FIRE</strong><small>SPACE</small></button>
+          </div>
+          <div class="control-note">Left-click a raider to lock guns, click empty space for cursor-following manual aim, then hold SPACE to fire. W fires the engine. Right/middle drag or Shift+drag pans. Mouse wheel zooms toward cursor. <button id="lock-btn" type="button">Lock nearest raider ↗</button></div>
+        </section>
+      </section>
+
+      <aside class="sidebar" aria-label="Spacecraft instruments">
+        <section class="panel ship-panel">
+          <div class="panel-heading"><span>YOUR SHIP</span><span class="ship-class">SCOUT / MK-I</span></div>
+          <div class="ship-name"><span class="ship-glyph">△</span><span>KESTREL-7<small id="status-text">Nominal orbit</small></span></div>
+          <div class="meter-title"><span>HULL INTEGRITY</span><b id="hull-value">100%</b></div><div class="meter"><div id="hull-bar" class="meter-fill green" style="width:100%"></div></div>
+          <div class="repair-controls"><span>SPARE PARTS <strong id="repair-parts">10.0 / 24 kg</strong></span><button id="repair-btn" type="button" class="small-btn repair-button" disabled>HOLD R · REPAIR</button></div>
+          <div class="meter-title"><span>PROPELLANT</span><b id="fuel-value">200 / 200 kg</b></div><div class="meter"><div id="fuel-bar" class="meter-fill cyan" style="width:100%"></div></div>
+          <div class="small-stats"><div><span>AMMO</span><strong id="ammo-value">36</strong></div><div><span>CREDITS</span><strong id="credits-value">0 <i>¤</i></strong></div><div><span>ΔV BUDGET</span><strong id="dv-value">—</strong></div></div>
+        </section>
+        <section class="panel ally-panel"><div class="panel-heading"><span>FRIENDLY ESCORT</span><span id="escort-status" class="status-pill">ONLINE</span></div><div class="ship-name" style="color:#67e0aa">★ AEGIS-01</div><div class="metric-row"><span>Hull integrity</span><strong id="escort-hull">80 / 80</strong></div><div class="metric-row"><span>Ammunition</span><strong id="escort-ammo">120</strong></div><div class="metric-row"><span>Propellant</span><strong id="escort-fuel">—</strong></div><div class="mini-note" id="escort-state">ENGAGING HOSTILES</div><button type="button" class="wide-subtle-btn" id="escort-help-btn">⚑ Request fuel assistance</button></section>
+        <section class="panel propulsion">
+          <div class="panel-heading"><span>PROPULSION</span><span>SCOUT MK-I</span></div>
+          <div class="metric-row"><span>Dry mass</span><strong id="dry-mass">900 kg</strong></div>
+          <div class="metric-row"><span>Total mass</span><strong id="total-mass">1,110 kg</strong></div>
+          <div class="metric-row"><span>Main thrust</span><strong id="main-thrust">1.6 MN</strong></div>
+          <div class="metric-row"><span>Mass flow</span><strong id="mass-flow">5 kg/s</strong></div>
+          <div class="metric-row"><span>Effective exhaust</span><strong id="exhaust-vel">320 km/s</strong></div>
+          <div class="metric-row"><span>Ship heading</span><strong id="ship-heading">0°</strong></div>
+          <div class="metric-row"><span>Angular speed</span><strong id="spin-value">0°/s</strong></div>
+          <div class="mini-note">Mass is conserved by ejecting propellant; acceleration rises as the ship becomes lighter. Extreme engine performance is fictional.</div>
+        </section>
+        <section class="panel instruments">
+          <div class="panel-heading"><span>ORBITAL TELEMETRY</span><span class="status-pill">NEWTONIAN</span></div>
+          <div class="metric-row"><span>Altitude</span><strong id="alt-value">—</strong></div>
+          <div class="metric-row"><span>Speed</span><strong id="speed-value">—</strong></div>
+          <div class="metric-row"><span>Periapsis</span><strong id="peri-value">—</strong></div>
+          <div class="metric-row"><span>Apoapsis</span><strong id="apo-value">—</strong></div>
+          <div class="metric-row"><span>Orbit period</span><strong id="period-value">—</strong></div>
+          <div class="metric-row"><span>Predicted path</span><strong id="path-status">SAFE</strong></div>
+          <div class="mini-note">Distances are displayed in km and times in s. The fictional Kestrel body is extremely dense; gravity follows inverse-square Newtonian physics.</div>
+        </section>
+        <section class="panel targeting">
+          <div class="panel-heading"><span>TARGET ACQUISITION</span><span id="target-state" class="status-pill hostile">HOSTILE</span></div>
+          <div class="target-name" id="target-name">RAIDER-01</div>
+          <div class="metric-row"><span>Range</span><strong id="range-value">—</strong></div>
+          <div class="metric-row"><span>Hull</span><strong id="target-hull">—</strong></div>
+          <div class="metric-row"><span>Weapon</span><strong>Ballistic rounds</strong></div>
+          <div class="metric-row"><span>Bullet reaches cursor range in</span><strong id="shot-time">—</strong></div>
+          <div class="metric-row"><span>Estimated separation at arrival</span><strong id="shot-miss">Requires analyzer</strong></div>
+          <div class="mini-note">Cyan curve: actual predicted ballistic shot. After upgrading: purple ghost shows where your selected target will be when the shot reaches the cursor range, assuming no new burn.</div>
+          <button id="next-target" class="wide-subtle-btn">Next target ↗</button>
+        </section>
+        <section class="panel upgrades">
+          <div class="panel-heading"><span>UPGRADES</span><span>FIELD MARKET</span></div>
+          <div class="upgrade-entry"><div><strong>Predictive fire control</strong><small>Solves a lead shot using projected target motion.</small><span id="upgrade-status">40 ¤</span></div><button id="upgrade-btn" class="buy-btn">BUY</button></div>
+          <div class="upgrade-entry"><div><strong>Target trajectory analyzer</strong><small>Show enemy coast path and its future position at your cursor-selected bullet arrival time.</small><span id="trajectory-upgrade-status">25 ¤</span></div><button id="trajectory-upgrade-btn" class="buy-btn">BUY</button></div>
+          <div class="upgrade-entry"><div><strong>Rendezvous computer</strong><small>Fuel-conscious route search, attitude control and automatic capture approach.</small><span id="nav-upgrade-status">60 ¤</span></div><button id="nav-upgrade-btn" class="buy-btn">BUY</button></div>
+        </section>
+        <section class="panel autopilot-panel">
+          <div class="panel-heading"><span>RENDEZVOUS COMPUTER</span><span id="autopilot-chip" class="status-pill">LOCKED</span></div>
+          <div class="mini-note">Navigation selection, route calculation and autopilot controls are always visible on the map. The computer scans short and long coast windows, favouring affordable Δv.</div>
+          <div class="metric-row"><span>Estimated total Δv</span><strong id="nav-dv">—</strong></div>
+          <div class="metric-row"><span>Arrival in</span><strong id="nav-eta">—</strong></div>
+          <div class="metric-row"><span>Propellant estimate</span><strong id="nav-fuel">—</strong></div>
+          <div class="metric-row"><span>Guidance status</span><strong id="nav-status">No plan</strong></div>
+          <div class="control-note">Alt+click empty space to place a fixed-position orbital waypoint. Manual controls override the autopilot. Estimates assume instantaneous burns; real engines need correction.</div>
+        </section>
+        <section class="panel feed-panel"><div class="panel-heading"><span>COMMS & EVENTS</span><span class="live-label">●</span></div><div id="event-feed" class="event-feed" aria-live="polite"></div></section>
+      </aside>
+    </main>
+    <div id="settings-modal" class="settings-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="settings-panel">
+        <div class="settings-top"><div><div class="section-kicker">COMMAND CONFIGURATION</div><h2 id="settings-title">Keyboard controls</h2></div><button type="button" id="settings-close" class="action-btn" aria-label="Close settings">✕</button></div>
+        <p class="mini-note">Click a control, then press its new key. Conflicting key assignments are rejected. Changes are saved on this browser.</p>
+        <div id="hotkey-list" class="hotkey-list"></div>
+        <div id="hotkey-feedback" role="status" class="hotkey-feedback"></div>
+        <div class="settings-bottom"><button type="button" id="hotkey-reset" class="small-btn">Restore defaults</button><button type="button" id="settings-done" class="buy-btn">Done</button></div>
+      </div>
+    </div>
+    <footer class="footer-note">Orbital Outlaws · Vue preview 0.7 <span>Full-width orbit · configurable controls · fuel-safe guidance · allied rescue</span></footer>
+  </div>
+
+  <v-alert v-if="startupError" color="error" variant="tonal" class="game-startup-error">{{ startupError }}</v-alert>
+  </v-main>
+</v-app>
+</template>
