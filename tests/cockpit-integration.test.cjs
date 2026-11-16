@@ -24,7 +24,7 @@ test('Vue matches Axore Options API convention',()=>{
 
 test('every cockpit panel can dock, undock, minimize and drag; fullscreen keeps a HUD picker',()=>{
   const canvas=app.indexOf('id="canvas-workspace"');
-  const ship=app.indexOf('id="ship-panel"');
+  const ship=app.indexOf('<ShipPanel />');
   const aside=app.indexOf('<aside class="sidebar"');
   assert.ok(canvas>=0&&ship>canvas&&ship<aside);
   assert.match(workspace,/sidebar\.querySelectorAll\('\.panel'\)/);
@@ -66,7 +66,9 @@ test('persistent player simulation bypasses browser NPC AI and collision authori
 });
 
 test('new ephemeris is a separate purchase and projects an object orbit',()=>{
-  assert.match(app,/id="ephemeris-upgrade-btn"/);
+  const market=fs.readFileSync(path.join(root,'frontend/src/components/TechnologyMarket.vue'),'utf8');
+  assert.match(app,/<TechnologyMarket\s*\/>/);
+  assert.match(market,/ephemeris-upgrade-btn/);
   assert.match(game,/purchaseUpgrade\('ephemeris'\)/);
   assert.match(game,/function drawEphemeris\(\)/);
   assert.match(game,/NAV\.propagate\(target,180/);
@@ -83,8 +85,9 @@ test('panel headings are the only minimize controls, and Panels is left of Fulls
 });
 
 test('all four upgrades use distinct Dota-like square icon atlas regions',()=>{
+  const market=fs.readFileSync(path.join(root,'frontend/src/components/TechnologyMarket.vue'),'utf8');
   for(const kind of ['predictive','trajectory','rendezvous','ephemeris'])
-    assert.match(app,new RegExp('tech-icon--'+kind));
+    assert.match(market,new RegExp("key: '"+kind+"'"));
   const css=fs.readFileSync(path.join(root,'frontend/src/cockpit.css'),'utf8');
   assert.match(css,/ability-icons\.webp/);
   assert.match(css,/background-size:200% 200%/);
@@ -120,4 +123,31 @@ test('Rendezvous has a new single-icon monitor image independent of the atlas',(
   const icon=fs.readFileSync(path.join(root,'frontend/public/tech/rendezvous-monitor.webp'));
   assert.equal(icon.toString('ascii',0,4),'RIFF');
   assert.equal(icon.toString('ascii',8,12),'WEBP');
+});
+
+
+test('Ship and Technology panels are genuine Options API components on one typed state bridge',()=>{
+  const ship=fs.readFileSync(path.join(root,'frontend/src/components/ShipPanel.vue'),'utf8');
+  const market=fs.readFileSync(path.join(root,'frontend/src/components/TechnologyMarket.vue'),'utf8');
+  const bridge=fs.readFileSync(path.join(root,'frontend/src/services/cockpit.ts'),'utf8');
+  assert.match(app,/import ShipPanel from '\.\/components\/ShipPanel\.vue'/);
+  assert.match(app,/import TechnologyMarket from '\.\/components\/TechnologyMarket\.vue'/);
+  assert.match(app,/<ShipPanel\s*\/>/);
+  assert.match(app,/<TechnologyMarket\s*\/>/);
+  assert.match(ship,/defineComponent\(/);
+  assert.match(ship,/data\(\)/);
+  assert.match(ship,/data-vue-managed="true"/);
+  assert.match(ship,/id="ship-panel"/);
+  assert.match(market,/data-vue-managed="true"/);
+  assert.match(market,/@click="purchase\(offer\.key\)"/);
+  assert.match(bridge,/COCKPIT_STATE_EVENT = 'orbital-cockpit-state'/);
+  assert.match(bridge,/MARKET_PURCHASE_EVENT = 'orbital-market-purchase'/);
+  assert.match(game,/new CustomEvent\('orbital-cockpit-state'/);
+  assert.match(game,/window\.addEventListener\('orbital-market-purchase'/);
+  assert.match(game,/dataset\.vueManaged!=='true'/);
+});
+
+test('incoming additional allies are rendered and retain server authority',()=>{
+  assert.match(game,/state\.allies=mergeLiveBodies/);
+  assert.match(game,/for\(const ally of state\.allies\|\|\[\]\)drawShip\(ally\)/);
 });

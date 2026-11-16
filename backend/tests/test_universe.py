@@ -45,3 +45,68 @@ def test_combat_is_repeatable_given_the_same_world_time_and_initial_state():
     one=advance_sector(new_sector(0),10,pilot())[0]
     two=advance_sector(new_sector(0),10,pilot())[0]
     assert one==two
+
+
+
+def test_inbound_flyby_is_hyperbolic_and_orbit_intent_spends_propellant():
+    from app.universe import incoming_ship, resolve_arrival
+    from app.physics import orbital_envelope
+    import math
+    mu=310000
+    flyby=incoming_ship('raider-09', 0.6, 'flyby')
+    orbit=incoming_ship('ally-07', 0.4, 'orbit', True)
+    for vessel in (flyby,orbit):
+        r=math.hypot(vessel['x'],vessel['y'])
+        assert r>900
+        assert vessel['x']*vessel['vx']+vessel['y']*vessel['vy']<0
+        assert (vessel['vx']**2+vessel['vy']**2)/2-mu/r>0
+
+    sector={'events':[]}
+    target=orbit['insertionRadius']
+    orbit['x']=target
+    orbit['y']=0
+    orbit['vx']=0
+    orbit['vy']=math.sqrt(14**2+2*mu/target)
+    old_fuel=orbit['fuel']
+    resolve_arrival(sector,orbit,mu,33)
+    assert orbit['arrivalPhase']=='orbiting'
+    assert orbit['fuel']<old_fuel
+    r=math.hypot(orbit['x'],orbit['y'])
+    assert abs(math.hypot(orbit['vx'],orbit['vy'])-math.sqrt(mu/r))<1e-8
+    assert abs(orbit['x']*orbit['vx']+orbit['y']*orbit['vy'])<1e-8
+    assert 'entered' in sector['events'][-1]['message']
+
+    flyby['x']=target
+    flyby['y']=0
+    flyby['vx']=0
+    flyby['vy']=math.sqrt(14**2+2*mu/target)
+    old_flyby_fuel=flyby['fuel']
+    resolve_arrival(sector,flyby,mu,33)
+    assert flyby['arrivalPhase']=='approach'
+    assert flyby['fuel']==old_flyby_fuel
+
+
+def test_salvage_events_report_exact_amounts_and_capacity_limited_gains():
+    from app.universe import new_sector, advance_sector
+    import math
+    initial=pilot()
+    sector=new_sector(0)
+    sector['enemies']=[]
+    sector['ally']['alive']=False
+    sector['pickups']=[
+        {'id':'fuel-1','type':'fuel','amount':55,'alive':True,'phase':0,
+         'x':initial.x,'y':initial.y,'vx':initial.vx,'vy':initial.vy},
+        {'id':'wreck-1','type':'wreck','amount':50,'alive':True,'phase':0,
+         'x':initial.x,'y':initial.y,'vx':initial.vx,'vy':initial.vy},
+        {'id':'parts-1','type':'parts','amount':10,'alive':True,'phase':0,
+         'x':initial.x,'y':initial.y,'vx':initial.vx,'vy':initial.vy},
+    ]
+    sector['player']['repairParts']=22
+    state,effects=advance_sector(sector,.25,initial)
+    messages=[event['message'] for event in state['events']]
+    assert any('+50 ¤' in msg and '+12 rounds' in msg and '+2.0 kg spare parts' in msg for msg in messages)
+    assert not any('recovered fuel' in msg for msg in messages)  # Full tanks: no phantom gain.
+    assert not any('recovered parts' in msg for msg in messages)
+    assert state['player']['repairParts']==24
+    assert any(p['id']=='fuel-1' for p in state['pickups'])
+    assert any(p['id']=='parts-1' for p in state['pickups'])
