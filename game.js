@@ -129,6 +129,16 @@
   function flightControls(){
     const p=state.player,target=state.gimbalTarget;
     const desired=target?Math.atan2(target.y-p.y,target.x-p.x):p.heading;
+    if(state.autopilot){
+      const wanted=state.autoDirection;
+      if(!wanted)return {thrust:false,turn:0,stabilize:true,gimbal:0};
+      const angle=normAngle(Math.atan2(wanted.y,wanted.x)-p.heading);
+      const alpha=2*ENGINE.rcsN*ENGINE.leverM/(mass(p)*ENGINE.shipLengthM**2/12);
+      const error=clamp(2.7*angle,-1.9,1.9)-p.omega;
+      const turn=Math.abs(error)<alpha*.05*.4?0:Math.sign(error);
+      return {thrust:!!state.autoBurnAllowed&&p.fuel>state.autopilot.reserveKg,
+        turn,stabilize:false,gimbal:clamp(angle,-ENGINE.gimbalMax,ENGINE.gimbalMax)};
+    }
     return {
       thrust:!state.ended&&state.down.has('main'),
       turn:state.ended?0:Number(state.down.has('rotate-right'))-Number(state.down.has('rotate-left')),
@@ -242,14 +252,18 @@
     let dir=null;
     if(ship.isPlayer){
       const requested=autopilotStep(dt);
+      if(persistentFlight){state.autoDirection=requested;state.autoBurnAllowed=false;}
       const reserve=state.autopilot?.reserveKg||0;
       if(requested){
         if(autoAttitude(ship,dt,requested,reserve))dir=requested;
+        if(persistentFlight)state.autoBurnAllowed=!!dir;
       }else if(state.autopilot){
         const a=state.autopilot;
         const next=a.phase==='wait'?a.plan.dv1:a.phase==='coast'?a.plan.dv2:null;
-        if(next&&magnitude(next.x,next.y)>.01)autoAttitude(ship,dt,next,reserve);
-        else rcsControl(ship,dt,'stabilize',reserve);
+        if(next&&magnitude(next.x,next.y)>.01){
+          autoAttitude(ship,dt,next,reserve);
+          if(persistentFlight)state.autoDirection=unit(next.x,next.y);
+        }else rcsControl(ship,dt,'stabilize',reserve);
       }else{
         manualAttitude(ship,dt);
         if(state.down.has('main')){
@@ -671,10 +685,13 @@
   }
   function abortNav(message='Autopilot disengaged.'){
     if(!state.autopilot)return;
-    state.autopilot=null;logEvent(message);updateHud();
+    state.autopilot=null;state.autoDirection=null;state.autoBurnAllowed=false;
+    logEvent(message);updateHud();
   }
   function engageNav(){
-    if(persistentFlight){logEvent('Server autopilot not implemented yet; fly manually.','danger');return;}
+    if(persistentFlight&&!flightOnline){
+      logEvent('Reconnect to the flight server before engaging autopilot.','danger');return;
+    }
     if(!state.navOwned){logEvent('Buy the rendezvous computer to engage.');return;}
     const plan=state.navPlan&&state.navPlan.targetKey===$('nav-target').value&&state.t-state.navPlan.calculatedAt<1?state.navPlan:planNav();
     if(!plan)return;
@@ -683,7 +700,8 @@
     state.autopilot={targetKey:plan.targetKey,plan,phase:'wait',startAt:state.t+plan.wait,
       dueAt:state.t+plan.wait+plan.flight,remaining:{...plan.dv1},spentAtStart:state.player.fuel,
       maxSpendKg:safety.estimatedKg*safety.margin,reserveKg:safety.reserveKg};
-    state.down.clear();logEvent('Rendezvous autopilot engaged.','good');updateHud();
+    state.down.clear();state.autoDirection=null;state.autoBurnAllowed=false;
+    logEvent(persistentFlight?'Rendezvous guidance engaged · must remain connected.':'Rendezvous autopilot engaged.','good');updateHud();
   }
   function autopilotStep(dt){
     const a=state.autopilot;if(!a)return null;
@@ -884,9 +902,10 @@
     $('nav-eta').textContent=state.navPlan?state.navPlan.eta.toFixed(0)+' s':'—';
     $('nav-fuel').textContent=state.navPlan?SAFE.requiredFuel(mass(p),state.navPlan.dv,exhaustKmS).toFixed(1)+' kg (ideal)':'—';
     $('nav-engage').textContent=state.navOwned?'ENGAGE':'BUY NAV 60¤';
-    $('nav-engage').disabled=(persistentFlight&&state.navOwned)||state.ended||(!state.navOwned&&p.credits<60)||(state.navOwned&&(!state.navPlan||!!state.autopilot));
+    $('nav-engage').disabled=state.ended||(!state.navOwned&&p.credits<60)||
+      (state.navOwned&&(!state.navPlan||!!state.autopilot||(persistentFlight&&!flightOnline)));
     $('nav-abort').disabled=!state.autopilot;
-    $('nav-quick-status').textContent=persistentFlight&&state.navOwned?'INSTALLED · AUTO PENDING':state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED';
+    $('nav-quick-status').textContent=state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED';
     $('nav-quick-metrics').textContent=state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${state.navPlan.safety.estimatedKg.toFixed(1)} kg ideal · ${state.navPlan.safety.reserveKg.toFixed(0)} kg reserved`: 'Pick a contact · press C to calculate';
 
   }
@@ -1221,6 +1240,7 @@
           state.autopilot=null;
           logEvent('Live flight and technology connected. Combat remains local.','good');
         }else{
+          if(state.autopilot)abortNav('Connection lost; autopilot guidance halted.');
           // Keep the pilot read-only while offline: never silently switch to local authority.
           logEvent('Flight server disconnected. Inputs suspended; orbit will resume from server.','danger');
         }
