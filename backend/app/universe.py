@@ -131,7 +131,7 @@ def resolve_arrival(sector: dict, body: dict, mu: float, when: float):
         return
     body['vx'],body['vy'],body['fuel']=result.vx,result.vy,result.fuel_kg
     body['arrivalPhase']='orbiting'
-    sense='counterclockwise' if body['orbitDirection']>0 else 'clockwise'
+    sense='clockwise' if body['orbitDirection']>0 else 'counterclockwise'
     event(sector,when,f"{body['name']} entered a {radius:.0f} km {sense} orbit "
          f"(Δv {math.hypot(dvx,dvy):.1f} km/s; "
          f"{before-result.fuel_kg:.1f} kg propellant).",'good')

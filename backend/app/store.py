@@ -181,7 +181,7 @@ class WorldStore:
                 'intent': intent,
                 'faction': faction,
                 'initial_heading_deg': math.degrees(vessel['launchDirection']) % 360,
-                'orbit_direction': 'counterclockwise' if vessel['orbitDirection'] > 0 else 'clockwise',
+                'orbit_direction': 'clockwise' if vessel['orbitDirection'] > 0 else 'counterclockwise',
                 'ship_count': len(collection)
             }
 
