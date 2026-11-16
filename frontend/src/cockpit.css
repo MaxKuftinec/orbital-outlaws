@@ -190,3 +190,8 @@
 /* New capture upgrade has a dedicated CSS emblem, no atlas cell reused. */
 .upgrades .tech-icon.tech-icon--capture{background:radial-gradient(circle at 50% 50%,#194a51 0 18%,#071f37 20% 43%,#227b7c 44% 47%,#0b263a 49% 70%,#061827 74%);position:relative}
 .upgrades .tech-icon.tech-icon--capture::before{content:'⊙';position:absolute;inset:0;display:grid;place-items:center;color:#93f5e9;font-size:38px;text-shadow:0 0 12px #5df8de}
+
+/* Physical capture instrumentation: gameplay heat sink and accumulated cargo. */
+.capture-instruments{border-top:1px solid #2e4b62;margin-top:11px;padding-top:8px}
+.capture-instruments .metric-row{margin:5px 0}
+.capture-instruments .meter{height:5px;margin-bottom:7px}

@@ -1,10 +1,10 @@
-# Orbital Outlaws — v0.17 finite NPC rendezvous burns and salvage capture upgrade
+# Orbital Outlaws — v0.18 finite arrival AI, coordinated tactics and momentum-conserving capture
 
 A persistent 2D Newtonian orbital combat prototype using **Vue 3 + Vuetify (Options API)**, **FastAPI**, **PostgreSQL** and a bidirectional **WebSocket**.
 
 ## Current architecture
 
-- **Backend authority:** Flight state, RCS/thrust fuel, projectile creation, ammunition, hull damage, NPC target decisions, physically integrated NPC support/tactical thrust (scripted arrival burns remain impulsive), swept projectile/ship collisions, salvage and credits.
+- **Backend authority:** Flight state, RCS/thrust fuel, projectile creation, ammunition, hull damage, NPC target decisions, physically integrated NPC support/tactical thrust (all incoming arrival and insertion burns now use finite thrust), swept projectile/ship collisions, salvage and credits.
 - **Offline time:** The universe clock uses real wall-clock time. A pilot-sector checkpoint is **caught up by FastAPI on the next connection/query**. NPC decisions and collisions are resolved during the catch-up even if nobody kept a browser open. This is lazy offline simulation, not a dedicated continuously running background worker per pilot.
 - **Frontend prediction:** Browser renders player controls immediately at ~60 FPS and interpolates authoritative NPC positions. The client never submits NPC positions, kills or credit claims.
 - **Still limited:** Sectors are **per pilot**, not yet shared multiplayer space. Long-disconnect catch-up uses adaptive numerical timesteps and is a gameplay approximation, not an exact global causal event queue. There is no player authentication yet. These endpoints are development-only.
@@ -76,15 +76,42 @@ to match velocity. Propellant and spacecraft mass decrease continuously through
 Small combat-course adjustments now also use finite thrust, not instant velocity
 changes. The rescue remains a sampled **two-burn approximation**: it may miss and
 replan; it is not a global low-thrust optimizer or a fleet coordinator.
-Scripted inbound flyby/orbit-insertion maneuvers still use legacy idealized
-impulses and are a **separate future migration**.
+New inbound ships also use finite-duration main-engine burns. Their arrival controller
+samples candidate approach burns, predicts post-burn periapsis, retains the
+independent random 360° launch velocity, performs up to three course trims,
+and attempts finite orbital insertion before periapsis. A physically infeasible
+arrival can miss or fail; the simulation never awards a free instant orbit.
 
 A rescue transfer is never awarded merely because a route was calculated.
 The donor must physically come within 18 km at under 2.5 km/s relative speed.
-A new UI upgrade, **Salvage Capture Rig** (55 ¤), raises the server-side pickup
-relative-speed threshold from 5 km/s to 8 km/s without changing the 19 km capture
-range. Very fast flybys still do not yield rewards. The rig is a gameplay
-approximation, not yet a fully simulated momentum-exchange tractor mechanism.
+The **Salvage Capture Rig** (55 ¤) raises the contact threshold from 5 km/s
+to 8 km/s, but never guarantees a capture. A 2D inelastic grapple computes
+the incoming payload mass and relative momentum; the ship's velocity changes
+to their combined center-of-mass velocity and the lost relative kinetic
+energy heats a bounded sink. Basic capture heat capacity is 520 MJ, upgraded
+capacity is 1,300 MJ, and 8 MJ/s radiates away. Payload limits are 150 kg
+basic / 240 kg upgraded; a massive/high-speed wreck can still be rejected.
+The HUD displays grapple heat and acquired cargo. Non-fuel material contributes
+real dry/cargo mass and makes later acceleration more expensive. Fuel containers
+and parts capsules can be partly emptied without deleting remaining salvage.
+The thermal model is simplified: no actual multi-second tether payout, hull
+stress, ammo round ejection or globally tracked debris destruction yet.
+
+### v0.18 coordinated NPC decision making and capture dynamics
+
+`backend/app/arrival_guidance.py` samples candidate finite approach/insertion
+burns and uses post-burn orbit elements for corrections and risk refusal.
+`backend/app/npc_intelligence.py` forecasts short-horizon close approaches,
+assigns allied intercept targets across available friendlies, prioritizes the
+player's defense, gives raiders future-range target selection, and queues
+fuel-constrained finite evasive burns. Rescue craft can perform up to two
+midcourse corrections before terminal velocity matching; donor selection
+avoids predicted hazardous orbits when possible. These are **bounded policies**,
+not a global fleet strategic planner or optimal-control solver.
+
+`backend/app/capture_physics.py` conserves capture momentum and accounts for
+energy absorbed by an inelastic grapple as stored/radiated heat. Crew G-loads,
+tether dynamics and waste heat engine penalties are next-stage realism work.
 
 ### Spawn incoming raiders or allies from FastAPI (development only)
 
@@ -98,7 +125,7 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/dev/players/$pilot/ra
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/dev/players/$pilot/allies"
 ```
 
-Each successful request adds one uniquely identified ship to the pilot's persistent sector; it appears in the next WebSocket snapshot. The pilot must already exist. Both factions spawn **outside** the operational orbital region, with independent uniformly random **360° initial velocity direction** (speed 20–32 km/s). After 2.5 seconds, their mission computer burns propellant to steer onto a targeted hyperbolic Kestrel approach. A fair 50/50 decision chooses **flyby** (approach burn only, then depart) or **orbit insertion** (an additional circularization burn near periapsis). The chosen orbital sense is based on initial angular momentum, so visitors may orbit in either direction. The response includes `intent`, faction, initial heading, orbital sense, and new ship ID. These are idealized instantaneous impulses, not finite-duration thruster maneuvers. Initial sector residents retain their existing established orbits. This endpoint requires `ORBITAL_DEV_COMMANDS=1`; it has **no user authentication**, so keep the backend bound to a trusted development network and never enable these commands on a public service.
+Each successful request adds one uniquely identified ship to the pilot's persistent sector; it appears in the next WebSocket snapshot. The pilot must already exist. Both factions spawn **outside** the operational orbital region, with independent uniformly random **360° initial velocity direction** (speed 20–32 km/s). After 2.5 seconds, their mission computer selects a safe finite approach burn using predicted post-burn periapsis and real fuel consumption. A fair 50/50 decision chooses **flyby** (approach burn only, then depart) or **orbit insertion** (an additional circularization burn near periapsis). The chosen orbital sense is based on initial angular momentum, so visitors may orbit in either direction. The response includes `intent`, faction, initial heading, orbital sense, and new ship ID. All of these NPC approach and insertion maneuvers now consume fuel during actual finite engine burns. The pilot still chooses their own arrival intention. Initial sector residents retain their existing established orbits. This endpoint requires `ORBITAL_DEV_COMMANDS=1`; it has **no user authentication**, so keep the backend bound to a trusted development network and never enable these commands on a public service.
 
 ### Respawn a destroyed pilot (development only)
 

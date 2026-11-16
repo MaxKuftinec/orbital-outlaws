@@ -9,6 +9,9 @@ import math
 import secrets
 from .physics import State, propagate, apply_impulse, orbital_envelope
 from .npc_guidance import plan_transfer, queue_burn, move_with_burn
+from .arrival_guidance import desired_approach, resolve_arrival as advance_arrival, ACTIVE_ARRIVAL
+from .capture_physics import assess_capture, payload_mass, cool_capture_system
+from .npc_intelligence import risk_report, evasive_burn, coordinate_allies, choose_raider_target
 
 MU = 310000.0
 BODY_RADIUS = 91.0
@@ -72,70 +75,13 @@ def incoming_ship(id: str, angle: float, intent: str, ally: bool = False,
 
 
 def arrival_course(body: dict, mu: float) -> tuple[float, float]:
-    """Hyperbolic Kestrel approach with a specified periapsis and orbit sense."""
-    x,y=body['x'],body['y']
-    radius=math.hypot(x,y)
-    peri=body['insertionRadius']
-    vinf=body['arrivalVInfinity']
-    tangential=peri*math.sqrt(vinf*vinf+2*mu/peri)/radius
-    inward=math.sqrt(max(0.,vinf*vinf+2*mu/radius-tangential*tangential))
-    orbit_sign=body['orbitDirection']
-    return (-inward*x/radius-orbit_sign*tangential*y/radius,
-            -inward*y/radius+orbit_sign*tangential*x/radius)
+    """Compatibility wrapper; approach choice is implemented by finite guidance."""
+    return desired_approach(body,mu)
 
 
 def resolve_arrival(sector: dict, body: dict, mu: float, when: float):
-    """Intention-driven impulses: first aim an encounter, then optionally capture."""
-    if not body.get('alive', True):
-        return
-    if body.get('arrivalPhase') == 'launch':
-        if when < body['courseBurnAt']:
-            return
-        target_vx,target_vy=arrival_course(body,mu)
-        dvx,dvy=target_vx-body['vx'],target_vy-body['vy']
-        try:
-            result=apply_impulse(state_of(body),dvx,dvy,320.,reserve_kg=100.)
-        except ValueError:
-            body['arrivalPhase']='failed'
-            event(sector,when,body['name']+' lacks fuel for approach correction.', 'danger')
-            return
-        before=body['fuel']
-        body['vx'],body['vy'],body['fuel']=result.vx,result.vy,result.fuel_kg
-        body['arrivalPhase']='approach'
-        event(sector,when,f"{body['name']} executed {body['arrivalIntent']} approach burn "
-              f"(Δv {math.hypot(dvx,dvy):.1f} km/s; "
-              f"{before-result.fuel_kg:.1f} kg propellant).",'neutral')
-    if body.get('arrivalPhase') != 'approach':
-        return
-    radius=math.hypot(body['x'],body['y'])
-    radial=(body['x']*body['vx']+body['y']*body['vy'])/radius
-    if body['arrivalIntent']=='flyby':
-        if radial>0 and radius>650:
-            body['arrivalPhase']='departed'
-            event(sector,when,body['name']+' completed its Kestrel flyby.','neutral')
-        return
-    if radius>body['insertionRadius']+24:
-        if radial>0 and radius>body['insertionRadius']+80:
-            body['arrivalPhase']='missed'
-            event(sector,when,body['name']+' missed its orbit insertion window.','danger')
-        return
-    tangent_x,tangent_y=-body['y']/radius,body['x']/radius
-    circular_speed=math.sqrt(mu/radius)*body['orbitDirection']
-    dvx=circular_speed*tangent_x-body['vx']
-    dvy=circular_speed*tangent_y-body['vy']
-    before=body['fuel']
-    try:
-        result=apply_impulse(state_of(body),dvx,dvy,320.,reserve_kg=8.)
-    except ValueError:
-        body['arrivalPhase']='failed'
-        event(sector,when,body['name']+' could not afford orbit insertion; flyby continues.','danger')
-        return
-    body['vx'],body['vy'],body['fuel']=result.vx,result.vy,result.fuel_kg
-    body['arrivalPhase']='orbiting'
-    sense='clockwise' if body['orbitDirection']>0 else 'counterclockwise'
-    event(sector,when,f"{body['name']} entered a {radius:.0f} km {sense} orbit "
-         f"(Δv {math.hypot(dvx,dvy):.1f} km/s; "
-         f"{before-result.fuel_kg:.1f} kg propellant).",'good')
+    advance_arrival(body,mu,when,
+                    lambda message,kind='neutral':event(sector,when,message,kind))
 
 
 def new_sector(world_time: float, mu: float = MU) -> dict:
@@ -154,7 +100,8 @@ def new_sector(world_time: float, mu: float = MU) -> dict:
                 pod('starter-parts-0', 295, 1.1, 'parts', 8)],
             'shots': [], 'shotCounter': 0, 'nextRaiderId': 3, 'nextAllyId': 2,
             'allies': [], 'player': {'hp': 100., 'ammo': 36, 'repairParts': 10.,
-                                    'alive': True, 'gunReady': world_time},
+                                    'alive': True, 'gunReady': world_time,
+            'cargoKg':0., 'captureHeatMJ':0., 'captureRadiatedMJ':0., 'captureHeatProducedMJ':0.},
             'events': [], 'reinforcements': False, 'nextEnemySpawn': world_time+75,
             'playerKills': 0, 'collisionCooldown': {}, 'assistance': []}
 
@@ -209,7 +156,7 @@ def destroy(sector: dict, body: dict, when: float, cause: str):
     sector['pickups'].append({
         **{k: body[k] for k in ('x', 'y', 'vx', 'vy')},
         'id': 'wreck-'+body['id'], 'type': 'wreck', 'amount': 50,
-        'phase': 0., 'alive': True
+        'phase': 0., 'alive': True, 'massKg':120.
     })
 
 
@@ -260,7 +207,7 @@ def guide_fuel_donor(donor: dict, recipient: dict, mu: float,
     Exact Kepler coast predictions and Newton shooting choose affordable,
     body-clearing future intersections. Executing the result uses finite thrust.
     """
-    if donor.get('burn') or donor.get('arrivalPhase') in ('launch', 'approach') or recipient.get('arrivalPhase') in ('launch', 'approach'):
+    if donor.get('burn') or donor.get('arrivalPhase') in ACTIVE_ARRIVAL or recipient.get('arrivalPhase') in ACTIVE_ARRIVAL:
         return False
     plan = plan_transfer(donor, recipient, mu)
     if plan is None:
@@ -297,6 +244,42 @@ def update_support_navigation(sector: dict, order: dict, donor: dict,
             nav['phase'] = 'coast' if math.hypot(dx, dy) < .025 else 'failed'
     elif phase == 'departure' and not donor.get('burn'):
         nav['phase'] = 'coast'
+    elif phase == 'correction' and not donor.get('burn'):
+        nav['phase']='coast'
+    elif (phase == 'coast' and
+          when < nav['dueAt'] - nav['burn2Sec'] - 8. and
+          when >= nav['startAt']+nav['burn1Sec']+7. and
+          nav.get('corrections',0) < 2 and
+          when >= nav.get('nextCorrectionAt',0.)):
+        # Reproject the physically flown (finite burn) trajectory and adjust
+        # position error before terminal velocity matching.
+        nav['nextCorrectionAt']=when+10.
+        remaining=nav['dueAt']-when
+        try:
+            projected=propagate(state_of(donor),remaining,mu)
+            destination=propagate(state_of(recipient),remaining,mu)
+            ex=destination.x-projected.x
+            ey=destination.y-projected.y
+            mismatch=math.hypot(ex,ey)
+            if mismatch>9. and donor['fuel']>45.:
+                dvx=.65*ex/max(6.,remaining)
+                dvy=.65*ey/max(6.,remaining)
+                amplitude=math.hypot(dvx,dvy)
+                if amplitude>1.:
+                    dvx/=amplitude
+                    dvy/=amplitude
+                future=state_of(donor)
+                safety=State(future.x,future.y,future.vx+dvx,future.vy+dvy,
+                             future.mass_kg,future.fuel_kg)
+                peri,_=orbital_envelope(safety,mu)
+                if peri>BODY_RADIUS+12. and queue_burn(
+                        donor,dvx,dvy,reserve_kg=35.,reason='support-midcourse'):
+                    nav['phase']='correction'
+                    nav['corrections']=nav.get('corrections',0)+1
+                    event(sector,when,f"{donor['name']} correcting rendezvous "
+                          f"trajectory ({mismatch:.1f} km projected miss).",'neutral')
+        except (ValueError,OverflowError,ZeroDivisionError):
+            pass
     elif phase == 'coast' and when >= nav['dueAt'] - nav['burn2Sec'] - 1.:
         # Terminal velocity matching, with a small bounded position correction
         # for the real departure burn's finite duration.
@@ -346,10 +329,12 @@ def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list
             if not recipient.get('alive', True) or recipient['id'] in involved or recipient.get('fuel', 0) >= .18*capacity:
                 continue
             donors = [b for b in fleet if b['id'] not in involved and b['id'] != recipient['id']
-                      and b.get('alive', True) and b.get('arrivalPhase') not in ('launch', 'approach')
+                      and b.get('alive', True) and b.get('arrivalPhase') not in ACTIVE_ARRIVAL
                       and b.get('fuel', 0) > max(55., .35*b.get('fuelMax', 170.))]
             if donors:
-                donor = min(donors, key=lambda b: distance(b, recipient))
+                donor = min(donors,key=lambda b:
+                    (2000. if risk_report(b,[player,*allies,*enemies],mu)['level']!='nominal' else 0.)+
+                    distance(b,recipient)+max(0.,90.-b['fuel'])*4.)
                 orders.append({'recipient': recipient['id'], 'donor': donor['id'],
                                'faction': faction, 'createdAt': when, 'nextDecision': when})
                 involved.update((recipient['id'], donor['id']))
@@ -369,10 +354,12 @@ def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list
         if not order.get('donor'):
             candidates = [a for a in allies if a.get('alive', True) and
                           a['id'] not in reserved_donors and a['id'] != recipient['id']
-                          and a.get('arrivalPhase') not in ('launch', 'approach')
+                          and a.get('arrivalPhase') not in ACTIVE_ARRIVAL
                           and a.get('fuel', 0) > 55.]
             if candidates:
-                donor = min(candidates, key=lambda a: distance(a, recipient))
+                donor = min(candidates,key=lambda a:
+                    (2000. if risk_report(a,[player,*allies,*enemies],mu)['level']!='nominal' else 0.)+
+                    distance(a,recipient)+max(0.,90.-a['fuel'])*4.)
                 order['donor'] = donor['id']
                 reserved_donors.add(donor['id'])
             else:
@@ -392,12 +379,27 @@ def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list
         if distance(donor, recipient) <= 18. and relative < 2.5:
             donor.pop('burn', None)
             moved = min(35., surplus, need)
+            # Physically transfer propellant with donor inertial momentum.
+            # The receiving ship accelerates toward the donor velocity; the
+            # difference is dissipated as hose/grapple heat, not free Δv.
+            incoming_x=donor['vx']-recipient['vx']
+            incoming_y=donor['vy']-recipient['vy']
+            receiver_mass=recipient.get('mass_kg',recipient.get('dryMass',1050.)+recipient['fuel'])
+            ratio=moved/(receiver_mass+moved)
+            dvx,dvy=ratio*incoming_x,ratio*incoming_y
+            thermal_mj=.5*receiver_mass*moved/(receiver_mass+moved)*relative**2
             donor['fuel'] -= moved
             recipient['fuel'] += moved
+            recipient['vx'] += dvx
+            recipient['vy'] += dvy
+            recipient['transferHeatMJ']=recipient.get('transferHeatMJ',0.)+thermal_mj
             if recipient.get('isPlayer'):
                 effects['fuel'] += moved
+                effects['player_dvx'] = effects.get('player_dvx',0.) + dvx
+                effects['player_dvy'] = effects.get('player_dvy',0.) + dvy
+                recipient['mass_kg'] = receiver_mass + moved
             event(sector, when, f"{donor['name']} transferred {moved:.1f} kg propellant to "
-                  f"{recipient['name']} (matched velocity, {relative:.2f} km/s).", 'good')
+                  f"{recipient['name']} ({relative:.2f} km/s relative; {thermal_mj:.1f} MJ damped).", 'good')
             continue
         if not order.get('navigation') and not donor.get('burn') and when >= order.get('nextDecision', 0):
             planned = guide_fuel_donor(donor, recipient, mu, when, order)
@@ -420,8 +422,10 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
     tunnelling through fast-moving ships. This is a pilot-sector prototype.
     """
     if seconds <= 0:
-        return sector, {'credits': 0, 'fuel': 0, 'player_dvx': 0., 'player_dvy': 0.}
-    effects = {'credits': 0, 'fuel': 0, 'player_dvx': 0., 'player_dvy': 0.}
+        return sector, {'credits': 0, 'fuel': 0, 'player_dvx': 0., 'player_dvy': 0.,
+                        'capture_cargo_mass':0., 'capture_heat_mj':0.}
+    effects = {'credits': 0, 'fuel': 0, 'player_dvx': 0., 'player_dvy': 0.,
+               'capture_cargo_mass':0., 'capture_heat_mj':0.}
     capture_limit = 8. if (upgrades or {}).get('capture') else 5.
     player = {**start_player.as_dict(), **sector['player'],
               'name': 'KESTREL-7', 'id': 'player', 'isPlayer': True,
@@ -431,6 +435,7 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
     time_step = max(.25, min(12., seconds / 15000))
     while elapsed < seconds-1e-8:
         dt = min(time_step, seconds-elapsed)
+        cool_capture_system(player,dt)
         when = sector['t']+dt
         allies = [sector['ally'], *sector.get('allies', [])]
         bodies = [player, *allies, *sector['enemies']]
@@ -446,27 +451,61 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
         support_orders(sector, player, allies, sector['enemies'], when, mu, effects)
         active_donors = {o.get('donor') for o in sector.get('assistance', [])}
         enemy_list=[b for b in sector['enemies'] if b.get('alive',True)]
+        if when>=sector.get('nextTacticalCouncil',0.):
+            previous_roles={a['id']:(a.get('tacticalRole'),a.get('tacticalTarget')) for a in allies}
+            coordinate_allies(sector,player,allies,enemy_list,active_donors,mu)
+            for ally in allies:
+                before=previous_roles.get(ally['id'])
+                now_role=(ally.get('tacticalRole'),ally.get('tacticalTarget'))
+                if before!=now_role and ally.get('alive',True):
+                    target=ally.get('tacticalTarget')
+                    event(sector,when,f"{ally['name']} tactical role: {ally.get('tacticalRole','patrol')}"
+                          +(f"; intercepting {target}." if target else "."),'neutral')
+            sector['nextTacticalCouncil']=when+6.
+        by_ship={body['id']:body for body in bodies}
+
         for ally in allies:
-            if not ally.get('alive',True) or ally.get('arrivalPhase')=='approach':
+            if not ally.get('alive',True) or ally.get('arrivalPhase') in ACTIVE_ARRIVAL:
                 continue
-            if enemy_list:
-                near=min(enemy_list,key=lambda b:distance(b,ally))
-                if distance(near,ally)<460:
-                    fire(sector,ally,near,when,'ally')
-        for enemy in sector['enemies']:
-            if not enemy.get('alive',True):
-                continue
+            chosen=by_ship.get(ally.get('tacticalTarget'))
+            if not chosen or not chosen.get('alive',True) or chosen not in enemy_list:
+                chosen=min(enemy_list,key=lambda e:distance(ally,e)) if enemy_list else None
+            if chosen and distance(chosen,ally)<460:
+                fire(sector,ally,chosen,when,'ally')
+            if when>=ally.get('nextDecision',0.) and ally['id'] not in active_donors:
+                danger=risk_report(ally,[player,*allies,*enemy_list],mu)
+                ally['tacticalRisk']=danger['level']
+                if evasive_burn(ally,danger,[player,*allies,*enemy_list],mu):
+                    event(sector,when,f"{ally['name']} initiated finite evasive burn "
+                          f"({danger['level']}).",'neutral')
+                else:
+                    if chosen and ally.get('fuel',0.)>75. and distance(ally,chosen)>160.:
+                        change_velocity(ally,chosen,mu,min_fuel=45.,max_range=520.)
+                ally['nextDecision']=when+7.
+
+        for enemy in enemy_list:
+            chosen=by_ship.get(enemy.get('tacticalTarget'))
             candidates=[b for b in (player,*allies) if b.get('alive',True)]
-            if not candidates:
+            if not chosen or not chosen.get('alive',True) or chosen not in candidates:
+                chosen=choose_raider_target(enemy,player,allies,mu)
+            if not chosen:
                 continue
-            target=min(candidates,key=lambda b:distance(b,enemy))
-            if enemy.get('arrivalPhase') not in ('approach','departed','failed'):
-                if when>=enemy.get('nextDecision',0):
+            if enemy.get('arrivalPhase') in (None,'orbiting','failed','missed'):
+                if when>=enemy.get('nextDecision',0.):
+                    chosen=choose_raider_target(enemy,player,allies,mu) or chosen
+                    enemy['tacticalTarget']=chosen['id']
+                    danger=risk_report(enemy,[player,*allies,*enemy_list],mu)
+                    enemy['tacticalRisk']=danger['level']
                     if enemy['id'] not in active_donors:
-                        change_velocity(enemy,target,mu)
+                        if evasive_burn(enemy,danger,[player,*allies,*enemy_list],mu):
+                            event(sector,when,f"{enemy['name']} initiated finite evasive burn "
+                                  f"({danger['level']}).",'neutral')
+                        else:
+                            if enemy.get('fuel',0.)>35.:
+                                change_velocity(enemy,chosen,mu,min_fuel=30.)
                     enemy['nextDecision']=when+7.
-            if distance(enemy,target)<310:
-                fire(sector,enemy,target,when,'raider')
+            if distance(enemy,chosen)<310:
+                fire(sector,enemy,chosen,when,'raider')
 
         for body in bodies:
             if not body.get('alive',True):
@@ -476,7 +515,7 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
             if was_alive and not body.get('alive',True):
                 body['hp']=0
                 event(sector,when,body['name']+' impacted Kestrel.','danger')
-            if body.get('alive',True) and body.get('arrivalPhase') in ('launch','approach'):
+            if body.get('alive',True) and body.get('arrivalPhase') in ACTIVE_ARRIVAL:
                 resolve_arrival(sector,body,mu,when)
         for pickup in sector['pickups']:
             move(pickup,dt,mu)
@@ -521,8 +560,8 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
                 damage=min(95.,impact*6)
                 a['hp']=max(0,a['hp']-damage);b['hp']=max(0,b['hp']-damage)
                 # Equal-and-opposite momentum impulse, evaluated at contact.
-                m1=a.get('dryMass',900)+a.get('fuel',0)
-                m2=b.get('dryMass',1050)+b.get('fuel',0)
+                m1=a.get('mass_kg',a.get('dryMass',900)+a.get('fuel',0))
+                m2=b.get('mass_kg',b.get('dryMass',1050)+b.get('fuel',0))
                 j=-(1+.2)*(rvx*nx+rvy*ny)/(1/m1+1/m2)
                 if j>0:
                     a['vx']-=j*nx/m1;a['vy']-=j*ny/m1
@@ -548,14 +587,26 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
                                hit_swept(start_player_pos, player, start_pickup_pos, pickup, 19.))
                 if not encountered and distance(player, pickup) > 19.:
                     continue
-                relative_speed = math.hypot(pickup['vx']-player['vx'], pickup['vy']-player['vy'])
-                if relative_speed >= capture_limit:
-                    if when-pickup.get('lastFastPassAt', -1e9) > 12.:
-                        pickup['lastFastPassAt'] = when
-                        event(sector, when, f"Salvage {pickup['id']} flyby at {relative_speed:.1f} km/s "
-                              f"(capture requires relative speed below {capture_limit:.0f} km/s).", 'neutral')
+                kind=pickup['type']
+                amount=pickup['amount']
+                # Materialize only what fits in storage. A partly emptied fuel
+                # or parts container remains available for another attempt.
+                fuel_need=min(amount,max(0.,200.-player['fuel'])) if kind=='fuel' else 0.
+                spare_need=min(amount,max(0.,24.-player['repairParts'])) if kind=='parts' else 0.
+                if kind=='fuel' and fuel_need < .00001:
                     continue
-                kind=pickup['type'];amount=pickup['amount']
+                if kind=='parts' and spare_need < .00001:
+                    continue
+                recovered = fuel_need if kind=='fuel' else spare_need if kind=='parts' else amount
+                mass = payload_mass(pickup,recovered)
+                decision = assess_capture(player,pickup,mass,bool((upgrades or {}).get('capture')))
+                if not decision.ok:
+                    if when-pickup.get('lastCaptureDeniedAt',-1e9) > 12.:
+                        pickup['lastCaptureDeniedAt']=when
+                        event(sector,when,f"Salvage {pickup['id']} flyby at "
+                              f"{decision.relative_km_s:.1f} km/s; "
+                              f"{decision.reason}.",'neutral')
+                    continue
                 gains=[]
                 if kind=='credits':
                     effects['credits']+=amount
@@ -571,26 +622,43 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
                     player['ammo']+=amount
                     gains.append(f'+{amount} rounds')
                 elif kind=='parts':
-                    spare=min(amount,max(0.,24.-player['repairParts']))
-                    if spare:
-                        player['repairParts']+=spare
-                        gains.append(f'+{spare:.1f} kg spare parts')
+                    player['repairParts']+=spare_need
+                    gains.append(f'+{spare_need:.1f} kg spare parts')
                 elif kind=='fuel':
-                    fuel=min(amount,max(0.,200-start_player.fuel_kg-effects['fuel']))
-                    if fuel:
-                        effects['fuel']+=fuel
-                        gains.append(f'+{fuel:.1f} kg propellant')
+                    player['fuel']+=fuel_need
+                    effects['fuel']+=fuel_need
+                    gains.append(f'+{fuel_need:.1f} kg propellant')
                 if not gains:
-                    continue  # Keep full-capacity salvage in the world for later.
-                pickup['alive']=False
-                event(sector,when,f"KESTREL-7 recovered {kind}: "
-                      +', '.join(gains)+'.','good')
+                    continue
+                # Inelastic coupling: momentum is conserved across incoming mass
+                # and KESTREL-7; lost relative kinetic energy is stored as heat.
+                player['vx']+=decision.dvx
+                player['vy']+=decision.dvy
+                player['mass_kg']+=decision.mass_kg
+                if kind!='fuel':
+                    player['dryMass']+=decision.mass_kg
+                    player['cargoKg']=player.get('cargoKg',0.)+decision.mass_kg
+                    effects['capture_cargo_mass']+=decision.mass_kg
+                effects['player_dvx']+=decision.dvx
+                effects['player_dvy']+=decision.dvy
+                player['captureHeatMJ']+=decision.heat_mj
+                player['captureHeatProducedMJ']+=decision.heat_mj
+                effects['capture_heat_mj']+=decision.heat_mj
+                if kind in ('fuel','parts') and recovered < amount-.00001:
+                    pickup['amount']=amount-recovered
+                    # The remaining debris stays on its previous orbit.
+                else:
+                    pickup['alive']=False
+                event(sector,when,f"KESTREL-7 captured {kind}: "
+                      +', '.join(gains)+f". Absorbed {decision.heat_mj:.1f} MJ; "
+                      f"momentum correction {math.hypot(decision.dvx,decision.dvy):.3f} km/s.",'good')
         sector['shots']=[shot for shot in sector['shots'] if shot.get('alive',True)]
         sector['pickups']=[p for p in sector['pickups'] if p.get('alive',True)]
         elapsed+=dt
         sector['t']=when
-    for field in ('hp','ammo','repairParts','alive','gunReady'):
-        sector['player'][field]=player[field]
+    for field in ('hp','ammo','repairParts','alive','gunReady','cargoKg',
+                  'captureHeatMJ','captureRadiatedMJ','captureHeatProducedMJ','transferHeatMJ'):
+        sector['player'][field]=player.get(field,0.)
     return sector,effects
 
 

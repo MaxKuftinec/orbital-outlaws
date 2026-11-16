@@ -53,6 +53,7 @@
       fuel:isPlayer?ENGINE.propellantKg:rand(120,170),fuelMax:isPlayer?ENGINE.propellantKg:170,
       dryMass:isPlayer?ENGINE.dryKg:1050,ammo:isPlayer?36:999,credits:isPlayer?65:0,
       repairParts:isPlayer?REPAIR.starterKg:0,isAlly:false,
+      cargoKg:0,captureHeatMJ:0,captureRadiatedMJ:0,captureHeatProducedMJ:0,
       thrustN:isPlayer?ENGINE.thrustN:1400000,flowKgS:isPlayer?ENGINE.flowKgS:4.8,
       gunCooldown:isPlayer?0:rand(2.2,4),aiThrustUntil:0,aiThrustKind:null,nextDecision:rand(4,9),
       trail:[],trailT:0,alive:true,heading:Math.atan2(orbit.vy,orbit.vx),omega:0,
@@ -151,6 +152,10 @@
       const p=state.player,info=saved.player;
       const revived=!p.alive&&info.alive;
       p.hp=info.hp;p.ammo=info.ammo;p.repairParts=info.repairParts;p.alive=info.alive;
+      p.cargoKg=info.cargoKg||0;
+      p.captureHeatMJ=info.captureHeatMJ||0;
+      p.captureRadiatedMJ=info.captureRadiatedMJ||0;
+      p.captureHeatProducedMJ=info.captureHeatProducedMJ||0;
       if(revived){
         state.ended=false;state.autopilot=null;state.navPlan=null;state.down.clear();
         state.panX=-p.x*scale();state.panY=-p.y*scale();
@@ -178,7 +183,28 @@
   function renderServerBodies(dt){
     for(const body of [state.ally,...(state.allies||[]),...state.enemies,...state.pickups,...state.shots]){
       if(!body?.alive)continue;
-      stepBody(body,dt);
+      // Visually extrapolate authoritative finite NPC engine burns. The server
+      // still owns actual fuel, mass, velocity and burn completion.
+      const burn=body.burn;
+      if(burn && body.fuel>burn.reserveKg && burn.remainingDv>.0001){
+        const m=body.dryMass+body.fuel,needed=m*(1-Math.exp(-burn.remainingDv/320));
+        const spent=Math.max(0,Math.min(5*dt,body.fuel-burn.reserveKg,needed));
+        const burnDt=spent/5;
+        if(spent>0 && burnDt>0){
+          const [ux,uy]=burn.direction;
+          const acceleration=1600000/(Math.max(1,m-spent/2)*1000);
+          stepBody(body,burnDt,{x:ux*acceleration,y:uy*acceleration});
+          body.fuel-=spent;
+          burn.remainingDv=Math.max(0,burn.remainingDv-320*Math.log(m/(m-spent)));
+          body.heading=Math.atan2(uy,ux);
+          body.thrustVector={x:ux,y:uy};
+          if(burn.remainingDv<=.0001)body.burn=null;
+          if(dt>burnDt)stepBody(body,dt-burnDt);
+        }else stepBody(body,dt);
+      }else{
+        stepBody(body,dt);
+        body.thrustVector=null;
+      }
       body.heading=normAngle((body.heading||0)+(body.omega||0)*dt);
       if(body._netCorrection){
         const f=1-Math.exp(-11*dt);
@@ -468,6 +494,9 @@
     applyShipStep(player,dt);
     if(state.ended)return;
     state.repairing=state.down.has('repair')&&repairHull(player,dt);
+    const cooling=Math.min(player.captureHeatMJ||0,8*dt);
+    player.captureHeatMJ=Math.max(0,(player.captureHeatMJ||0)-cooling);
+    player.captureRadiatedMJ=(player.captureRadiatedMJ||0)+cooling;
     const ally=state.ally;
     if(ally.alive){
       applyShipStep(ally,dt);
@@ -581,25 +610,60 @@
     
   }
   function collect(pod) {
-    pod.alive=false;
     const p=state.player;
-    if(pod.type==='fuel') {
-      if(persistentFlight) logEvent('Fuel salvage is not yet persistent.','danger');
-      else {p.fuel=Math.min(p.fuelMax,p.fuel+pod.amount);logEvent('Recovered '+pod.amount+' kg propellant.','good');}
+    const massBefore=mass(p),heatLimit=state.captureOwned?1300:520;
+    const amount=pod.amount||0;
+    const fuelGain=pod.type==='fuel'?Math.min(amount,p.fuelMax-p.fuel):0;
+    const partsGain=pod.type==='parts'?Math.min(amount,REPAIR.capacityKg-p.repairParts):0;
+    if(pod.type==='fuel'&&fuelGain<=0||pod.type==='parts'&&partsGain<=0)return;
+    const incomingMass=pod.type==='fuel'?fuelGain:
+      pod.type==='parts'?partsGain:pod.type==='ammo'?amount*.12:
+      pod.type==='credits'?2:pod.type==='wreck'?(pod.massKg||120):0;
+    const relV=magnitude(pod.vx-p.vx,pod.vy-p.vy);
+    const reducer=massBefore*incomingMass/(massBefore+incomingMass);
+    const heatMJ=.5*reducer*relV*relV;
+    const maxMass=state.captureOwned?240:150;
+    if(!incomingMass||incomingMass>maxMass||relV>=(state.captureOwned?8:5)||
+       (p.captureHeatMJ||0)+heatMJ>heatLimit){
+      if(state.t-(pod.lastCaptureDeniedAt||-1e9)>12){
+        pod.lastCaptureDeniedAt=state.t;
+        logEvent('Capture rejected: speed, grapple mass or heat-sink limit exceeded.','danger');
+      }
+      return;
     }
-    if(pod.type==='ammo') {p.ammo+=pod.amount;logEvent('Recovered '+pod.amount+' ballistic rounds.','good');}
-    if(pod.type==='credits'){p.credits+=pod.amount;logEvent('Recovered '+pod.amount+' salvage credits.','good');}
-    if(pod.type==='parts') {const received=Math.min(pod.amount,REPAIR.capacityKg-p.repairParts);p.repairParts+=received;logEvent(received>0?'Recovered '+received.toFixed(1)+' kg repair materials.':'Repair storage already full.','good');}
-    if(pod.type==='wreck') {
-      p.credits+=50;p.fuel=Math.min(p.fuelMax,p.fuel+25);
-      p.ammo+=12;
-      const parts=Math.min(6,REPAIR.capacityKg-p.repairParts);p.repairParts+=parts;
-      logEvent('Wreck salvaged. Ammo/repair parts are still local.','good');
+    const ratio=incomingMass/(massBefore+incomingMass);
+    p.vx+=ratio*(pod.vx-p.vx);
+    p.vy+=ratio*(pod.vy-p.vy);
+    p.captureHeatMJ=(p.captureHeatMJ||0)+heatMJ;
+    p.captureHeatProducedMJ=(p.captureHeatProducedMJ||0)+heatMJ;
+    if(pod.type==='fuel'){p.fuel+=fuelGain;}
+    if(pod.type==='ammo')p.ammo+=amount;
+    if(pod.type==='credits')p.credits+=amount;
+    if(pod.type==='parts')p.repairParts+=partsGain;
+    let wreckParts=0;
+    if(pod.type==='wreck'){
+      p.credits+=50;p.ammo+=12;
+      wreckParts=Math.min(6,REPAIR.capacityKg-p.repairParts);
+      p.repairParts+=wreckParts;
     }
-    if(state.autopilot?.targetKey==='pickup:'+pod.id){state.autopilot=null;state.navPlan=null;logEvent('Rendezvous complete. Salvage secured!','good');}
-    sparks(pod.x,pod.y,palette.green,12);updateTargetOptions();
-    
+    if(!['fuel','parts'].includes(pod.type)){
+      // Repair parts are already counted by mass(ship). Do not double-count.
+      p.dryMass+=incomingMass-wreckParts;
+      p.cargoKg=(p.cargoKg||0)+incomingMass;
+    }
+    if(['fuel','parts'].includes(pod.type)&&
+       (pod.type==='fuel'?fuelGain:partsGain)<amount-.00001){
+      pod.amount=amount-(pod.type==='fuel'?fuelGain:partsGain);
+    }else pod.alive=false;
+    logEvent('Salvage captured · '+heatMJ.toFixed(1)+' MJ absorbed, momentum conserved.','good');
+    if(!pod.alive&&state.autopilot?.targetKey==='pickup:'+pod.id){
+      state.autopilot=null;state.navPlan=null;
+      logEvent('Rendezvous complete. Salvage secured!','good');
+    }
+    sparks(pod.x,pod.y,palette.green,12);
+    if(!pod.alive)updateTargetOptions();
   }
+
   function sparks(x,y,color,n) {
     for(let i=0;i<n;i++){const a=rand(0,TWO_PI),v=rand(6,45);state.particles.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,color,life:rand(.35,1),maxLife:1});}
     if(state.particles.length>200)state.particles.splice(0,state.particles.length-200);
@@ -1114,7 +1178,9 @@
     window.dispatchEvent(new CustomEvent('orbital-cockpit-state',{detail:{
       ship:{
         hp:p.hp,fuel:p.fuel,fuelMax:p.fuelMax,repairParts:p.repairParts,repairCapacity:REPAIR.capacityKg,
-        ammo:p.ammo,credits:p.credits,deltaV:exhaustKmS*Math.log(mass(p)/(p.dryMass+p.repairParts)),
+        ammo:p.ammo,credits:p.credits,
+        captureHeatMJ:p.captureHeatMJ||0,captureCapacityMJ:state.captureOwned?1300:520,
+        cargoKg:p.cargoKg||0,deltaV:exhaustKmS*Math.log(mass(p)/(p.dryMass+p.repairParts)),
         status:shipStatus,statusColor:shipStatusColor,
         repairDisabled:state.ended||p.hp>=100||p.repairParts<=.00001,
         repairing:state.down.has('repair')
