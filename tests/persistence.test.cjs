@@ -31,16 +31,17 @@ function harness(){
     setTimeout:()=>11,clearTimeout:()=>{}
   };
   vm.runInNewContext(source,context);
-  const snapshots=[],progress=[],statuses=[],errors=[];
+  const snapshots=[],progress=[],encounters=[],statuses=[],errors=[];
   const handle=window.OrbitalPersistence.attach({
     controls:()=>control,
     onState:packet=>snapshots.push(packet),
     onProgress:state=>progress.push(state),
+    onEncounter:checkpoint=>encounters.push(checkpoint),
     onConnected:state=>statuses.push(state),
     onError:reason=>errors.push(reason)
   });
   return {
-    sockets,sent,events,docEvents,document,store,handle,snapshots,progress,statuses,errors,
+    sockets,sent,events,docEvents,document,store,handle,snapshots,progress,encounters,statuses,errors,
     setControl:value=>{control=value;},setTime:value=>{now=value;},tick:()=>interval()
   };
 }
@@ -119,4 +120,16 @@ test('unacknowledged salvage is queued and cleared only after server acknowledge
   assert.equal(JSON.parse(h.store.get(key)).length,1);
   h.sockets[0].emit({type:'progress',progress:{credits:95,upgrades:{}},claim_id:'starter-credits-1'});
   assert.equal(JSON.parse(h.store.get(key)).length,0,'acknowledged credit claim must leave retry queue');
+});
+
+
+test('websocket welcome restores encounter and permits NPC checkpoints',()=>{
+  const h=harness();
+  const checkpoint={saved_at_utc:123,snapshot:{t:20,enemies:[{id:'raider-01',alive:false}],pickups:[],ally:{id:'ally-01'}}};
+  h.sockets[0].emit({type:'welcome',flight:{state:{}},progress:{credits:65,upgrades:{}},encounter:checkpoint});
+  assert.equal(h.encounters[0].snapshot.enemies[0].alive,false);
+  const snapshot={t:21,enemies:[{id:'raider-01',alive:false}],pickups:[],ally:{id:'ally-01'}};
+  assert.equal(h.handle.encounter(snapshot),true);
+  assert.equal(h.sent.at(-1).type,'encounter');
+  assert.equal(h.sent.at(-1).snapshot.enemies[0].id,'raider-01');
 });
