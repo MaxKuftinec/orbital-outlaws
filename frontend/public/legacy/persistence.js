@@ -13,7 +13,7 @@
   }
   function attach({controls, onState, onConnected, onError}){
     const url = base + '/api/players/' + pilotId();
-    let connected = false, busy = false, previous = '', lastPoll = 0, lastError = '';
+    let connected = false, busy = false, pending = false, previous = '', lastSent = 0, lastPoll = 0, lastError = '';
     async function request(path, init){
       const sentAt=performance.now();
       const response = await fetch(url + path, {cache:'no-store',...init});
@@ -24,7 +24,8 @@
       return result;
     }
     async function tick(){
-      if(busy || document.hidden) return;
+      if(busy){pending=true;return;}
+      if(document.hidden) return;
       busy = true;
       try{
         if(!connected){
@@ -36,7 +37,8 @@
           const fingerprint = JSON.stringify(command);
           const active = command.thrust || command.turn || command.stabilize;
           const now = performance.now();
-          if(active || fingerprint !== previous){
+          if(fingerprint !== previous || (active && now-lastSent>=220)){
+            lastSent=now;
             onState(await request('/input',{method:'POST',headers:{'Content-Type':'application/json'},body:fingerprint}));
             previous = fingerprint;
           }else if(now-lastPoll>550){
@@ -48,11 +50,19 @@
       }catch(error){
         if(String(error)!==lastError){console.warn('Persistent flight unavailable:',error);lastError=String(error);if(onError)onError(lastError);}
         if(connected){connected=false;onConnected(false);}
-      }finally{busy=false;}
+      }finally{
+        busy=false;
+        if(pending){pending=false;Promise.resolve().then(tick);}
+      }
     }
-    const timer = setInterval(tick,250);
+    const events=['keydown','keyup','pointerdown','pointerup','pointercancel','click','blur'];
+    for(const name of events)root.addEventListener?.(name,tick);
+    const timer=setInterval(tick,100);
     tick();
-    return ()=>clearInterval(timer);
+    return ()=>{
+      clearInterval(timer);
+      for(const name of events)root.removeEventListener?.(name,tick);
+    };
   }
   root.OrbitalPersistence = {attach};
 })(window);
