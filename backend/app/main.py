@@ -19,7 +19,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app=FastAPI(title='Orbital Outlaws — Persistent Universe Foundation',version='0.7.0',lifespan=lifespan)
+app=FastAPI(title='Orbital Outlaws',version='0.7.0',lifespan=lifespan)
 
 
 def require_dev_commands():

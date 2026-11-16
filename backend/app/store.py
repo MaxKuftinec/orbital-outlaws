@@ -1,7 +1,7 @@
-"""Lazy query API: checkpoint + event source, with radial coarse filtering.
+"""Lazy query API: checkpoint + event source, with radial coarse filtering
 
 Collision graph / active thrusters are not yet authoritative. The safe role of this
-first API is durable snapshots, impulsive manoeuvre events and Kepler coasts.
+first API is durable snapshots, impulsive manoeuvre events and Kepler coasts
 """
 from __future__ import annotations
 import math, time
@@ -75,8 +75,8 @@ class WorldStore:
             at=self.now(world) if at_s is None else float(at_s)
             if at<0:raise ValueError('Negative world time')
             cr=math.hypot(cx,cy)
-            # Radial envelopes are conservative for the CURRENT osculating orbit.
-            # Historical viewport queries use all entities (older events may change envelopes).
+            # Radial envelopes are conservative for the CURRENT osculating orbit
+            # Historical viewport queries use all entities (older events may change envelopes)
             past=at<self.now(world)-1.0
             q=select(Entity).where(Entity.world_id==world_id)
             if not past:
