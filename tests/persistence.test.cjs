@@ -1,75 +1,108 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const path = require('node:path');
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const vm=require('node:vm');
 
-test('persistent client sends control inputs, never client-derived coordinates or fuel', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../frontend/public/legacy/persistence.js'), 'utf8');
-  const calls = [];
-  let callback;
-  const window = {};
-  const storage = new Map();
-  const sandbox = {
-    window, document:{hidden:false}, crypto:{randomUUID:()=> '12345678-1234-1234-1234-123456789abc'},
-    localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},
-    performance:{now:()=>1000},
-    setInterval:cb=>{callback=cb;return 5}, clearInterval:()=>{},
-    console, fetch:async (url, init)=>{
-      calls.push({url,init});
-      return {ok:true,json:async()=>({state:{x:123}})};
-    }
+const source=fs.readFileSync(path.join(__dirname,'../frontend/public/legacy/persistence.js'),'utf8');
+
+function harness(){
+  const sockets=[],sent=[],events=new Map(),docEvents=new Map(),store=new Map();
+  let now=1000,control={thrust:false,turn:0,stabilize:false,gimbal:0},interval;
+  class FakeWebSocket {
+    static OPEN=1;
+    constructor(url){this.url=url;this.readyState=1;sockets.push(this);}
+    send(raw){sent.push(JSON.parse(raw));}
+    emit(packet){this.onmessage({data:JSON.stringify(packet)});}
+    close(){this.readyState=3;this.onclose?.();}
+  }
+  const window={
+    ORBITAL_API_BASE_URL:'',
+    addEventListener:(name,listener)=>events.set(name,listener),
+    removeEventListener:name=>events.delete(name)
   };
-  vm.runInNewContext(source,sandbox);
-  const seen=[];
-  const sampleTimes=[];
-  const controls=()=>({thrust:true,turn:0,stabilize:false,gimbal:0});
-  window.OrbitalPersistence.attach({controls,onState:s=>{seen.push(s.state.x);sampleTimes.push(s.clientSampleMs)},onConnected:()=>{}});
-  await new Promise(resolve=>setImmediate(resolve));
-  callback();
-  await new Promise(resolve=>setImmediate(resolve));
-  assert.match(calls[0].url,/\/api\/players\/12345678123412341234123456789abc$/);
-  assert.equal(calls[0].init.method,'POST');
-  assert.equal(calls[1].init.method,'POST');
-  assert.equal(calls[1].url,calls[0].url+'/input');
-  assert.deepEqual(JSON.parse(calls[1].init.body),controls());
-  assert.ok(seen.length>=2);
-  assert.ok(sampleTimes.every(t=>t===1000), 'estimated browser-side snapshot timestamp is attached');
+  const document={hidden:false,addEventListener:(name,listener)=>docEvents.set(name,listener),
+    removeEventListener:name=>docEvents.delete(name)};
+  const context={
+    window,document,URL,location:{href:'http://localhost:5173/'},WebSocket:FakeWebSocket,
+    crypto:{randomUUID:()=> '12345678-1234-1234-1234-123456789abc'},
+    localStorage:{getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v)},
+    performance:{now:()=>now},setInterval:fn=>{interval=fn;return 10},clearInterval:()=>{},
+    setTimeout:()=>11,clearTimeout:()=>{}
+  };
+  vm.runInNewContext(source,context);
+  const snapshots=[],progress=[],statuses=[],errors=[];
+  const handle=window.OrbitalPersistence.attach({
+    controls:()=>control,
+    onState:packet=>snapshots.push(packet),
+    onProgress:state=>progress.push(state),
+    onConnected:state=>statuses.push(state),
+    onError:reason=>errors.push(reason)
+  });
+  return {
+    sockets,sent,events,docEvents,document,handle,snapshots,progress,statuses,errors,
+    setControl:value=>{control=value;},setTime:value=>{now=value;},tick:()=>interval()
+  };
+}
+
+test('WebSocket welcome resumes persistent flight and progress without an HTTP request',()=>{
+  const h=harness();
+  assert.match(h.sockets[0].url,/^ws:\/\/localhost:5173\/api\/players\/12345678123412341234123456789abc\/live$/);
+  const flight={state:{x:123,y:42,heading:.3}};
+  const economy={credits:65,upgrades:{predictive:true}};
+  h.sockets[0].emit({type:'welcome',flight,progress:economy});
+  assert.equal(h.snapshots[0].state.x,123);
+  assert.equal(h.snapshots[0].clientSampleMs,1000);
+  assert.equal(h.progress[0].credits,65);
+  assert.deepEqual(h.statuses,[true]);
+  assert.equal(h.sent[0].type,'input');
+  assert.equal(h.sent[0].thrust,false);
 });
 
+test('short key press and release transmit immediate control edges',()=>{
+  const h=harness();
+  h.sockets[0].emit({type:'welcome',flight:{state:{}},progress:{credits:65,upgrades:{}}});
+  h.setControl({thrust:false,turn:1,stabilize:false,gimbal:0});
+  h.setTime(1010);h.events.get('keydown')();
+  h.setControl({thrust:false,turn:0,stabilize:false,gimbal:0});
+  h.setTime(1020);h.events.get('keyup')();
+  const inputs=h.sent.filter(x=>x.type==='input');
+  assert.deepEqual(inputs.map(i=>i.turn),[0,1,0]);
+  assert.ok(inputs.every(i=>!('x' in i)&&!('fuel' in i)));
+});
 
-test('short press and release trigger immediate requests without waiting for interval polling', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../frontend/public/legacy/persistence.js'), 'utf8');
-  const listeners = new Map();
-  const window = {
-    addEventListener: (type, callback) => listeners.set(type,callback),
-    removeEventListener: type => listeners.delete(type)
-  };
-  let now=1000, active=false;
-  const calls=[];
-  const sandbox = {
-    window, document:{hidden:false},
-    crypto:{randomUUID:()=> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'},
-    localStorage:{getItem:()=>null,setItem:()=>{}},
-    performance:{now:()=>now}, setInterval:()=>1, clearInterval:()=>{},
-    Promise, console,
-    fetch:async (url,options)=>{
-      calls.push({url,options});
-      return {ok:true,json:async()=>({state:{x:200}})};
-    }
-  };
-  vm.runInNewContext(source,sandbox);
-  window.OrbitalPersistence.attach({
-    controls:()=>({thrust:false,turn:active?1:0,stabilize:false,gimbal:0}),
-    onState:()=>{}, onConnected:()=>{}
-  });
-  await new Promise(resolve=>setImmediate(resolve)); // initial connect
-  active=true; now=1010; listeners.get('keydown')();
-  await new Promise(resolve=>setImmediate(resolve));
-  active=false; now=1020; listeners.get('keyup')();
-  await new Promise(resolve=>setImmediate(resolve));
-  const inputs = calls.filter(c=>c.url.endsWith('/input')).map(c=>JSON.parse(c.options.body));
-  assert.equal(inputs.length,2,'both input edges should be transmitted without timer ticks');
-  assert.equal(inputs[0].turn,1);
-  assert.equal(inputs[1].turn,0);
+test('continuous active thrust renews lease without writing on every render tick',()=>{
+  const h=harness();
+  h.sockets[0].emit({type:'welcome',flight:{state:{}},progress:{credits:65,upgrades:{}}});
+  h.setControl({thrust:true,turn:0,stabilize:false,gimbal:0});
+  h.setTime(1100);h.tick();
+  for(let t=1110;t<1250;t+=10){h.setTime(t);h.tick();}
+  h.setTime(1300);h.tick();
+  assert.equal(h.sent.filter(x=>x.type==='input').length,3);
+});
+
+test('purchases and salvage use the same WebSocket and accept server progress',()=>{
+  const h=harness();
+  h.sockets[0].emit({type:'welcome',flight:{state:{}},progress:{credits:65,upgrades:{}}});
+  assert.equal(h.handle.purchase('predictive'),true);
+  assert.equal(h.handle.salvage('starter-credits-0',24),true);
+  assert.deepEqual(h.sent.slice(-2).map(x=>x.type),['purchase','salvage']);
+  assert.equal(h.sent.at(-1).credits,24);
+  h.sockets[0].emit({type:'progress',progress:{credits:49,upgrades:{predictive:true}}});
+  assert.equal(h.progress.at(-1).credits,49);
+  h.sockets[0].emit({type:'error',message:'Insufficient credits'});
+  assert.equal(h.errors.at(-1),'Insufficient credits');
+});
+
+test('hidden tab sends neutral controls; disconnects clear connected state',()=>{
+  const h=harness();
+  h.sockets[0].emit({type:'welcome',flight:{state:{}},progress:{credits:65,upgrades:{}}});
+  h.setControl({thrust:true,turn:1,stabilize:false,gimbal:0});
+  h.setTime(1100);h.tick();
+  h.document.hidden=true;h.docEvents.get('visibilitychange')();
+  assert.equal(h.sent.at(-1).thrust,false);
+  assert.equal(h.sent.at(-1).turn,0);
+  h.sockets[0].close();
+  assert.deepEqual(h.statuses,[true,false]);
+  assert.equal(h.handle.purchase('nav'),false);
 });
