@@ -120,7 +120,7 @@ test('reinforcement button is removed from the cockpit',()=>{
 
 test('Rendezvous has a new single-icon monitor image independent of the atlas',()=>{
   const css=fs.readFileSync(path.join(root,'frontend/src/cockpit.css'),'utf8');
-  assert.match(css,/tech-icon\.tech-icon--rendezvous\{/);
+  assert.match(css,/tech-icon\.tech-icon--nav\{/);
   assert.match(css,/rendezvous-monitor\.webp/);
   const icon=fs.readFileSync(path.join(root,'frontend/public/tech/rendezvous-monitor.webp'));
   assert.equal(icon.toString('ascii',0,4),'RIFF');
