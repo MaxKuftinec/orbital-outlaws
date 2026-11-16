@@ -24,7 +24,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app=FastAPI(title='Orbital Outlaws',version='0.10.0',lifespan=lifespan)
+app=FastAPI(title='Orbital Outlaws',version='0.11.0',lifespan=lifespan)
 
 
 def require_dev_commands():
@@ -38,6 +38,10 @@ class PlayerInput(BaseModel):
     turn: int = Field(default=0, ge=-1, le=1)
     stabilize: bool = False
     gimbal: float = Field(default=0, ge=-0.4886921906, le=0.4886921906)
+    fire: bool = False
+    repair: bool = False
+    aim_x: float = Field(default=0, ge=-1, le=1)
+    aim_y: float = Field(default=0, ge=-1, le=1)
 
 
 
@@ -50,33 +54,43 @@ async def pilot_live(ws: WebSocket,pilot_id: str):
     await ws.accept()
     database=store()
     try:
-        flight=await run_in_threadpool(database.connect_player,pilot_id)
-        progress=await run_in_threadpool(database.player_progress,pilot_id)
+        await run_in_threadpool(database.connect_player,pilot_id)
         encounter=await run_in_threadpool(database.player_encounter,pilot_id)
-        await ws.send_json({'type':'welcome','flight':flight,'progress':progress,'encounter':encounter})
+        flight=await run_in_threadpool(database.get_entity,'kestrel','pilot-'+pilot_id)
+        progress=await run_in_threadpool(database.player_progress,pilot_id)
+        await ws.send_json({'type':'welcome','flight':flight,'progress':progress,
+                            'encounter':encounter})
         while True:
             try:
-                message=await asyncio.wait_for(ws.receive_json(),timeout=.1)
+                message=await asyncio.wait_for(ws.receive_json(),timeout=.25)
             except asyncio.TimeoutError:
+                encounter=await run_in_threadpool(database.player_encounter,pilot_id)
                 flight=await run_in_threadpool(database.get_entity,'kestrel','pilot-'+pilot_id)
-                await ws.send_json({'type':'snapshot','flight':flight})
+                progress=await run_in_threadpool(database.player_progress,pilot_id)
+                await ws.send_json({'type':'snapshot','flight':flight,
+                                    'encounter':encounter,'progress':progress})
                 continue
             try:
                 kind=message.get('type')
                 if kind=='input':
                     body=PlayerInput.model_validate(message)
-                    flight=await run_in_threadpool(database.player_input,pilot_id,body.thrust,body.turn,body.stabilize,body.gimbal)
-                    await ws.send_json({'type':'snapshot','flight':flight})
+                    await run_in_threadpool(database.player_input,pilot_id,
+                                            body.thrust,body.turn,body.stabilize,body.gimbal)
+                    if body.fire:
+                        await run_in_threadpool(database.player_fire,pilot_id,body.aim_x,body.aim_y)
+                    if body.repair:
+                        await run_in_threadpool(database.player_repair,pilot_id)
+                    encounter=await run_in_threadpool(database.player_encounter,pilot_id)
+                    flight=await run_in_threadpool(database.get_entity,'kestrel','pilot-'+pilot_id)
+                    progress=await run_in_threadpool(database.player_progress,pilot_id)
+                    await ws.send_json({'type':'snapshot','flight':flight,
+                                        'encounter':encounter,'progress':progress})
                 elif kind=='purchase':
-                    progress=await run_in_threadpool(database.player_purchase,pilot_id,str(message.get('upgrade','')))
+                    progress=await run_in_threadpool(database.player_purchase,pilot_id,
+                                                     str(message.get('upgrade','')))
                     await ws.send_json({'type':'progress','progress':progress})
-                elif kind=='encounter':
-                    await run_in_threadpool(database.save_encounter,pilot_id,message['snapshot'])
-                elif kind=='salvage':
-                    progress=await run_in_threadpool(database.player_salvage,pilot_id,str(message.get('id','')),int(message.get('credits',0)))
-                    await ws.send_json({'type':'progress','progress':progress,'claim_id':str(message['id'])})
                 else:
-                    raise ValueError('Unknown message type')
+                    raise ValueError('Only flight inputs and purchases are accepted; NPCs and loot are server-owned')
             except (ValueError,ValidationError,LookupError) as exc:
                 await ws.send_json({'type':'error','message':str(exc)})
     except WebSocketDisconnect:
