@@ -110,3 +110,26 @@ def test_salvage_events_report_exact_amounts_and_capacity_limited_gains():
     assert state['player']['repairParts']==24
     assert any(p['id']=='fuel-1' for p in state['pickups'])
     assert any(p['id']=='parts-1' for p in state['pickups'])
+
+
+
+def test_incoming_ship_reaches_real_orbit_insertion_during_offline_simulation():
+    from app.universe import incoming_ship
+    sector=new_sector(0)
+    sector['enemies']=[]
+    sector['ally']['alive']=False
+    sector['pickups']=[]
+    orbiter=incoming_ship('ally-02', 1.0, 'orbit', True)
+    visitor=incoming_ship('ally-03', -1.1, 'flyby', True)
+    sector['allies']=[orbiter,visitor]
+    updated,_=advance_sector(sector,110,pilot())
+    arrived=updated['allies'][0]
+    passing=updated['allies'][1]
+    assert arrived['arrivalPhase']=='orbiting', (arrived['arrivalPhase'], arrived['x'],arrived['y'])
+    assert arrived['fuel']<180
+    r=math.hypot(arrived['x'],arrived['y'])
+    v=math.hypot(arrived['vx'],arrived['vy'])
+    assert v*v/2-310000/r<0
+    assert passing['arrivalIntent']=='flyby'
+    assert passing['fuel']==180
+    assert passing['arrivalPhase']=='departed'

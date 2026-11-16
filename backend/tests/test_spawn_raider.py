@@ -2,7 +2,9 @@ from uuid import uuid4
 from app.store import WorldStore
 
 
-def test_each_dev_trigger_adds_one_inbound_ship_and_persists_both_factions(postgres_url):
+def test_each_dev_trigger_adds_one_inbound_ship_and_persists_both_factions(postgres_url,monkeypatch):
+    decisions=iter([0,1,0,1])
+    monkeypatch.setattr('app.store.secrets.randbelow',lambda n:next(decisions))
     store = WorldStore(postgres_url)
     store.ensure_world()
     pilot = uuid4().hex
@@ -16,7 +18,7 @@ def test_each_dev_trigger_adds_one_inbound_ship_and_persists_both_factions(postg
     assert raider2['ship_count'] == len(before['enemies']) + 2
     assert ally1['ship_count'] == 1 and ally2['ship_count'] == 2
     assert len({d['ship']['id'] for d in (raider1,raider2,ally1,ally2)}) == 4
-    assert all(d['intent'] in ('flyby','orbit') for d in (raider1,raider2,ally1,ally2))
+    assert [d['intent'] for d in (raider1,raider2,ally1,ally2)] == ['flyby','orbit','flyby','orbit']
     saved=WorldStore(postgres_url).player_encounter(pilot)['snapshot']
     assert len(saved['enemies']) == len(before['enemies']) + 2
     assert len(saved['allies']) == 2
