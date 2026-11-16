@@ -26,6 +26,7 @@ test('reinforcement spawn creates an inbound spacecraft without runtime errors',
       return {id, name, radius, angle, color, alive: true};
     },
     logEvent: (message, type) => logs.push({message, type}),
+    persistEncounterNow: () => {},
     Math
   };
 
