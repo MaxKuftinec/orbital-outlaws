@@ -140,8 +140,12 @@ def test_incoming_ship_reaches_real_orbit_insertion_during_offline_simulation():
     sector['enemies']=[]
     sector['ally']['alive']=False
     sector['pickups']=[]
-    orbiter=incoming_ship('ally-02', 1.0, 'orbit', True)
-    visitor=incoming_ship('ally-03', -1.1, 'flyby', True)
+    # Fixed launch velocities keep this arrival-window regression deterministic.
+    # Independent random 360-degree launches are covered by the dedicated launch test.
+    orbiter=incoming_ship('ally-02', 1.0, 'orbit', True,
+                          velocity_angle=1.0+2.4, velocity_speed=26.)
+    visitor=incoming_ship('ally-03', -1.1, 'flyby', True,
+                          velocity_angle=-1.1+2.4, velocity_speed=26.)
     sector['allies']=[orbiter,visitor]
     updated,_=advance_sector(sector,110,pilot())
     arrived=updated['allies'][0]
