@@ -60,6 +60,7 @@
     connect();
     return {
       purchase:upgrade=>send('purchase',{upgrade}),
+       setReserve:kg=>send('reserve',{kg}),
        requestAssistance:recipient=>send('request_assistance',{recipient}),
        offerFuel:(target,kg=20)=>send('offer_fuel',{target,kg}),
       close:()=>{
