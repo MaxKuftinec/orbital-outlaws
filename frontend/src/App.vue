@@ -93,7 +93,7 @@ export default defineComponent({
           </div>
           <div class="telemetry-console collapsed" id="telemetry-console" role="group" aria-label="On-screen orbital telemetry">
             <button type="button" class="panel-drag-handle" data-drag-handle title="Drag telemetry panel" aria-label="Drag telemetry panel">⠿</button>
-            <button type="button" class="console-toggle" id="telemetry-toggle" aria-controls="telemetry-console-body" aria-expanded="false">◉ TELEMETRY <span id="telemetry-toggle-arrow">▾</span></button>
+            <button type="button" class="console-toggle" id="telemetry-toggle" aria-controls="telemetry-console-body" aria-expanded="false">◉ TELEMETRY</button>
             <div class="telemetry-console-body" id="telemetry-console-body">
               <div><span>Altitude</span><strong id="quick-alt">—</strong></div>
               <div><span>Speed</span><strong id="quick-speed">—</strong></div>
