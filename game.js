@@ -59,7 +59,11 @@
   function logEvent(message, category='neutral') {
     state.events.unshift({t:state.t, message, category});
     if(state.events.length>7) state.events.length=7;
-    $('event-feed').innerHTML = state.events.map(e => {
+    window.dispatchEvent(new CustomEvent('orbital-comms', {
+      detail: {events: state.events.map(e=>({...e}))}
+    }));
+    const legacyFeed=$('event-feed');
+    if(legacyFeed && legacyFeed.dataset.vueManaged!=='true')legacyFeed.innerHTML = state.events.map(e => {
       const min = Math.floor(e.t/60).toString().padStart(2,'0');
       const sec = Math.floor(e.t%60).toString().padStart(2,'0');
       return `<div class="event-entry ${e.category}"><time>${min}:${sec}</time><span>${escapeHtml(e.message)}</span></div>`;
@@ -947,8 +951,7 @@
     $('sos-btn').disabled=persistentFlight||state.ended||!state.ally.alive;
     $('sos-btn').textContent=state.rescue?'⚑ ASSISTANCE REQUESTED':'⚑ REQUEST FUEL ASSISTANCE';
     $('escort-help-btn').disabled=persistentFlight||state.ended||!state.ally.alive;
-    $('reinforce-btn').textContent='Reinforcements: '+(state.reinforcements?'ON':'OFF');
-    $('reinforce-btn').setAttribute('aria-pressed',String(state.reinforcements));
+    // Reinforcements are now created by the guarded FastAPI dev endpoint only.
     $('upgrade-status').textContent=state.predictive?'Installed · lead shot active':'40 ¤';
     $('trajectory-upgrade-status').textContent=state.trajectoryIntel?'Installed · trajectory overlay active':'25 ¤';
     $('trajectory-upgrade-btn').textContent=state.trajectoryIntel?'OWNED':'BUY';
@@ -1276,7 +1279,7 @@
     $('lock-btn').addEventListener('click',lockNearest);
     $('upgrade-btn').addEventListener('click',()=>{if(state.predictive||state.ended)return;if(purchaseUpgrade('predictive'))return;if(state.player.credits<40)return;state.player.credits-=40;state.predictive=true;logEvent('Predictive fire control installed.','good');state.lastBallistic=-999;updateHud();});
     $('trajectory-upgrade-btn').addEventListener('click',()=>{if(state.trajectoryIntel||state.ended)return;if(purchaseUpgrade('trajectory'))return;if(state.player.credits<25)return;state.player.credits-=25;state.trajectoryIntel=true;state.lastBallistic=-999;logEvent('Target trajectory analyzer installed.','good');updateHud();});
-    $('reinforce-btn').addEventListener('click',()=>{if(persistentFlight){logEvent('Reinforcement policy is server-controlled.','danger');return;}state.reinforcements=!state.reinforcements;state.nextEnemySpawn=state.t+rand(35,55);logEvent('Hostile reinforcements '+(state.reinforcements?'enabled.':'disabled.'),state.reinforcements?'danger':'good');updateHud();});
+    // No reinforcement control in the connected cockpit; use POST /api/dev/players/{pilot_id}/raiders.
     $('nav-upgrade-btn').addEventListener('click',()=>{if(state.navOwned||state.ended)return;if(purchaseUpgrade('nav'))return;if(state.player.credits<60)return;state.player.credits-=60;state.navOwned=true;logEvent('Rendezvous intelligence installed.','good');updateHud();});
     $('ephemeris-upgrade-btn')?.addEventListener('click',()=>{
       if(state.ephemerisOwned||state.ended)return;
