@@ -28,7 +28,7 @@ def circular(radius: float, angle: float, mu: float = MU) -> dict:
 
 def ship(id: str, radius: float, angle: float, ally: bool = False) -> dict:
     orbit = circular(radius, angle)
-    return {**orbit, 'id': id, 'name': 'AEGIS-01' if ally else id.upper(),
+    return {**orbit, 'id': id, 'name': ('AEGIS-'+id.rsplit('-',1)[-1]) if ally else id.upper(),
             'alive': True, 'isAlly': ally,
             'color': '#67e0aa' if ally else '#ff7184',
             'hp': 80.0 if ally else 66.0,
