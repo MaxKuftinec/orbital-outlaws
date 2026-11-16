@@ -87,7 +87,7 @@
     const e2 = newShip('raider-02','RAIDER-02',323,-2.02,palette.purple);
     const ally = newShip('ally-01','AEGIS-01',272,-0.21,palette.green);
     ally.isAlly=true;ally.hp=80;ally.ammo=120;ally.gunCooldown=1.5;ally.fuel=140;
-    state = {t:0, player, ally, enemies:[e1,e2], shots:[], pickups:[
+    state = {t:0, player, ally, allies:[], enemies:[e1,e2], shots:[], pickups:[
       newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30),newPickup(295,1.1,'parts',8)
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
     orbitVisible:true, predictive:false, trajectoryIntel:false, ephemerisOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
@@ -132,6 +132,7 @@
     const previous=state.enemies.map(e=>e.id+':'+e.alive).join(',');
     state.enemies=mergeLiveBodies(state.enemies,saved.enemies);
     state.ally=mergeLiveBodies([state.ally],[saved.ally])[0];
+    state.allies=mergeLiveBodies(state.allies||[],saved.allies||[]);
     state.pickups=mergeLiveBodies(state.pickups,saved.pickups);
     state.shots=mergeLiveBodies(state.shots,(saved.shots||[]).map((shot,i)=>({id:shot.id||'shot-'+i,...shot})));
     state.t=Math.max(state.t,saved.t||0);
@@ -160,7 +161,7 @@
     updateHud();
   }
   function renderServerBodies(dt){
-    for(const body of [state.ally,...state.enemies,...state.pickups,...state.shots]){
+    for(const body of [state.ally,...(state.allies||[]),...state.enemies,...state.pickups,...state.shots]){
       if(!body?.alive)continue;
       stepBody(body,dt);
       body.heading=normAngle((body.heading||0)+(body.omega||0)*dt);
@@ -941,7 +942,8 @@
     $('target-hull').textContent=target?Math.ceil(target.hp)+' / 66':'—';
     $('target-indicator').textContent=state.aimMode==='manual'?'AIM MODE: MANUAL':target?'TRACKING: '+target.name:'NO TARGET';
     const liveHostiles=state.enemies.filter(ship=>ship.alive).length;
-    $('mission-status').textContent=liveHostiles+' hostile'+(liveHostiles!==1?'s':'')+' · '+(state.ally.alive?'1 ally':'ally lost');
+    const activeAllies=(state.ally.alive?1:0)+(state.allies||[]).filter(ally=>ally.alive).length;
+    $('mission-status').textContent=liveHostiles+' hostile'+(liveHostiles!==1?'s':'')+' · '+activeAllies+' active allies';
     $('escort-status').textContent=state.ally.alive?'ONLINE':'LOST';
     $('escort-status').style.color=state.ally.alive?palette.green:palette.red;
     $('escort-hull').textContent=state.ally.alive?Math.ceil(state.ally.hp)+' / 80':'DESTROYED';
@@ -1046,7 +1048,7 @@
     if(state.orbitVisible){pathWorld(state.predicted, state.dangerPrediction?'rgba(255,113,132,.72)':'rgba(98,217,246,.63)',1.7,[5,5]);}
     if(state.navPlan){pathWorld(state.navPlan.coastPath,'#67e0aa9a',2.1,[6,4]);const a=state.navPlan.arrival;if(a){const q=toScreen(a.x,a.y);ctx.strokeStyle=palette.green;ctx.beginPath();ctx.arc(q.x,q.y,11,0,TWO_PI);ctx.stroke();}}
     if(state.waypoint){const q=toScreen(state.waypoint.x,state.waypoint.y);ctx.strokeStyle=palette.yellow;ctx.lineWidth=2;ctx.strokeRect(q.x-8,q.y-8,16,16);}
-    for(const e of [...state.enemies,state.ally,state.player])if(e.alive)pathWorld(e.trail,e.isPlayer?'#62d9f654':e.isAlly?'#67e0aa55':'#ff718433',1.5);
+    for(const e of [...state.enemies,state.ally,...(state.allies||[]),state.player])if(e.alive)pathWorld(e.trail,e.isPlayer?'#62d9f654':e.isAlly?'#67e0aa55':'#ff718433',1.5);
   }
   function drawShip(ship){
     if(!ship.alive)return;
@@ -1142,7 +1144,9 @@
     }
     drawTrails();
     for(const pod of state.pickups)drawPickup(pod);
-    drawShots();for(const e of state.enemies)drawShip(e);drawShip(state.ally);drawShip(state.player);
+    drawShots();for(const e of state.enemies)drawShip(e);drawShip(state.ally);
+    for(const ally of state.allies||[])drawShip(ally);
+    drawShip(state.player);
     drawEphemeris();drawAim();drawParticles();
     if(state.ended){ctx.fillStyle='#060e1870';ctx.fillRect(0,0,W,H);}
   }
