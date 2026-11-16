@@ -71,3 +71,24 @@ test('new ephemeris is a separate purchase and projects an object orbit',()=>{
   assert.match(game,/function drawEphemeris\(\)/);
   assert.match(game,/NAV\.propagate\(target,180/);
 });
+
+
+test('panel headings are the only minimize controls, and Panels is left of Fullscreen',()=>{
+  assert.match(workspace,/title\.dataset\.panelCollapse=''/);
+  assert.match(workspace,/setCollapsed\(panel,!panel\.classList\.contains\('hud-minimized'\)\)/);
+  assert.doesNotMatch(workspace,/data-panel-minimize|panelMinimize/);
+  assert.match(workspace,/toolbar\.append\(picker,fullscreen,menu\)/);
+  assert.match(game,/window\.OrbitalHUD\.togglePanelById\(id\)/);
+  assert.match(game,/if\(arrow\)arrow\.textContent/);
+});
+
+test('all four upgrades use distinct Dota-like square icon atlas regions',()=>{
+  for(const kind of ['predictive','trajectory','rendezvous','ephemeris'])
+    assert.match(app,new RegExp('tech-icon--'+kind));
+  const css=fs.readFileSync(path.join(root,'frontend/src/cockpit.css'),'utf8');
+  assert.match(css,/ability-icons\.webp/);
+  assert.match(css,/background-size:200% 200%/);
+  const atlas=fs.readFileSync(path.join(root,'frontend/public/tech/ability-icons.webp'));
+  assert.equal(atlas.toString('ascii',0,4),'RIFF');
+  assert.equal(atlas.toString('ascii',8,12),'WEBP');
+});

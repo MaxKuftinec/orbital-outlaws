@@ -145,3 +145,31 @@
  #canvas-workspace .hud-toolbar .fullscreen-btn,
  #canvas-workspace .hud-toolbar .hud-picker{font-size:10px;padding:6px 8px}
 }
+
+
+/* Compact painterly technology icons, like game ability thumbnails (2x2 WebP atlas). */
+.upgrades .upgrade-entry{
+  display:grid;grid-template-columns:68px minmax(0,1fr) auto;
+  align-items:center;column-gap:12px;min-height:72px;
+}
+.upgrades .upgrade-entry>div{min-width:0}
+.upgrades .upgrade-entry .tech-icon{
+  display:block;width:68px;height:68px;flex:none;
+  border:2px solid #364f66;border-radius:5px;
+  box-shadow:0 0 0 1px #050b16,0 6px 13px #0009;
+  background-image:url('/tech/ability-icons.webp');
+  background-repeat:no-repeat;background-size:200% 200%;
+  transition:transform .16s ease,border-color .16s ease,filter .16s ease;
+}
+.upgrades .upgrade-entry:hover .tech-icon{
+  transform:translateY(-2px);border-color:#80dbe8;
+  filter:saturate(1.15) contrast(1.04);
+}
+.tech-icon--predictive{background-position:0% 0%}
+.tech-icon--trajectory{background-position:100% 0%}
+.tech-icon--rendezvous{background-position:0% 100%}
+.tech-icon--ephemeris{background-position:100% 100%}
+@media(max-width:480px){
+  .upgrades .upgrade-entry{grid-template-columns:56px minmax(0,1fr) auto;gap:8px}
+  .upgrades .upgrade-entry .tech-icon{width:56px;height:56px}
+}

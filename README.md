@@ -51,7 +51,7 @@ W: main engine. A/D: rotate via RCS. S: stabilize. Space: fire (server validates
 
 The **Rendezvous Computer** automatically computes and executes a planned transfer while the tab remains open. During autopilot, mouse hover **does not control the engine gimbal**; navigation owns its attitude and thrust target. Manual gimbal control resumes when autopilot disengages. Guidance is still client-side; its inputs are applied by the authoritative server.
 
-Technology purchases are persistent in PostgreSQL:
+Technology purchases are persistent in PostgreSQL. Each has a compact, painted ability-style icon, supplied as a single optimized WebP atlas rather than large banner artwork:
 
 | Technology | Credits | Capability |
 | --- | ---: | --- |
@@ -67,10 +67,10 @@ Trajectory predictions assume **unpowered Kepler motion**. Future burns, impacts
 Every cockpit panel (including Comms, Upgrades, Navigation and Your Ship) has controls to:
 
 - **↙ / ↗ Dock/undock**: move between sidebar and map.
-- **− / ▢ Minimize/expand**: collapse an individual panel.
+- **Click the panel heading** to collapse/expand; Navigation and Telemetry retain their existing title buttons (no duplicate minimize button).
 - **⠿ Drag** when inside the canvas (keyboard arrow keys also work on focused drag handles).
 
-Click **⛶ Fullscreen** to make the canvas fill your display; Escape exits. Use **☷ Panels** to move any panel into the fullscreen map, even when it is currently docked outside. Panel layout persists in browser storage. **☷ Panels → Restore default layout** resets the HUD only.
+Click **⛶ Fullscreen** to make the canvas fill your display; Escape exits. **☷ Panels** sits immediately to the left of Fullscreen. Use **☷ Panels** to move any panel into the fullscreen map, even when it is currently docked outside. Panel layout persists in browser storage. **☷ Panels → Restore default layout** resets the HUD only.
 
 ## Restart versus reset
 
