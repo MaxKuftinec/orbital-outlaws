@@ -47,7 +47,7 @@ def new_sector(world_time: float, mu: float = MU) -> dict:
                 pod('starter-fuel-1', 312, .75, 'fuel', 32),
                 pod('starter-credits-1', 365, 1.7, 'credits', 30),
                 pod('starter-parts-0', 295, 1.1, 'parts', 8)],
-            'shots': [], 'player': {'hp': 100., 'ammo': 36, 'repairParts': 10.,
+            'shots': [], 'shotCounter': 0, 'player': {'hp': 100., 'ammo': 36, 'repairParts': 10.,
                                     'alive': True, 'gunReady': world_time},
             'events': [], 'reinforcements': False, 'nextEnemySpawn': world_time+75,
             'playerKills': 0, 'collisionCooldown': {}}
@@ -116,7 +116,9 @@ def fire(sector: dict, shooter: dict, target: dict, at: float, faction: str,
     if length <= 1e-8:
         return False
     ux, uy = dx/length, dy/length
-    sector['shots'].append({'x': shooter['x']+12*ux, 'y': shooter['y']+12*uy,
+    sector['shotCounter']=sector.get('shotCounter',0)+1
+    sector['shots'].append({'id':'shot-'+str(sector['shotCounter']),
+                            'x': shooter['x']+12*ux, 'y': shooter['y']+12*uy,
                             'vx': shooter['vx']+SHOT_SPEED*ux,
                             'vy': shooter['vy']+SHOT_SPEED*uy,
                             'faction': faction, 'fromPlayer': faction == 'player',
