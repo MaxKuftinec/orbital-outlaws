@@ -935,8 +935,8 @@
     $('nav-eta').textContent=state.navPlan?state.navPlan.eta.toFixed(0)+' s':'—';
     $('nav-fuel').textContent=state.navPlan?SAFE.requiredFuel(mass(p),state.navPlan.dv,exhaustKmS).toFixed(1)+' kg (ideal)':'—';
     $('nav-engage').textContent=state.navOwned?'ENGAGE':'BUY NAV 60¤';
-    $('nav-engage').disabled=state.ended||(!state.navOwned&&p.credits<60)||
-      (state.navOwned&&(!state.navPlan||!!state.autopilot||(persistentFlight&&!flightOnline)));
+    $('nav-engage').disabled=state.ended||!!state.autopilot||
+      (persistentFlight&&!flightOnline)||(!state.navOwned&&p.credits<60);
     $('nav-abort').disabled=!state.autopilot;
     $('nav-quick-status').textContent=state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED';
     $('nav-quick-metrics').textContent=state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${state.navPlan.safety.estimatedKg.toFixed(1)} kg ideal · ${state.navPlan.safety.reserveKg.toFixed(0)} kg reserved`: 'Pick a contact · press C to calculate';
@@ -1246,6 +1246,7 @@
     document.addEventListener('visibilitychange',()=>{
       lastFrame=performance.now();accumulator=0;
       if(document.hidden){state.down.clear();state.pointerThrust=false;
+        if(state.autopilot)abortNav('Autopilot halted when cockpit tab became hidden.');
         if(persistentFlight&&flightOnline)pilotLink?.encounter(captureEncounter());
       }
     });
@@ -1281,7 +1282,9 @@
           $('reset-btn').textContent='⌖ Recenter view';
           $('reset-btn').title='Recenter map without resetting any persistent ships or combat.';
           state.autopilot=null;
-          logEvent('Live flight and technology connected. Combat remains local.','good');
+          pilotLink?.encounter(captureEncounter());
+          state.lastEncounterSave=state.t;
+          logEvent('Live flight and technology connected. Encounter checkpoint active.','good');
         }else{
           if(state.autopilot)abortNav('Connection lost; autopilot guidance halted.');
           // Keep the pilot read-only while offline: never silently switch to local authority.
