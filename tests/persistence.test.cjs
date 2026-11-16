@@ -22,8 +22,9 @@ test('persistent client sends control inputs, never client-derived coordinates o
   };
   vm.runInNewContext(source,sandbox);
   const seen=[];
+  const sampleTimes=[];
   const controls=()=>({thrust:true,turn:0,stabilize:false,gimbal:0});
-  window.OrbitalPersistence.attach({controls,onState:s=>seen.push(s.state.x),onConnected:()=>{}});
+  window.OrbitalPersistence.attach({controls,onState:s=>{seen.push(s.state.x);sampleTimes.push(s.clientSampleMs)},onConnected:()=>{}});
   await new Promise(resolve=>setImmediate(resolve));
   callback();
   await new Promise(resolve=>setImmediate(resolve));
@@ -33,4 +34,5 @@ test('persistent client sends control inputs, never client-derived coordinates o
   assert.equal(calls[1].url,calls[0].url+'/input');
   assert.deepEqual(JSON.parse(calls[1].init.body),controls());
   assert.ok(seen.length>=2);
+  assert.ok(sampleTimes.every(t=>t===1000), 'estimated browser-side snapshot timestamp is attached');
 });
