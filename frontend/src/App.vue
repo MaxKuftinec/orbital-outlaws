@@ -70,7 +70,7 @@ export default defineComponent({
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
-        <div><div class="eyebrow">PROTOTYPE 0.15</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+        <div><div class="eyebrow">PROTOTYPE 0.16</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
       <div class="top-actions"><v-chip :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Live · flight and upgrades saved' : backendOnline ? 'Backend online · connecting flight' : 'Local gameplay · backend offline' }}</v-chip>
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">ENCOUNTER TIME</span><strong id="sim-clock">00:00</strong></div></div>
@@ -93,7 +93,7 @@ export default defineComponent({
           <NavigationPanel :console="true" />
           <TelemetryPanel :console="true" />
         <ShipPanel />
-          <button type="button" id="sos-btn" class="sos-btn" title="Ask AEGIS-01 for propellant">⚑ REQUEST FUEL ASSISTANCE</button>
+          <button type="button" id="sos-btn" class="sos-btn" title="Request a fuel rendezvous from a friendly spacecraft">⚑ REQUEST FUEL ASSISTANCE</button>
           <div class="canvas-overlay top-left"><span class="tiny-dot blue"></span><span id="target-indicator">TRACKING: RAIDER-01</span></div>
           <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom <span class="keyboard-tag">N/C/E/X</span> nav <span class="keyboard-tag">H</span> help</div>
           <!-- Status is announced in Comms; the map remains visible and pannable after death. -->
@@ -115,7 +115,6 @@ export default defineComponent({
 
       <aside class="sidebar" aria-label="Spacecraft instruments">
 
-        <section class="panel ally-panel"><div class="panel-heading"><span>FRIENDLY ESCORT</span><span id="escort-status" class="status-pill">ONLINE</span></div><div class="ship-name" style="color:#67e0aa">★ AEGIS-01</div><div class="metric-row"><span>Hull integrity</span><strong id="escort-hull">80 / 80</strong></div><div class="metric-row"><span>Ammunition</span><strong id="escort-ammo">120</strong></div><div class="metric-row"><span>Propellant</span><strong id="escort-fuel">—</strong></div><div class="mini-note" id="escort-state">ENGAGING HOSTILES</div><button type="button" class="wide-subtle-btn" id="escort-help-btn">⚑ Request fuel assistance</button><button type="button" class="wide-subtle-btn" id="escort-donate-btn" title="Donate up to 20 kg to your selected friendly craft after matching position and velocity">⇄ Offer 20 kg to selected ally</button></section>
         <section class="panel propulsion">
           <div class="panel-heading"><span>PROPULSION</span><span>SCOUT MK-I</span></div>
           <div class="metric-row"><span>Dry mass</span><strong id="dry-mass">900 kg</strong></div>
@@ -142,7 +141,7 @@ export default defineComponent({
         <div class="settings-bottom"><button type="button" id="hotkey-reset" class="small-btn">Restore defaults</button><button type="button" id="settings-done" class="buy-btn">Done</button></div>
       </div>
     </div>
-    <footer class="footer-note">Orbital Outlaws · Vue preview 0.15 <span>Autonomous server-side sector · persistent upgrades · configurable panels</span></footer>
+    <footer class="footer-note">Orbital Outlaws · Vue preview 0.16 <span>Autonomous server-side sector · persistent upgrades · configurable panels</span></footer>
   </div>
 
   <v-alert v-if="startupError" color="error" variant="tonal" class="game-startup-error">{{ startupError }}</v-alert>
