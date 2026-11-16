@@ -13,7 +13,7 @@
   function attach({controls,onState,onProgress,onEncounter,onConnected,onError}){
     const origin=new URL(root.ORBITAL_API_BASE_URL||'/',location.href);
     const address=(origin.protocol==='https:'?'wss:':'ws:')+'//'+origin.host+
-      origin.pathname.replace(/\/$/,'')+'/api/players/'+pilotId()+'/live';
+      origin.pathname.replace(/\/$/,'')+'/players/'+pilotId()+'/live';
     let socket=null,connected=false,last='',lastSent=0,retry=null,closed=false;
     const send=(type,body={})=>{
       if(!connected||socket?.readyState!==WebSocket.OPEN)return false;
@@ -60,6 +60,8 @@
     connect();
     return {
       purchase:upgrade=>send('purchase',{upgrade}),
+       requestAssistance:recipient=>send('request_assistance',{recipient}),
+       offerFuel:(target,kg=20)=>send('offer_fuel',{target,kg}),
       close:()=>{
         closed=true;clearInterval(interval);clearTimeout(retry);
         for(const name of events)root.removeEventListener(name,tick);
