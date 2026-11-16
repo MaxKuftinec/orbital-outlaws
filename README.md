@@ -45,7 +45,7 @@ Open http://localhost:5173. The Vite server proxies `/api` to FastAPI and `/back
 
 - The backend stores sparse state checkpoints + event history, propagates unpowered Kepler orbits lazily, and integrates short finite-thrust/RCS control windows. Controls are renewed while held, but **expire after 0.4 seconds** if the browser stops sending them. There is no perpetual offline thrust.
 - **Do not expose this server publicly** with `ORBITAL_DEV_COMMANDS=1`: player IDs are anonymous browser IDs, not authentication. The older arbitrary spawn and impulse development endpoints also remain enabled.
-- When persistent flight is active, client-side repair, fuel salvage/transfers and autopilot engagement are disabled. Combat, ammo, credits, hits, NPCs and AI remain **client-local** for now. The browser's prediction is visual only and its state is never sent to the server.
+- When persistent flight is active, **fuel salvage/transfers and autopilot engagement are disabled**. Repair, damage and inventory remain local and do not persist. Combat, ammo, credits, hits, NPCs and AI remain **client-local** for now. The browser's prediction is visual only and its state is never sent to the server.
 - If the backend cannot connect, the legacy local game still runs. Offline standalone `orbital-outlaws.html` remains v0.6 local-only.
 - PostgreSQL `create_all` creates new tables but does not migrate existing columns. Production requires schema migrations, authenticated commands, collision/event scheduling and reconciliation of all entities and inventory.
 

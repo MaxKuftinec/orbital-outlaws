@@ -290,7 +290,7 @@
       player.rcsFiring=0;
     }else applyShipStep(player,dt);
     if(state.ended)return;
-    state.repairing=!persistentFlight&&state.down.has('repair')&&repairHull(player,dt);
+    state.repairing=state.down.has('repair')&&repairHull(player,dt);
     const ally=state.ally;
     if(ally.alive){
       applyShipStep(ally,dt);
@@ -736,7 +736,7 @@
     $('hull-value').textContent=Math.round(p.hp)+'%';$('hull-bar').style.width=clamp(p.hp,0,100)+'%';
     $('fuel-value').textContent=`${p.fuel.toFixed(1)} / ${p.fuelMax} kg`;$('fuel-bar').style.width=(100*p.fuel/p.fuelMax)+'%';
     $('repair-parts').textContent=p.repairParts.toFixed(1)+' / '+REPAIR.capacityKg+' kg';
-    $('repair-btn').disabled=persistentFlight||state.ended||p.hp>=100||p.repairParts<=.00001;
+    $('repair-btn').disabled=state.ended||p.hp>=100||p.repairParts<=.00001;
     $('repair-btn').textContent=state.repairing?'REPAIRING… (R)':'HOLD R · REPAIR';
     $('ammo-value').textContent=p.ammo;
     $('credits-value').innerHTML=p.credits+' <i>¤</i>';
@@ -1115,7 +1115,7 @@
           thrust:!state.paused&&!state.ended&&state.down.has('main'),
           turn:state.paused||state.ended?0:Number(state.down.has('rotate-right'))-Number(state.down.has('rotate-left')),
           stabilize:!state.paused&&!state.ended&&state.down.has('stabilize'),
-          gimbal:clamp(normAngle(desired-p.heading),-ENGINE.gimbalMax,ENGINE.gimbalMax)
+          gimbal:state.down.has('main')?clamp(normAngle(desired-p.heading),-ENGINE.gimbalMax,ENGINE.gimbalMax):0
         };
       },
       onState:result=>{
@@ -1130,6 +1130,8 @@
         if(online){
           persistentFlight=true;
           state.speed=1;$('sim-speed').value='1';$('sim-speed').disabled=true;
+          $('reset-btn').textContent='↻ Reset encounter';
+          $('reset-btn').title='Resets local combat only; persistent ship position and fuel are preserved.';
           state.autopilot=null;
           logEvent('Server-authoritative orbital flight connected. Combat/loot are still local.','good');
         }else{
