@@ -51,7 +51,11 @@
       // Sidebar panels acquire an initial cascade; positions are then preserved.
       if(!layout[panel.id]||layout[panel.id].x===undefined){
         const index=panels.findIndex(p=>p.id===panel.id);
-        moveTo(panel,20+index*20,65+index*28,true);
+        const x=panel.id==='nav-command'?limits(panel).x-14:
+          panel.id==='telemetry-console'||panel.id==='ship-panel'?14:20+index*20;
+        const y=panel.id==='nav-command'?96:panel.id==='telemetry-console'?14:
+          panel.id==='ship-panel'?limits(panel).y-14:65+index*28;
+        moveTo(panel,x,y,true);
       }else restorePosition(panel);
     }else{
       sidebar.appendChild(panel);
@@ -80,7 +84,7 @@
     const panel=document.getElementById(definition.id);
     if(!panel)continue;
     const header=panel.querySelector('.panel-heading,.nav-command-head')||
-      (()=>{const row=document.createElement('div');row.className='hud-heading';
+      (()=>{const row=document.createElement('div');row.className='hud-heading';row.textContent=definition.title;
         panel.insertBefore(row,panel.firstChild);return row;})();
     panel.classList.add('hud-panel');
     panel.dataset.panelTitle=definition.title;

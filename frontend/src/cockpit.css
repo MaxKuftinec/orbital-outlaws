@@ -36,3 +36,75 @@
   #canvas-workspace .nav-command{right:7px}
   #canvas-workspace .fullscreen-btn{top:7px;right:7px;font-size:10px}
 }
+
+
+/* v0.11 universal cockpit docking controls. Every panel supports both destinations. */
+#canvas-workspace .hud-in-canvas{
+  position:absolute!important;z-index:22;max-height:calc(100% - 20px);
+  min-width:190px;max-width:calc(100% - 16px);overflow:auto;
+  background:#071726f3;border:1px solid #3b6076;border-radius:10px;
+  box-shadow:0 10px 30px #000a;backdrop-filter:blur(8px);
+}
+#canvas-workspace .hud-in-canvas.panel{
+  width:min(305px,calc(100% - 22px));padding:12px 14px;
+}
+#canvas-workspace .hud-in-canvas.nav-command{width:min(315px,calc(100% - 22px))}
+#canvas-workspace .hud-in-canvas.telemetry-console{width:214px}
+#canvas-workspace .hud-in-canvas.ship-panel{width:min(294px,calc(100% - 22px))}
+#canvas-workspace .hud-in-canvas.hud-minimized{
+  width:235px!important;max-height:none;padding:8px 10px;
+}
+#canvas-workspace .hud-minimized>:not(.panel-heading):not(.nav-command-head):not(.hud-heading){
+  display:none!important;
+}
+.sidebar .hud-panel{
+  position:relative!important;top:auto!important;left:auto!important;right:auto!important;
+  bottom:auto!important;width:100%!important;max-width:none!important;max-height:none!important;
+  transform:none!important;
+}
+.sidebar .nav-command,.sidebar .telemetry-console{
+  padding:14px!important;background:var(--surface)!important;
+  box-shadow:none!important;backdrop-filter:none!important;
+}
+.sidebar .hud-panel.hud-minimized{
+  min-height:42px;padding:10px 12px!important;
+}
+.hud-panel .panel-heading,.hud-panel .nav-command-head,.hud-panel .hud-heading{
+  display:flex;align-items:center;gap:6px;
+}
+.hud-panel .panel-heading>span:first-child{margin-right:auto}
+.hud-panel .nav-command-head .console-toggle{margin-right:auto}
+.hud-heading{font-size:10px;letter-spacing:1px;font-weight:800;color:#b9d5e3;margin-bottom:6px}
+.hud-panel .hud-tool{
+  flex:none;display:inline-grid;place-items:center;min-width:25px;height:25px;padding:0 4px;
+  border:1px solid #3d5970;border-radius:5px;background:#153146;color:#bde4ed;
+  cursor:pointer;font-size:13px;
+}
+.hud-panel .hud-tool:hover,.hud-panel .panel-drag-handle:hover{background:#244b64}
+.hud-panel .panel-drag-handle{flex:none}
+.hud-panel .hud-heading .panel-drag-handle{margin-right:auto}
+.hud-panel.hud-in-canvas .panel-drag-handle{cursor:grab}
+.hud-panel:not(.hud-in-canvas) .panel-drag-handle{opacity:.4;cursor:default}
+#canvas-workspace .hud-picker{
+  position:absolute;z-index:1000;right:12px;top:48px;border:1px solid #35677f;
+  border-radius:7px;background:#0a2738f2;color:#c8f2fa;
+  padding:8px 11px;font-size:11px;font-weight:700;
+}
+#canvas-workspace .hud-picker-menu{
+  position:absolute;z-index:1001;top:87px;right:12px;width:min(260px,calc(100% - 22px));
+  max-height:calc(100% - 100px);overflow:auto;
+  border:1px solid #40657b;border-radius:9px;background:#081f30f8;
+  padding:7px;box-shadow:0 16px 35px #000c;
+}
+#canvas-workspace .hud-picker-menu[hidden]{display:none}
+#canvas-workspace .hud-picker-entry{
+  display:block;width:100%;text-align:left;background:transparent;color:#b7ddec;
+  border:0;border-radius:5px;padding:8px 10px;font-size:12px;
+}
+#canvas-workspace .hud-picker-entry:hover{background:#23455b}
+#canvas-workspace .hud-panel.dragging-panel{box-shadow:0 18px 45px #000e!important}
+@media(max-width:550px){
+  #canvas-workspace .hud-picker{top:43px;right:7px}
+  #canvas-workspace .hud-picker-menu{top:80px;right:7px}
+  #canvas-workspace .hud-in-canvas.panel{width:min(260px,calc(100% - 18px))}
+}
