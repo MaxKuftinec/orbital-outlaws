@@ -5,7 +5,7 @@ const backendOnline = ref(false)
 const persistentOnline = ref(false)
 window.addEventListener('orbital-persistence', ((e: CustomEvent) => { persistentOnline.value = e.detail.online }) as EventListener)
 const startupError = ref('')
-const legacyFiles = ['navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js', 'arrival.js', 'persistence.js', 'game.js']
+const legacyFiles = ['navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js', 'arrival.js', 'persistence.js', 'workspace.js', 'game.js']
 
 function loadLegacyScript(filename: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -43,7 +43,7 @@ onMounted(async () => {
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
-        <div><div class="eyebrow">PROTOTYPE 0.9</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+        <div><div class="eyebrow">PROTOTYPE 0.10</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
       <div class="top-actions"><v-chip :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Live · flight and upgrades saved' : backendOnline ? 'Backend online · connecting flight' : 'Local gameplay · backend offline' }}</v-chip>
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">ENCOUNTER TIME</span><strong id="sim-clock">00:00</strong></div></div>
@@ -60,10 +60,11 @@ onMounted(async () => {
           <div><span class="section-kicker">SECTOR 01</span><div class="arena-title">Kestrel gravity well <span class="online"></span></div></div>
           <div class="arena-actions"><v-btn density="compact" variant="tonal"  id="reinforce-btn" class="small-btn" aria-pressed="false" title="Allow new pirate spawns">Reinforcements: OFF</v-btn><v-btn density="compact" variant="tonal"  id="orbit-btn" class="small-btn selected" aria-pressed="true">◌ Trajectory</v-btn><v-btn density="compact" variant="tonal"  id="zoom-out" class="small-btn" aria-label="Zoom out">−</v-btn><span id="zoom-level" class="zoom-text">1.0×</span><v-btn density="compact" variant="tonal"  id="zoom-in" class="small-btn" aria-label="Zoom in">+</v-btn></div>
         </div>
-        <div class="canvas-wrap">
+        <div class="canvas-wrap" id="canvas-workspace">
+          <button type="button" id="fullscreen-btn" class="fullscreen-btn" aria-label="Enter fullscreen cockpit">⛶ Fullscreen</button>
           <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat."></canvas>
           <div class="nav-command" id="nav-command" role="group" aria-label="Navigation console">
-            <div class="nav-command-head"><button type="button" id="nav-toggle" class="console-toggle" aria-controls="nav-command-body" aria-expanded="true">◈ NAVIGATION <span id="nav-toggle-arrow">▴</span></button><span id="nav-quick-status">COMPUTER LOCKED</span></div>
+            <div class="nav-command-head"><button type="button" class="panel-drag-handle" data-drag-handle title="Drag navigation panel" aria-label="Drag navigation panel">⠿</button><button type="button" id="nav-toggle" class="console-toggle" aria-controls="nav-command-body" aria-expanded="true">◈ NAVIGATION <span id="nav-toggle-arrow">▴</span></button><span id="nav-quick-status">COMPUTER LOCKED</span></div>
             <div id="nav-command-body" class="nav-command-body">
             <div class="nav-command-select"><select id="nav-target" class="nav-target" aria-label="Rendezvous destination"></select><button type="button" id="nav-next" class="small-btn" title="Next navigation target (N)" aria-label="Cycle navigation targets">↻</button></div>
             <div class="nav-command-actions"><button type="button" id="nav-plan" class="wide-subtle-btn" title="Calculate route (C)">CALCULATE</button><button type="button" id="nav-engage" class="buy-btn" title="Install navigation computer or engage route (E)">BUY NAV 60¤</button><button type="button" id="nav-abort" class="small-btn" title="Abort autopilot (X)" disabled>ABORT</button></div>
@@ -71,6 +72,7 @@ onMounted(async () => {
             </div>
           </div>
           <div class="telemetry-console collapsed" id="telemetry-console" role="group" aria-label="On-screen orbital telemetry">
+            <button type="button" class="panel-drag-handle" data-drag-handle title="Drag telemetry panel" aria-label="Drag telemetry panel">⠿</button>
             <button type="button" class="console-toggle" id="telemetry-toggle" aria-controls="telemetry-console-body" aria-expanded="false">◉ TELEMETRY <span id="telemetry-toggle-arrow">▾</span></button>
             <div class="telemetry-console-body" id="telemetry-console-body">
               <div><span>Altitude</span><strong id="quick-alt">—</strong></div>
@@ -81,6 +83,14 @@ onMounted(async () => {
               <div><span>Flight status</span><strong id="quick-flight">—</strong></div>
             </div>
           </div>
+        <section class="panel ship-panel canvas-floating" id="ship-panel">
+          <div class="panel-heading"><span>YOUR SHIP</span><button type="button" class="panel-drag-handle" data-drag-handle title="Drag ship panel" aria-label="Drag ship panel">⠿</button><span class="ship-class">SCOUT / MK-I</span></div>
+          <div class="ship-name"><span class="ship-glyph">△</span><span>KESTREL-7<small id="status-text">Nominal orbit</small></span></div>
+          <div class="meter-title"><span>HULL INTEGRITY</span><b id="hull-value">100%</b></div><div class="meter"><div id="hull-bar" class="meter-fill green" style="width:100%"></div></div>
+          <div class="repair-controls"><span>SPARE PARTS <strong id="repair-parts">10.0 / 24 kg</strong></span><button id="repair-btn" type="button" class="small-btn repair-button" disabled>HOLD R · REPAIR</button></div>
+          <div class="meter-title"><span>PROPELLANT</span><b id="fuel-value">200 / 200 kg</b></div><div class="meter"><div id="fuel-bar" class="meter-fill cyan" style="width:100%"></div></div>
+          <div class="small-stats"><div><span>AMMO</span><strong id="ammo-value">36</strong></div><div><span>CREDITS</span><strong id="credits-value">0 <i>¤</i></strong></div><div><span>ΔV BUDGET</span><strong id="dv-value">—</strong></div></div>
+        </section>
           <button type="button" id="sos-btn" class="sos-btn" title="Ask AEGIS-01 for propellant">⚑ REQUEST FUEL ASSISTANCE</button>
           <div class="canvas-overlay top-left"><span class="tiny-dot blue"></span><span id="target-indicator">TRACKING: RAIDER-01</span></div>
           <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom <span class="keyboard-tag">N/C/E/X</span> nav <span class="keyboard-tag">H</span> help</div>
@@ -101,14 +111,7 @@ onMounted(async () => {
       </section>
 
       <aside class="sidebar" aria-label="Spacecraft instruments">
-        <section class="panel ship-panel">
-          <div class="panel-heading"><span>YOUR SHIP</span><span class="ship-class">SCOUT / MK-I</span></div>
-          <div class="ship-name"><span class="ship-glyph">△</span><span>KESTREL-7<small id="status-text">Nominal orbit</small></span></div>
-          <div class="meter-title"><span>HULL INTEGRITY</span><b id="hull-value">100%</b></div><div class="meter"><div id="hull-bar" class="meter-fill green" style="width:100%"></div></div>
-          <div class="repair-controls"><span>SPARE PARTS <strong id="repair-parts">10.0 / 24 kg</strong></span><button id="repair-btn" type="button" class="small-btn repair-button" disabled>HOLD R · REPAIR</button></div>
-          <div class="meter-title"><span>PROPELLANT</span><b id="fuel-value">200 / 200 kg</b></div><div class="meter"><div id="fuel-bar" class="meter-fill cyan" style="width:100%"></div></div>
-          <div class="small-stats"><div><span>AMMO</span><strong id="ammo-value">36</strong></div><div><span>CREDITS</span><strong id="credits-value">0 <i>¤</i></strong></div><div><span>ΔV BUDGET</span><strong id="dv-value">—</strong></div></div>
-        </section>
+
         <section class="panel ally-panel"><div class="panel-heading"><span>FRIENDLY ESCORT</span><span id="escort-status" class="status-pill">ONLINE</span></div><div class="ship-name" style="color:#67e0aa">★ AEGIS-01</div><div class="metric-row"><span>Hull integrity</span><strong id="escort-hull">80 / 80</strong></div><div class="metric-row"><span>Ammunition</span><strong id="escort-ammo">120</strong></div><div class="metric-row"><span>Propellant</span><strong id="escort-fuel">—</strong></div><div class="mini-note" id="escort-state">ENGAGING HOSTILES</div><button type="button" class="wide-subtle-btn" id="escort-help-btn">⚑ Request fuel assistance</button></section>
         <section class="panel propulsion">
           <div class="panel-heading"><span>PROPULSION</span><span>SCOUT MK-I</span></div>
@@ -167,7 +170,7 @@ onMounted(async () => {
         <div class="settings-bottom"><button type="button" id="hotkey-reset" class="small-btn">Restore defaults</button><button type="button" id="settings-done" class="buy-btn">Done</button></div>
       </div>
     </div>
-    <footer class="footer-note">Orbital Outlaws · Vue preview 0.9 <span>Live orbital flight · persistent upgrades · local combat preview</span></footer>
+    <footer class="footer-note">Orbital Outlaws · Vue preview 0.10 <span>Live orbital flight · persistent upgrades · local combat preview</span></footer>
   </div>
 
   <v-alert v-if="startupError" color="error" variant="tonal" class="game-startup-error">{{ startupError }}</v-alert>

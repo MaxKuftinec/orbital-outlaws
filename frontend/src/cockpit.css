@@ -4,3 +4,35 @@
 .orbital-vuetify .v-btn { text-transform: none; letter-spacing: normal; font-family: inherit; font-size: 12px; }
 .orbital-vuetify .top-actions .v-chip { margin-right: 8px; }
 .game-startup-error { position: fixed; bottom: 12px; left: 12px; right: 12px; z-index: 200; }
+
+
+/* Canvas cockpit workspace — floating panels remain available in fullscreen. */
+#canvas-workspace{position:relative;isolation:isolate}
+#canvas-workspace:fullscreen{width:100vw;height:100dvh;max-width:none;border-radius:0;background:#050d18}
+#canvas-workspace:fullscreen #orbit-canvas{width:100%;height:100%;min-height:0;max-height:none}
+#canvas-workspace::backdrop{background:#050d18}
+#canvas-workspace .fullscreen-btn{position:absolute;z-index:30;right:12px;top:10px;border:1px solid #35677f;border-radius:7px;background:#0a2738ed;color:#c8f2fa;padding:8px 11px;font-size:11px;font-weight:750;box-shadow:0 4px 14px #0008}
+#canvas-workspace .fullscreen-btn:hover{background:#16425a}
+#canvas-workspace .nav-command{top:51px;right:12px}
+#canvas-workspace .telemetry-console{top:10px;left:12px}
+#canvas-workspace .canvas-floating{position:absolute;z-index:6;left:12px;bottom:15px;width:min(294px,calc(100% - 24px));max-height:calc(100% - 80px);overflow:auto;background:#071726ef;box-shadow:0 12px 32px #0009;backdrop-filter:blur(9px);border-color:#345467}
+#canvas-workspace .canvas-floating .panel-heading{margin-bottom:10px}
+#canvas-workspace .canvas-floating .ship-name{margin-bottom:8px}
+#canvas-workspace .canvas-floating .meter-title{margin-top:9px}
+#canvas-workspace .canvas-floating .small-stats{margin-top:12px}
+#canvas-workspace .canvas-floating .small-stats strong{font-size:14px}
+#canvas-workspace .panel-drag-handle{flex:none;background:#183449;color:#9eddec;border:1px solid #42617a;border-radius:5px;font-size:14px;padding:1px 7px;cursor:grab;touch-action:none;user-select:none;line-height:1.25}
+#canvas-workspace .panel-drag-handle:active{cursor:grabbing}
+#canvas-workspace .nav-command-head .panel-drag-handle{margin-right:3px}
+#canvas-workspace .telemetry-console>.panel-drag-handle{float:right;margin-left:7px}
+#canvas-workspace .canvas-overlay.bottom-left{left:50%;transform:translateX(-50%);max-width:calc(100% - 330px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#canvas-workspace .dragging-panel{box-shadow:0 19px 35px #000d!important}
+@media(max-width:850px){
+  #canvas-workspace .canvas-floating{width:min(244px,calc(100% - 24px));padding:12px}
+  #canvas-workspace .canvas-overlay.bottom-left{display:none}
+}
+@media(max-width:480px){
+  #canvas-workspace .canvas-floating{bottom:10px;left:7px;width:min(232px,calc(100% - 16px))}
+  #canvas-workspace .nav-command{right:7px}
+  #canvas-workspace .fullscreen-btn{top:7px;right:7px;font-size:10px}
+}
