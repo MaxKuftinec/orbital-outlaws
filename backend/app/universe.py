@@ -33,6 +33,66 @@ def ship(id: str, radius: float, angle: float, ally: bool = False) -> dict:
             'shotCount': 0, 'gimbal': 0, 'thrustVector': None, 'rcsFiring': 0}
 
 
+
+def incoming_ship(id: str, angle: float, intent: str, ally: bool = False,
+                  mu: float = MU) -> dict:
+    """Start beyond the populated sector on an inbound hyperbolic approach.
+
+    Flyby ships retain their positive-energy trajectory. Orbit-intent ships
+    circularize with an actual propellant-consuming insertion impulse.
+    """
+    if intent not in ('flyby', 'orbit'):
+        raise ValueError('Unknown arrival intention')
+    number = int(id.rsplit('-', 1)[-1])
+    radius = 950. + (number % 4) * 85.
+    periapsis = 275. + (number % 4) * 24.
+    v_inf = 12. + (number % 3) * 2.
+    tangential = periapsis * math.sqrt(v_inf*v_inf + 2*mu/periapsis)/radius
+    inbound_speed = math.sqrt(v_inf*v_inf + 2*mu/radius - tangential*tangential)
+    c, si = math.cos(angle), math.sin(angle)
+    vessel = ship(id, radius, angle, ally)
+    vessel.update({'name':id.upper(), 'x':radius*c, 'y':radius*si,
+                   'vx':-inbound_speed*c-tangential*si,
+                   'vy':-inbound_speed*si+tangential*c,
+                   'heading':math.atan2(-inbound_speed*si+tangential*c,
+                                        -inbound_speed*c-tangential*si),
+                   'arrivalIntent':intent, 'arrivalPhase':'approach',
+                   'insertionRadius':periapsis, 'nextDecision':0.,
+                   'fuel':180., 'fuelMax':190.})
+    return vessel
+
+
+def resolve_arrival(sector: dict, body: dict, mu: float, when: float):
+    """Execute a physically meaningful capture burn instead of a slingshot."""
+    if body.get('arrivalPhase') != 'approach' or not body.get('alive', True):
+        return
+    if body['arrivalIntent'] == 'flyby':
+        r = math.hypot(body['x'], body['y'])
+        radial = (body['x']*body['vx']+body['y']*body['vy'])/r
+        if radial > 0 and r > 650:
+            body['arrivalPhase'] = 'departed'
+            event(sector,when,body['name']+' completed its Kestrel flyby.', 'neutral')
+        return
+    r = math.hypot(body['x'],body['y'])
+    if r > body['insertionRadius']+24:
+        return
+    tangent_x,tangent_y=-body['y']/r,body['x']/r
+    circular_speed=math.sqrt(mu/r)
+    dvx=circular_speed*tangent_x-body['vx']
+    dvy=circular_speed*tangent_y-body['vy']
+    try:
+        result=apply_impulse(state_of(body),dvx,dvy,320.,reserve_kg=8.)
+    except ValueError:
+        body['arrivalPhase']='failed'
+        event(sector,when,body['name']+' could not afford orbit insertion; flyby continues.', 'danger')
+        return
+    body['vx'],body['vy'],body['fuel']=result.vx,result.vy,result.fuel_kg
+    body['arrivalPhase']='orbiting'
+    event(sector,when,f"{body['name']} entered a {r:.0f} km orbit "
+         f"(Δv {math.hypot(dvx,dvy):.1f} km/s; "
+         f"{180-result.fuel_kg:.1f} kg propellant used).",'good')
+
+
 def new_sector(world_time: float, mu: float = MU) -> dict:
     def pod(id, radius, angle, kind, amount):
         return {**circular(radius, angle, mu), 'id': id, 'type': kind,
@@ -47,7 +107,8 @@ def new_sector(world_time: float, mu: float = MU) -> dict:
                 pod('starter-fuel-1', 312, .75, 'fuel', 32),
                 pod('starter-credits-1', 365, 1.7, 'credits', 30),
                 pod('starter-parts-0', 295, 1.1, 'parts', 8)],
-            'shots': [], 'shotCounter': 0, 'nextRaiderId': 3, 'player': {'hp': 100., 'ammo': 36, 'repairParts': 10.,
+            'shots': [], 'shotCounter': 0, 'nextRaiderId': 3, 'nextAllyId': 2,
+            'allies': [], 'player': {'hp': 100., 'ammo': 36, 'repairParts': 10.,
                                     'alive': True, 'gunReady': world_time},
             'events': [], 'reinforcements': False, 'nextEnemySpawn': world_time+75,
             'playerKills': 0, 'collisionCooldown': {}}
@@ -167,7 +228,8 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
     while elapsed < seconds-1e-8:
         dt = min(time_step, seconds-elapsed)
         when = sector['t']+dt
-        bodies = [player, sector['ally'], *sector['enemies']]
+        allies = [sector['ally'], *sector.get('allies', [])]
+        bodies = [player, *allies, *sector['enemies']]
         previous = {b['id']: {k:b[k] for k in ('x','y')} for b in bodies if b.get('alive',True)}
         for pickup in sector['pickups']:
             if pickup.get('alive',True):
@@ -177,9 +239,10 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
                 previous['shot-'+str(index)]={k:shot[k] for k in ('x','y')}
 
         # Decisions and firing happen before motion; offline events are durable.
-        ally = sector['ally']
-        if ally.get('alive',True):
-            enemy_list=[b for b in sector['enemies'] if b.get('alive',True)]
+        enemy_list=[b for b in sector['enemies'] if b.get('alive',True)]
+        for ally in allies:
+            if not ally.get('alive',True) or ally.get('arrivalPhase')=='approach':
+                continue
             if enemy_list:
                 near=min(enemy_list,key=lambda b:distance(b,ally))
                 if distance(near,ally)<460:
@@ -187,13 +250,14 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
         for enemy in sector['enemies']:
             if not enemy.get('alive',True):
                 continue
-            candidates=[b for b in (player,ally) if b.get('alive',True)]
+            candidates=[b for b in (player,*allies) if b.get('alive',True)]
             if not candidates:
                 continue
             target=min(candidates,key=lambda b:distance(b,enemy))
-            if when>=enemy.get('nextDecision',0):
-                change_velocity(enemy,target,mu)
-                enemy['nextDecision']=when+7.
+            if enemy.get('arrivalPhase') not in ('approach','departed','failed'):
+                if when>=enemy.get('nextDecision',0):
+                    change_velocity(enemy,target,mu)
+                    enemy['nextDecision']=when+7.
             if distance(enemy,target)<310:
                 fire(sector,enemy,target,when,'raider')
 
@@ -205,6 +269,8 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
             if was_alive and not body.get('alive',True):
                 body['hp']=0
                 event(sector,when,body['name']+' impacted Kestrel.','danger')
+            if body.get('alive',True) and body.get('arrivalPhase')=='approach':
+                resolve_arrival(sector,body,mu,when)
         for pickup in sector['pickups']:
             move(pickup,dt,mu)
 
@@ -216,7 +282,7 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
             if not shot['alive'] or when-shot['born'] > 30:
                 shot['alive']=False
                 continue
-            targets = [player,ally] if shot['faction']=='raider' else sector['enemies']
+            targets = [player,*allies] if shot['faction']=='raider' else sector['enemies']
             for target in targets:
                 if not target.get('alive',True):
                     continue
@@ -272,22 +338,36 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
                 if distance(player,pickup)>19 or math.hypot(
                     pickup['vx']-player['vx'],pickup['vy']-player['vy'])>=5:
                     continue
-                pickup['alive']=False
                 kind=pickup['type'];amount=pickup['amount']
+                gains=[]
                 if kind=='credits':
                     effects['credits']+=amount
+                    gains.append(f'+{amount} ¤')
                 elif kind=='wreck':
                     effects['credits']+=50
                     player['ammo']+=12
-                    player['repairParts']=min(24.,player['repairParts']+6)
+                    spare=min(6.,max(0.,24.-player['repairParts']))
+                    player['repairParts']+=spare
+                    gains.extend(['+50 ¤','+12 rounds'])
+                    if spare:gains.append(f'+{spare:.1f} kg spare parts')
                 elif kind=='ammo':
                     player['ammo']+=amount
+                    gains.append(f'+{amount} rounds')
                 elif kind=='parts':
-                    player['repairParts']=min(24.,player['repairParts']+amount)
+                    spare=min(amount,max(0.,24.-player['repairParts']))
+                    if spare:
+                        player['repairParts']+=spare
+                        gains.append(f'+{spare:.1f} kg spare parts')
                 elif kind=='fuel':
                     fuel=min(amount,max(0.,200-start_player.fuel_kg-effects['fuel']))
-                    effects['fuel']+=fuel
-                event(sector,when,'KESTREL-7 recovered '+kind+' salvage.','good')
+                    if fuel:
+                        effects['fuel']+=fuel
+                        gains.append(f'+{fuel:.1f} kg propellant')
+                if not gains:
+                    continue  # Keep full-capacity salvage in the world for later.
+                pickup['alive']=False
+                event(sector,when,f"KESTREL-7 recovered {kind}: "
+                      +', '.join(gains)+'.','good')
         sector['shots']=[shot for shot in sector['shots'] if shot.get('alive',True)]
         sector['pickups']=[p for p in sector['pickups'] if p.get('alive',True)]
         elapsed+=dt
