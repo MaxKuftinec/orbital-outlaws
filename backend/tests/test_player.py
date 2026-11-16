@@ -11,7 +11,7 @@ def test_player_persists_and_uses_lease_limited_burn(monkeypatch, postgres_url):
     main.store.cache_clear()
     pid = uuid4().hex
     with TestClient(app) as client:
-        url = '/api/players/' + pid
+        url = '/players/' + pid
         first = client.post(url)
         assert first.status_code == 200, first.text
         assert first.json()['state']['fuel_kg'] == 200
