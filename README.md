@@ -34,7 +34,7 @@ Open http://localhost:5173. Vite proxies WebSocket upgrades on `/api` and the he
 
 The game has **no Pause or time-speed multiplier**. The universe clock continues on the server even when nobody has the tab open. Unpowered motion is calculated lazily from orbital checkpoints. W/A/D/S and the gimbal are predicted immediately on the browser, with server snapshots ~10 Hz and held-control lease renewals ~5 Hz. Inputs expire after 0.4 seconds without renewal.
 
-Credits begin at 65 ¤. Buying **Predictive (40 ¤)**, **Trajectory (25 ¤)** or **Navigation (60 ¤)** is checked by PostgreSQL and persists through refresh. The starter credit pickups and wreck credit rewards are submitted as idempotent claims. The same pickup ID can only be credited once per pilot, even if a local encounter is reset. The **technology remains owned after refreshing**, but navigation *autopilot itself* is not yet server-authoritative and remains disabled in persistent mode. Ammo, repair parts, enemy ships and encounter resets are still local.
+Credits begin at 65 ¤. Buying **Predictive (40 ¤)**, **Trajectory (25 ¤)** or **Navigation (60 ¤)** is checked by PostgreSQL and persists through refresh. The starter credit pickups and wreck credit rewards are submitted as idempotent claims; unacknowledged claims are retried on reconnect. The same pickup ID can only be credited once per pilot, even if a local encounter is reset. The **technology remains owned after refreshing**, but navigation *autopilot itself* is not yet server-authoritative and remains disabled in persistent mode. Ammo, repair parts, enemy ships and encounter resets are still local.
 
 ### Important security boundary
 

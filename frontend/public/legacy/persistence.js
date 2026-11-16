@@ -16,6 +16,9 @@
     const address=(origin.protocol==='https:'?'wss:':'ws:')+'//'+origin.host+
       origin.pathname.replace(/\/$/,'')+'/api/players/'+pilotId()+'/live';
     let socket=null,connected=false,last='',lastSent=0,retry=null,closed=false;
+    const pendingKey='orbital-outlaws.pending-salvage.v1';
+    const pending=new Map(JSON.parse(localStorage.getItem(pendingKey)||'[]'));
+    const savePending=()=>localStorage.setItem(pendingKey,JSON.stringify([...pending]));
     const send=(type,body={})=>{
       if(!connected||socket?.readyState!==WebSocket.OPEN)return false;
       socket.send(JSON.stringify({type,...body}));
@@ -39,17 +42,20 @@
           onState({...data.flight,clientSampleMs:performance.now()});
           onProgress(data.progress);
           connected=true;last='';onConnected(true);tick();
+          for(const reward of pending.values())send('salvage',reward);
         }else if(data.type==='snapshot'){
           onState({...data.flight,clientSampleMs:performance.now()});
         }else if(data.type==='progress'){
+          if(data.claim_id){pending.delete(data.claim_id);savePending();}
           onProgress(data.progress);
         }else if(data.type==='error'){
           onError(data.message);
         }
       };
       ws.onerror=()=>onError('WebSocket connection error');
-      ws.onclose=()=>{
+      ws.onclose=event=>{
         if(connected){connected=false;onConnected(false);}
+        if(event.code===1008){onError('Development WebSocket disabled; set ORBITAL_DEV_COMMANDS=1 locally.');return;}
         if(!closed)retry=setTimeout(connect,1500);
       };
     }
@@ -60,7 +66,11 @@
     connect();
     return {
       purchase:upgrade=>send('purchase',{upgrade}),
-      salvage:(id,credits)=>send('salvage',{id,credits}),
+      salvage:(id,credits)=>{
+        pending.set(id,{id,credits});savePending();
+        send('salvage',{id,credits});
+        return true;
+      },
       close:()=>{
         closed=true;clearInterval(interval);clearTimeout(retry);
         for(const name of events)root.removeEventListener(name,tick);

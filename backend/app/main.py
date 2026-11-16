@@ -71,7 +71,7 @@ async def pilot_live(ws: WebSocket,pilot_id: str):
                     await ws.send_json({'type':'progress','progress':progress})
                 elif kind=='salvage':
                     progress=await run_in_threadpool(database.player_salvage,pilot_id,str(message.get('id','')),int(message.get('credits',0)))
-                    await ws.send_json({'type':'progress','progress':progress})
+                    await ws.send_json({'type':'progress','progress':progress,'claim_id':str(message['id'])})
                 else:
                     raise ValueError('Unknown message type')
             except (ValueError,ValidationError,LookupError) as exc:
