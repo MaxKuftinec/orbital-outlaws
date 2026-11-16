@@ -42,6 +42,33 @@ def begin_tether(player: dict, pickup: dict, selected_mass: float,
     decision=assess_capture(player,pickup,selected_mass,upgraded)
     if not decision.ok:
         return None, decision.reason
+    # A capture is voluntary only in the abstracted auto-grapple system.
+    # Refuse obviously impossible contact *before* attaching and penalizing
+    # the pilot: the winch cannot safely arrest outward radial motion with
+    # less line than the required minimum stopping distance.
+    dx=pickup['x']-player['x']
+    dy=pickup['y']-player['y']
+    separation=math.hypot(dx,dy)
+    if separation>LINE_LENGTH_KM:
+        return None,'Outside grapple reach'
+    relative_x=pickup['vx']-player['vx']
+    relative_y=pickup['vy']-player['vy']
+    relative=math.hypot(relative_x,relative_y)
+    if separation>1.e-7:
+        nx,ny=dx/separation,dy/separation
+    elif relative>1.e-7:
+        nx,ny=relative_x/relative,relative_y/relative
+    else:
+        nx,ny=1.,0.
+    radial=max(0.,relative_x*nx+relative_y*ny)
+    ship_mass=float(player.get('mass_kg',player.get('dryMass',900.)+player.get('fuel',0.)))
+    reduced=ship_mass*selected_mass/(ship_mass+selected_mass)
+    rated=RIG_TENSION_N if upgraded else BASE_TENSION_N
+    braking=reduced*1000.*radial*radial/(2.*rated)
+    remaining=LINE_LENGTH_KM-separation
+    if braking+.25>remaining:
+        return None,(f'Unsafe automatic grapple: needs at least {braking:.1f} km '
+                     f'braking distance but only {remaining:.1f} km line remains')
     return {'pickupId':pickup['id'], 'massKg':selected_mass,
             'startedAt':when, 'durationS':0., 'tensionN':0.,
             'peakTensionN':0.,'fatigueS':0.,'heatMJ':0.,

@@ -99,3 +99,16 @@ def test_different_salvage_masses_produce_different_acceleration_under_same_forc
     step_tether(first,a,a_arm,.25,True)
     step_tether(second,b,b_arm,.25,True)
     assert abs(a['vx']-1.)>abs(b['vx']-1.)
+
+
+def test_line_can_still_fail_after_safe_latch_if_motion_changes():
+    ship=spacecraft()
+    pod={'id':'sudden-thrust','alive':True,'type':'credits','amount':24.,
+         'x':2.,'y':0.,'vx':.25,'vy':0.}
+    arm,reason=begin_tether(ship,pod,2.,0.,True)
+    assert arm is not None,reason
+    ship['vx']=-35.   # Pilot applies a huge unexpected retrograde impulse.
+    result=step_tether(ship,pod,arm,.25,True)
+    assert result.status=='broken'
+    assert 'braking distance' in result.reason
+    assert pod['alive']

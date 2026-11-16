@@ -632,6 +632,20 @@
       const limit=state.captureOwned?8:5;
       if(!payload||payload>(state.captureOwned?240:150)||relative>=limit||
          (p.captureHeatMJ||0)+energy>(state.captureOwned?1300:520))return;
+      const dx=pod.x-p.x,dy=pod.y-p.y;
+      const nx=range>1e-7?dx/range:relative>1e-7?rvx/relative:1;
+      const ny=range>1e-7?dy/range:relative>1e-7?rvy/relative:0;
+      const outbound=Math.max(0,rvx*nx+rvy*ny);
+      const tensionLimit=state.captureOwned?12000:2200;
+      const brakeDistance=reduced*1000*outbound*outbound/(2*tensionLimit);
+      if(brakeDistance+.25>19-range){
+        if(state.t-(pod.lastCaptureDeniedAt||-1e9)>12){
+          pod.lastCaptureDeniedAt=state.t;
+          logEvent('Automatic grapple refused: '+brakeDistance.toFixed(1)+
+            ' km braking distance needs more free tether line. Approach more slowly.','danger');
+        }
+        return;
+      }
       tether={pickupId:pod.id,massKg:payload,startedAt:state.t,durationS:0,tensionN:0,
         peakTensionN:0,fatigueS:0,heatMJ:0,motorMJ:0,status:'reeling'};
       state.captureTether=tether;
@@ -1011,12 +1025,29 @@
   }
   function autopilotStep(dt){
     const a=state.autopilot;if(!a)return null;
+    const isPickup=a.targetKey.startsWith('pickup:');
     const target=navTarget(a.targetKey);
-    if(!target){abortNav('Navigation contact lost.');return null;}
+    if(!target){
+      if(isPickup&&a.phase==='tether')abortNav('Salvage contact cleared after grapple; guidance complete.');
+      else abortNav('Navigation contact lost.');
+      return null;
+    }
     const ship=state.player,range=magnitude(ship.x-target.x,ship.y-target.y),relative=magnitude(ship.vx-(target.vx||0),ship.vy-(target.vy||0));
+    const grappleActive=isPickup&&state.captureTether?.pickupId===target.id;
+    if(grappleActive){
+      if(a.phase!=='tether'){
+        a.phase='tether';
+        logEvent('Grapple attached; suspending maneuver burns until capture succeeds or the line releases.','good');
+      }
+      return null;
+    }
+    if(isPickup&&a.phase==='tether'){
+      abortNav('Grapple released before recovery. Reduce relative speed, then replot the rendezvous.');
+      return null;
+    }
     if(!SAFE.burnAllowed(ship.fuel,ship.fuelMax,a.reserveKg)){abortNav('Autopilot aborted: protected reserve reached.');return null;}
     if(state.t>a.dueAt+28){abortNav('Autopilot aborted: interception deadline exceeded. No more blind correction burns.');return null;}
-    if((a.targetKey.startsWith('enemy:')||a.targetKey==='ally')&&range<28&&relative<3){abortNav('Rendezvous range reached; hostile contact nearby!');return null;}
+    if((a.targetKey.startsWith('enemy:')||a.targetKey==='ally'||a.targetKey.startsWith('ally:'))&&range<28&&relative<3){abortNav('Rendezvous range reached; hostile contact nearby!');return null;}
     if(a.targetKey==='waypoint'&&range<24){abortNav('Waypoint reached.');return null;}
     if(a.phase==='wait'){
       if(state.t>=a.startAt){a.phase='burn1';}
@@ -1039,8 +1070,15 @@
       const dx=future.x-ship.x,dy=future.y-ship.y;
       const dvx=future.vx-ship.vx,dvy=future.vy-ship.vy;
       const dist=magnitude(dx,dy);
-      if(dist<22&&magnitude(dvx,dvy)<3){
-        if(a.targetKey.startsWith('enemy:')||a.targetKey==='waypoint'||a.targetKey==='ally')abortNav('Relative velocity matched near destination.');
+      // For moving salvage the old <22 km / <3 km/s threshold was far too
+      // generous for a finite-force tether (especially a 120 kg wreck).
+      // Continue to actively match velocity before switching into capture
+      // holding. The server's own tether safety envelope remains final.
+      const captureReady=isPickup?dist<16&&magnitude(dvx,dvy)<(state.captureOwned?.5:.2):
+        dist<22&&magnitude(dvx,dvy)<3;
+      if(captureReady){
+        if(a.targetKey.startsWith('enemy:')||a.targetKey==='waypoint'||a.targetKey==='ally'||
+           a.targetKey.startsWith('ally:'))abortNav('Relative velocity matched near destination.');
         else {a.phase='holding';a.holdingAt=state.t;}
         return null;
       }
@@ -1051,7 +1089,10 @@
       return unit(correction.x,correction.y);
     }
     if(a.phase==='holding'){
-      if(state.t-a.holdingAt>6)abortNav('Capture window missed. Replot the route.');
+      if(isPickup&&state.t-a.holdingAt>12)
+        abortNav('No safe grapple attachment confirmed. Replot a closer, slower salvage approach.');
+      else if(!isPickup&&state.t-a.holdingAt>6)
+        abortNav('Capture window missed. Replot the route.');
       return null;
     }
     return null;

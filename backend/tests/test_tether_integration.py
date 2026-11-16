@@ -38,10 +38,10 @@ def test_failed_high_mass_cable_does_not_grant_credits_or_delete_wreck():
     result,effects=advance_sector(sector,2.,player,upgrades={'capture':True})
     assert effects['credits']==0
     assert len(result['pickups'])==1
-    assert result['player']['hp']<100.
-    assert result['player']['captureFailures']>=1.
+    assert result['player']['hp']==100.  # refused contact causes no structural damage
+    assert result['player']['captureFailures']==0.
     assert result['captureTether'] is None
-    assert any('grapple failed' in e['message'] for e in result['events'])
+    assert any('Unsafe automatic grapple' in e['message'] for e in result['events'])
 
 
 def test_zero_relative_speed_payload_does_not_need_fake_tow_or_heating():

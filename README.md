@@ -309,3 +309,16 @@ simulation tick rather than integrating full elastic cable elements/attitude
 dynamics. Realistic metre-scale grapple reach, multi-body tethers, rotational
 torque, finite cable mass, retraction power supply and spool failure are future
 physical-model improvements.
+
+
+### Automatic grapple safety and salvage autopilot handoff
+
+Automatic capture refuses a contact when its current outward radial speed and
+payload mass require more braking distance than the free tether length. Such
+refusals preserve the payload and do not impose hull damage. Once a viable
+line is attached, the Rendezvous Computer switches to **tether** guidance:
+it does not fire new transfer burns or time out under the obsolete six-second
+capture-window deadline while the server reels in the payload. If the line
+breaks or disappears without recovery, guidance stops and requires a new
+approach. The separate grapple-tension, overheating and fatigue limits remain;
+a line that becomes unsafe *after* attachment may still snap and damage hull.
