@@ -21,3 +21,15 @@ def test_persistent_credits_upgrades_and_idempotent_salvage(postgres_url):
     reopened=WorldStore(postgres_url)
     assert reopened.player_progress(pilot)==credited
     assert reopened.player_purchase(pilot,'trajectory')['credits']==24
+
+
+def test_salvage_capture_upgrade_is_purchased_and_persists(postgres_url):
+    store=WorldStore(postgres_url)
+    store.ensure_world()
+    pilot=uuid4().hex
+    store.connect_player(pilot)
+    bought=store.player_purchase(pilot,'capture')
+    assert bought['credits']==10
+    assert bought['upgrades']['capture'] is True
+    assert store.player_purchase(pilot,'capture')==bought
+    assert WorldStore(postgres_url).player_progress(pilot)==bought

@@ -2,7 +2,7 @@
 export const COCKPIT_STATE_EVENT = 'orbital-cockpit-state'
 export const MARKET_PURCHASE_EVENT = 'orbital-market-purchase'
 
-export type TechnologyKey = 'predictive' | 'trajectory' | 'ephemeris' | 'nav'
+export type TechnologyKey = 'predictive' | 'trajectory' | 'ephemeris' | 'nav' | 'capture'
 
 export interface ShipView {
   hp: number

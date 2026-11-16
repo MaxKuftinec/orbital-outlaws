@@ -83,7 +83,7 @@
       return;
     }
     const oldPilot = persistentFlight && state ? state.player : null;
-    const oldTech = persistentFlight && state ? {predictive:state.predictive,trajectoryIntel:state.trajectoryIntel,navOwned:state.navOwned,ephemerisOwned:state.ephemerisOwned} : null;
+    const oldTech = persistentFlight && state ? {predictive:state.predictive,trajectoryIntel:state.trajectoryIntel,navOwned:state.navOwned,ephemerisOwned:state.ephemerisOwned,captureOwned:state.captureOwned} : null;
     const player = newShip('player','KESTREL-7',260,-0.67,palette.cyan,true);
     if(oldPilot){
       for(const key of ['x','y','vx','vy','heading','omega','fuel'])player[key]=oldPilot[key];
@@ -96,7 +96,7 @@
     state = {t:0, player, ally, allies:[], enemies:[e1,e2], shots:[], pickups:[
       newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30),newPickup(295,1.1,'parts',8)
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
-    orbitVisible:true, predictive:false, trajectoryIntel:false, ephemerisOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
+    orbitVisible:true, predictive:false, trajectoryIntel:false, ephemerisOwned:false, captureOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
     collisionCooldown:new Map(), playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false,
     playerReserveKg:storedReserve()};
     if(oldTech){Object.assign(state,oldTech);player.credits=oldPilot.credits;}
@@ -505,7 +505,7 @@
     for(const p of state.pickups) {
       if(!p.alive) continue;
       stepBody(p,dt);
-      if(magnitude(p.x-player.x,p.y-player.y)<19 && magnitude(p.vx-player.vx,p.vy-player.vy)<5) collect(p);
+      if(magnitude(p.x-player.x,p.y-player.y)<19 && magnitude(p.vx-player.vx,p.vy-player.vy)<(state.captureOwned?8:5)) collect(p);
       if(p.alive&&state.rescue?.activity==='scavenge'&&state.rescue.targetKey==='pickup:'+p.id&&state.ally.alive&&
          magnitude(p.x-state.ally.x,p.y-state.ally.y)<19&&magnitude(p.vx-state.ally.vx,p.vy-state.ally.vy)<5){
         p.alive=false;
@@ -1113,7 +1113,7 @@
       market:{
         credits:p.credits,ended:state.ended||!p.alive,
         owned:{predictive:state.predictive,trajectory:state.trajectoryIntel,
-          ephemeris:state.ephemerisOwned,nav:state.navOwned}
+          ephemeris:state.ephemerisOwned,nav:state.navOwned,capture:state.captureOwned}
       }
     }}));
   }
@@ -1278,7 +1278,8 @@
       predictive:{flag:'predictive',price:40,name:'Predictive fire control'},
       trajectory:{flag:'trajectoryIntel',price:25,name:'Target trajectory analyzer'},
       ephemeris:{flag:'ephemerisOwned',price:45,name:'Ephemeris computer'},
-      nav:{flag:'navOwned',price:60,name:'Rendezvous computer'}
+      nav:{flag:'navOwned',price:60,name:'Rendezvous computer'},
+      capture:{flag:'captureOwned',price:55,name:'Salvage Capture Rig'}
     };
     function buyTechnology(key){
       const tech=technologies[key];
@@ -1295,7 +1296,7 @@
     if(!document.querySelector('.upgrades[data-vue-managed="true"]')){
       for(const [key,id] of [
         ['predictive','upgrade-btn'],['trajectory','trajectory-upgrade-btn'],
-        ['ephemeris','ephemeris-upgrade-btn'],['nav','nav-upgrade-btn']
+        ['ephemeris','ephemeris-upgrade-btn'],['nav','nav-upgrade-btn'],['capture','capture-upgrade-btn']
       ])$(id)?.addEventListener('click',()=>buyTechnology(key));
     }
     // NPC reinforcement spawning is available only via the FastAPI development API.
@@ -1368,17 +1369,19 @@
         state.lastBallistic=-999;
       },
       onProgress:progress=>{
-        const previous={predictive:state.predictive,trajectoryIntel:state.trajectoryIntel,navOwned:state.navOwned,ephemerisOwned:state.ephemerisOwned};
+        const previous={predictive:state.predictive,trajectoryIntel:state.trajectoryIntel,navOwned:state.navOwned,ephemerisOwned:state.ephemerisOwned,captureOwned:state.captureOwned};
         state.player.credits=progress.credits;
         if(typeof progress.reserve_kg==='number')applyPlayerReserve(progress.reserve_kg);
         state.predictive=Boolean(progress.upgrades.predictive);
         state.trajectoryIntel=Boolean(progress.upgrades.trajectory);
         state.navOwned=Boolean(progress.upgrades.nav);
         state.ephemerisOwned=Boolean(progress.upgrades.ephemeris);
+        state.captureOwned=Boolean(progress.upgrades.capture);
         if(!previous.predictive&&state.predictive)logEvent('Predictive fire control installed persistently.','good');
         if(!previous.trajectoryIntel&&state.trajectoryIntel)logEvent('Trajectory analyzer installed persistently.','good');
         if(!previous.navOwned&&state.navOwned)logEvent('Rendezvous technology installed persistently.','good');
         if(!previous.ephemerisOwned&&state.ephemerisOwned)logEvent('Ephemeris computer installed · orbital predictions unlocked.','good');
+        if(!previous.captureOwned&&state.captureOwned)logEvent('Salvage Capture Rig installed · capture tolerance now 8 km/s.','good');
         state.lastBallistic=-999;updateHud();
       },
       onError:message=>{encounterReady=true;logEvent('Flight server: '+message.slice(0,110),'danger');},

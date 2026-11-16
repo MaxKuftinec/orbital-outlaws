@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 import secrets
 from .physics import State, propagate, apply_impulse, orbital_envelope
+from .npc_guidance import plan_transfer, queue_burn, move_with_burn
 
 MU = 310000.0
 BODY_RADIUS = 91.0
@@ -174,9 +175,11 @@ def move(body: dict, dt: float, mu: float):
     if not body.get('alive', True):
         return
     try:
-        result = propagate(state_of(body), dt, mu)
+        result = move_with_burn(body, dt, mu)
         for field in ('x', 'y', 'vx', 'vy', 'heading', 'omega'):
             body[field] = getattr(result, field)
+        if 'fuel' in body:
+            body['fuel'] = result.fuel_kg
         if math.hypot(result.x, result.y) < BODY_RADIUS:
             body['alive'] = False
     except (ValueError, OverflowError):
@@ -246,52 +249,82 @@ def change_velocity(body: dict, toward: dict, mu: float,
     # Matching motion, with low continuous impulse budget and conserved propellant.
     dvx = max(-.08, min(.08, .18*dx/length+.015*(toward['vx']-body['vx'])))
     dvy = max(-.08, min(.08, .18*dy/length+.015*(toward['vy']-body['vy'])))
-    try:
-        s = apply_impulse(state_of(body), dvx, dvy, 320., reserve_kg=min_fuel)
-    except ValueError:
-        return
-    for field in ('vx', 'vy'):
-        body[field] = getattr(s, field)
-    body['fuel'] = s.fuel_kg
+    # Tactical corrections also obey real engine acceleration and fuel flow.
+    queue_burn(body, dvx, dvy, reserve_kg=max(12., min_fuel), reason='tactical')
 
 
-def guide_fuel_donor(donor: dict, recipient: dict, mu: float) -> bool:
-    """Fuel-limited lead pursuit for cooperative rendezvous.
+def guide_fuel_donor(donor: dict, recipient: dict, mu: float,
+                     when: float = 0., order: dict | None = None) -> bool:
+    """Plan a delayed two-burn encounter, without altering velocity or fuel now.
 
-    A bounded velocity correction is applied only if the resulting osculating
-    trajectory keeps the donor clear of the central body. This is a coarse
-    orbital-controller heuristic, not teleportation or an ideal transfer solver.
+    Exact Kepler coast predictions and Newton shooting choose affordable,
+    body-clearing future intersections. Executing the result uses finite thrust.
     """
-    if donor.get('fuel', 0.) <= 30.:
+    if donor.get('burn') or donor.get('arrivalPhase') in ('launch', 'approach') or recipient.get('arrivalPhase') in ('launch', 'approach'):
         return False
-    dx = recipient['x'] - donor['x']
-    dy = recipient['y'] - donor['y']
-    separation = math.hypot(dx, dy)
-    if separation > 5000.:
+    plan = plan_transfer(donor, recipient, mu)
+    if plan is None:
         return False
-    relative_x = recipient['vx']-donor['vx']
-    relative_y = recipient['vy']-donor['vy']
-    closing = math.hypot(relative_x,relative_y)
-    horizon = max(4., min(40., separation/max(4., closing)))
-    # Velocity matching takes priority as proximity increases.
-    desired_x = relative_x + dx/horizon
-    desired_y = relative_y + dy/horizon
-    magnitude = math.hypot(desired_x, desired_y)
-    if magnitude < .04:
-        return False
-    # Allow purposeful rendezvous corrections, unlike slow combat steering.
-    pulse = min(1.75,magnitude)
-    dvx,dvy = desired_x*pulse/magnitude,desired_y*pulse/magnitude
-    try:
-        result = apply_impulse(state_of(donor),dvx,dvy,320.,reserve_kg=30.)
-        peri,_ = orbital_envelope(result,mu)
-        if peri < BODY_RADIUS + 12.:
-            return False
-    except (ValueError,OverflowError):
-        return False
-    donor['vx'],donor['vy'],donor['fuel'] = result.vx,result.vy,result.fuel_kg
-    donor['heading'] = math.atan2(dvy,dvx)
+    if order is not None:
+        order['navigation'] = {
+            **plan, 'phase': 'wait',
+            'startAt': when + plan['wait'],
+            'dueAt': when + plan['wait'] + plan['flight']
+        }
     return True
+
+
+def update_support_navigation(sector: dict, order: dict, donor: dict,
+                              recipient: dict, when: float, mu: float):
+    """Advance the transfer's wait / finite departure / coast / braking phases."""
+    nav = order.get('navigation')
+    if not nav:
+        return
+    if when > nav['dueAt'] + 16.:
+        donor.pop('burn', None)
+        order.pop('navigation', None)
+        order['nextDecision'] = when + 8.
+        event(sector, when, f"{donor['name']} missed its planned fuel rendezvous; replanning.", 'neutral')
+        return
+    phase = nav['phase']
+    if phase == 'wait' and when >= nav['startAt']:
+        dx, dy = nav['dv1']
+        if queue_burn(donor, dx, dy, reserve_kg=30., reason='support-departure'):
+            nav['phase'] = 'departure'
+            event(sector, when, f"{donor['name']} started finite rendezvous departure burn.", 'neutral')
+        else:
+            # A zero-sized first burn is a legitimate coast start.
+            nav['phase'] = 'coast' if math.hypot(dx, dy) < .025 else 'failed'
+    elif phase == 'departure' and not donor.get('burn'):
+        nav['phase'] = 'coast'
+    elif phase == 'coast' and when >= nav['dueAt'] - nav['burn2Sec'] - 1.:
+        # Terminal velocity matching, with a small bounded position correction
+        # for the real departure burn's finite duration.
+        dx, dy = nav['dv2']
+        try:
+            remain = max(1., nav['dueAt'] - when)
+            coast = propagate(state_of(donor), remain, mu)
+            future = propagate(state_of(recipient), remain, mu)
+            residual_x = (future.x - coast.x) / max(8., remain)
+            residual_y = (future.y - coast.y) / max(8., remain)
+            correction = math.hypot(residual_x, residual_y)
+            if correction > 1.5:
+                residual_x *= 1.5/correction
+                residual_y *= 1.5/correction
+            dx += residual_x
+            dy += residual_y
+        except (ValueError, OverflowError):
+            pass
+        if queue_burn(donor, dx, dy, reserve_kg=30., reason='support-arrival'):
+            nav['phase'] = 'arrival'
+            event(sector, when, f"{donor['name']} started finite velocity-matching burn.", 'neutral')
+        else:
+            nav['phase'] = 'failed'
+    elif phase == 'arrival' and not donor.get('burn'):
+        nav['phase'] = 'complete'
+    if nav['phase'] in ('failed', 'complete'):
+        order.pop('navigation', None)
+        order['nextDecision'] = when + (8. if nav['phase'] == 'failed' else 3.)
 
 
 def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list[dict],
@@ -313,7 +346,8 @@ def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list
             if not recipient.get('alive', True) or recipient['id'] in involved or recipient.get('fuel', 0) >= .18*capacity:
                 continue
             donors = [b for b in fleet if b['id'] not in involved and b['id'] != recipient['id']
-                      and b.get('alive', True) and b.get('fuel', 0) > max(55., .35*b.get('fuelMax', 170.))]
+                      and b.get('alive', True) and b.get('arrivalPhase') not in ('launch', 'approach')
+                      and b.get('fuel', 0) > max(55., .35*b.get('fuelMax', 170.))]
             if donors:
                 donor = min(donors, key=lambda b: distance(b, recipient))
                 orders.append({'recipient': recipient['id'], 'donor': donor['id'],
@@ -324,16 +358,23 @@ def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list
     fleet = [player, *allies, *enemies]
     by_id = {body['id']: body for body in fleet}
     remaining = []
+    reserved_donors = {o.get('donor') for o in orders if o.get('donor')}
     for order in orders:
         recipient = by_id.get(order['recipient'])
         if not recipient or not recipient.get('alive', True) or when-order['createdAt'] > 900:
+            previous_donor = by_id.get(order.get('donor'))
+            if previous_donor:
+                previous_donor.pop('burn', None)
             continue
         if not order.get('donor'):
             candidates = [a for a in allies if a.get('alive', True) and
-                          a['id'] != recipient['id'] and a.get('fuel', 0) > 55.]
+                          a['id'] not in reserved_donors and a['id'] != recipient['id']
+                          and a.get('arrivalPhase') not in ('launch', 'approach')
+                          and a.get('fuel', 0) > 55.]
             if candidates:
                 donor = min(candidates, key=lambda a: distance(a, recipient))
                 order['donor'] = donor['id']
+                reserved_donors.add(donor['id'])
             else:
                 remaining.append(order)
                 continue
@@ -345,9 +386,11 @@ def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list
         surplus = max(0., donor.get('fuel', 0.) - 30.)
         need = max(0., recipient.get('fuelMax', 200.)-recipient.get('fuel', 0.))
         if surplus < 2 or need < 1:
+            donor.pop('burn', None)
             continue
         relative = math.hypot(donor['vx']-recipient['vx'], donor['vy']-recipient['vy'])
         if distance(donor, recipient) <= 18. and relative < 2.5:
+            donor.pop('burn', None)
             moved = min(35., surplus, need)
             donor['fuel'] -= moved
             recipient['fuel'] += moved
@@ -356,14 +399,21 @@ def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list
             event(sector, when, f"{donor['name']} transferred {moved:.1f} kg propellant to "
                   f"{recipient['name']} (matched velocity, {relative:.2f} km/s).", 'good')
             continue
-        if when >= order.get('nextDecision', 0):
-            guide_fuel_donor(donor, recipient, mu)
-            order['nextDecision'] = when + 5.
+        if not order.get('navigation') and not donor.get('burn') and when >= order.get('nextDecision', 0):
+            planned = guide_fuel_donor(donor, recipient, mu, when, order)
+            order['nextDecision'] = when + (20. if not planned else 6.)
+            if planned:
+                nav = order['navigation']
+                event(sector, when, f"{donor['name']} planned fuel rendezvous with {recipient['name']}: "
+                      f"{nav['deltaV']:.1f} km/s Δv across {nav['wait']+nav['flight']:.0f} s "
+                      f"(estimated {nav['fuelKg']:.1f} kg propellant).", 'neutral')
+        update_support_navigation(sector, order, donor, recipient, when, mu)
         remaining.append(order)
     sector['assistance'] = remaining
 
 
-def advance_sector(sector: dict, seconds: float, start_player: State, mu: float = MU):
+def advance_sector(sector: dict, seconds: float, start_player: State, mu: float = MU,
+                   upgrades: dict | None = None):
     """Resolve all elapsed time on the server, including periods with zero clients.
 
     Uses adaptive time slices to bound long disconnections; swept collisions avoid
@@ -372,6 +422,7 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
     if seconds <= 0:
         return sector, {'credits': 0, 'fuel': 0, 'player_dvx': 0., 'player_dvy': 0.}
     effects = {'credits': 0, 'fuel': 0, 'player_dvx': 0., 'player_dvy': 0.}
+    capture_limit = 8. if (upgrades or {}).get('capture') else 5.
     player = {**start_player.as_dict(), **sector['player'],
               'name': 'KESTREL-7', 'id': 'player', 'isPlayer': True,
               'fuel': start_player.fuel_kg,
@@ -498,11 +549,11 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
                 if not encountered and distance(player, pickup) > 19.:
                     continue
                 relative_speed = math.hypot(pickup['vx']-player['vx'], pickup['vy']-player['vy'])
-                if relative_speed >= 5.:
+                if relative_speed >= capture_limit:
                     if when-pickup.get('lastFastPassAt', -1e9) > 12.:
                         pickup['lastFastPassAt'] = when
                         event(sector, when, f"Salvage {pickup['id']} flyby at {relative_speed:.1f} km/s "
-                              "(capture requires relative speed below 5 km/s).", 'neutral')
+                              f"(capture requires relative speed below {capture_limit:.0f} km/s).", 'neutral')
                     continue
                 kind=pickup['type'];amount=pickup['amount']
                 gains=[]

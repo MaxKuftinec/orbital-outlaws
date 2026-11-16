@@ -35,6 +35,12 @@ const OFFERS: Technology[] = [
     ownedDescription: 'Installed · orbit projection'
   },
   {
+    key: 'capture', title: 'Salvage Capture Rig',
+    description: 'Magnetic grapple assist: capture light salvage below 8 km/s relative speed (base 5 km/s).',
+    price: 55, buttonId: 'capture-upgrade-btn', statusId: 'capture-upgrade-status',
+    ownedDescription: 'Installed · capture limit 8 km/s'
+  },
+  {
     key: 'nav', title: 'Rendezvous computer',
     description: 'Fuel-conscious route search, attitude control and automatic capture.',
     price: 60, buttonId: 'nav-upgrade-btn', statusId: 'nav-upgrade-status',
@@ -44,7 +50,7 @@ const OFFERS: Technology[] = [
 
 const DEFAULT_MARKET: MarketView = {
   credits: 65, ended: false,
-  owned: { predictive: false, trajectory: false, ephemeris: false, nav: false }
+  owned: { predictive: false, trajectory: false, ephemeris: false, nav: false, capture: false }
 }
 
 export default defineComponent({

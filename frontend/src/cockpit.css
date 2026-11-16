@@ -186,3 +186,7 @@
 .reserve-setting>div{display:flex;align-items:center;gap:5px}
 .reserve-setting>div span{color:#a9c6d5;font-size:11px}
 .reserve-setting input:focus-visible{outline:2px solid #62d9f6;outline-offset:2px}
+
+/* New capture upgrade has a dedicated CSS emblem, no atlas cell reused. */
+.upgrades .tech-icon.tech-icon--capture{background:radial-gradient(circle at 50% 50%,#194a51 0 18%,#071f37 20% 43%,#227b7c 44% 47%,#0b263a 49% 70%,#061827 74%);position:relative}
+.upgrades .tech-icon.tech-icon--capture::before{content:'⊙';position:absolute;inset:0;display:grid;place-items:center;color:#93f5e9;font-size:38px;text-shadow:0 0 12px #5df8de}

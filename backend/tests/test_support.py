@@ -72,13 +72,11 @@ def test_npcs_autonomously_refuel_same_faction_member():
     assert any('transferred 35.0 kg' in e['message'] for e in sector['events'])
 
 
-def test_autonomous_guidance_spends_real_fuel_and_preserves_safe_periapsis():
-    from app.universe import state_of
-    from app.physics import orbital_envelope
-    donor=ship('ally-08',280.,0.,True)
-    recipient=ship('ally-09',300.,.09,True)
-    before=donor['fuel']
-    assert guide_fuel_donor(donor,recipient,310000.)
-    assert 30. < donor['fuel'] < before
-    peri,_=orbital_envelope(state_of(donor),310000.)
-    assert peri>103.
+def test_autonomous_guidance_queues_navigation_without_instant_dv():
+    donor=ship('ally-08',300.,0.,True)
+    recipient=ship('ally-09',300.,.025,True)
+    before=(donor['vx'],donor['vy'],donor['fuel'])
+    order={}
+    assert guide_fuel_donor(donor,recipient,310000.,0.,order)
+    assert 'navigation' in order
+    assert (donor['vx'],donor['vy'],donor['fuel'])==before

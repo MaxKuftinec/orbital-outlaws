@@ -65,3 +65,16 @@ test('fuel donation is Vue-owned and does not require a legacy DOM node at initi
   assert.doesNotMatch(game,/\$\('escort-donate-btn'\)\.addEventListener/);
   assert.doesNotMatch(game,/\$\('escort-donate-btn'\)\.disabled/);
 });
+
+
+test('capture rig is exposed in the reactive marketplace with persistent ownership',()=>{
+  const market=read('frontend/src/components/TechnologyMarket.vue');
+  const types=read('frontend/src/services/cockpit.ts');
+  const store=read('backend/app/store.py');
+  const physics=read('backend/app/universe.py');
+  assert.match(market,/key: 'capture'/);
+  assert.match(market,/price: 55/);
+  assert.match(types,/\| 'capture'/);
+  assert.match(store,/'capture':55/);
+  assert.match(physics,/capture_limit = 8\./);
+});

@@ -1,10 +1,10 @@
-# Orbital Outlaws — v0.16 configurable reserves and streamlined Navigation
+# Orbital Outlaws — v0.17 finite NPC rendezvous burns and salvage capture upgrade
 
 A persistent 2D Newtonian orbital combat prototype using **Vue 3 + Vuetify (Options API)**, **FastAPI**, **PostgreSQL** and a bidirectional **WebSocket**.
 
 ## Current architecture
 
-- **Backend authority:** Flight state, RCS/thrust fuel, projectile creation, ammunition, hull damage, NPC target decisions, finite NPC maneuver impulses, swept projectile/ship collisions, salvage and credits.
+- **Backend authority:** Flight state, RCS/thrust fuel, projectile creation, ammunition, hull damage, NPC target decisions, physically integrated NPC support/tactical thrust (scripted arrival burns remain impulsive), swept projectile/ship collisions, salvage and credits.
 - **Offline time:** The universe clock uses real wall-clock time. A pilot-sector checkpoint is **caught up by FastAPI on the next connection/query**. NPC decisions and collisions are resolved during the catch-up even if nobody kept a browser open. This is lazy offline simulation, not a dedicated continuously running background worker per pilot.
 - **Frontend prediction:** Browser renders player controls immediately at ~60 FPS and interpolates authoritative NPC positions. The client never submits NPC positions, kills or credit claims.
 - **Still limited:** Sectors are **per pilot**, not yet shared multiplayer space. Long-disconnect catch-up uses adaptive numerical timesteps and is a gameplay approximation, not an exact global causal event queue. There is no player authentication yet. These endpoints are development-only.
@@ -62,7 +62,29 @@ Technology purchases are persistent in PostgreSQL. Each has a compact ability-st
 
 Trajectory predictions assume **unpowered Kepler motion**. Future burns, impacts or NPC decisions can invalidate them.
 
-**Comms & Events now itemizes salvage rewards**, using the server's actual awarded amounts rather than the pickup label: for example `+18.0 kg propellant`, `+12 rounds`, `+50 ¤` or `+2.0 kg spare parts` on a capacity-limited wreck. Full tanks and full parts capacity no longer consume pickups without giving a benefit. Salvage capture requires being within 19 km and moving slower than 5 km/s **relative to the pickup**. Swept encounters are now checked to detect high-speed fly-throughs; those are logged but **not recovered**. To collect a counter-orbiting wreck, first slow down and match its velocity.
+**Comms & Events now itemizes salvage rewards**, using the server's actual awarded amounts rather than the pickup label: for example `+18.0 kg propellant`, `+12 rounds`, `+50 ¤` or `+2.0 kg spare parts` on a capacity-limited wreck. Full tanks and full parts capacity no longer consume pickups without giving a benefit. Starter salvage capture requires being within 19 km and moving below **5 km/s relative to the pickup**. The new **Salvage Capture Rig (55 ¤)** increases the speed limit to **8 km/s**, but only for small floating salvage—not intact spacecraft. Swept encounters are now checked to detect high-speed fly-throughs; those are logged but **not recovered**. To collect a counter-orbiting wreck, first slow down and match its velocity.
+
+### v0.17 autonomous NPC guidance
+
+Fuel-rescue NPCs now search sampled orbital wait/transfer windows using Kepler
+coast predictions and Newton shooting. A candidate must clear the central body,
+fit the donor's fuel reserve and leave propellant for donation. It also must fit
+the finite-duration main-engine burns into the selected flight window. The donor
+then **waits, thrusts for multiple simulation steps, coasts, and thrusts again**
+to match velocity. Propellant and spacecraft mass decrease continuously through
+`backend/app/npc_guidance.py`, using 1.6 MN thrust and 5 kg/s mass flow.
+Small combat-course adjustments now also use finite thrust, not instant velocity
+changes. The rescue remains a sampled **two-burn approximation**: it may miss and
+replan; it is not a global low-thrust optimizer or a fleet coordinator.
+Scripted inbound flyby/orbit-insertion maneuvers still use legacy idealized
+impulses and are a **separate future migration**.
+
+A rescue transfer is never awarded merely because a route was calculated.
+The donor must physically come within 18 km at under 2.5 km/s relative speed.
+A new UI upgrade, **Salvage Capture Rig** (55 ¤), raises the server-side pickup
+relative-speed threshold from 5 km/s to 8 km/s without changing the 19 km capture
+range. Very fast flybys still do not yield rewards. The rig is a gameplay
+approximation, not yet a fully simulated momentum-exchange tractor mechanism.
 
 ### Spawn incoming raiders or allies from FastAPI (development only)
 

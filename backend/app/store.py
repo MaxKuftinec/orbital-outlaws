@@ -113,7 +113,8 @@ class WorldStore:
                 start_s = max(0., saved.saved_at_utc - world.epoch_utc)
                 _, _, _, start_player = self._at(db, 'kestrel', entity_id, start_s)
                 snapshot, effects = advance_sector(
-                    copy.deepcopy(saved.snapshot), elapsed, start_player, world.mu)
+                    copy.deepcopy(saved.snapshot), elapsed, start_player, world.mu,
+                    upgrades=(db.get(PlayerProgress, entity_id).upgrades or {}))
                 if effects['credits']:
                     progress = db.scalars(select(PlayerProgress).where(
                         PlayerProgress.entity_id == entity_id).with_for_update()).one()
@@ -377,7 +378,7 @@ class WorldStore:
     def save_encounter(self, pilot_id: str, snapshot: dict):
         raise ValueError('Client-owned NPC snapshots are disabled; FastAPI owns sector state')
 
-    PRICES={'predictive':40,'trajectory':25,'nav':60,'ephemeris':45}
+    PRICES={'predictive':40,'trajectory':25,'nav':60,'ephemeris':45,'capture':55}
 
     def player_progress(self,pilot_id: str):
         with self.sessions() as db:
