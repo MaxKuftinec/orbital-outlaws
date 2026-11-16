@@ -22,6 +22,12 @@
   const ENGINE=Object.freeze({dryKg:900,propellantKg:200,thrustN:1600000,flowKgS:5,rcsN:2500,rcsFlowKgS:.04,leverM:7,shipLengthM:14,gimbalMax:28*Math.PI/180});
   const exhaustKmS=ENGINE.thrustN/ENGINE.flowKgS/1000;
   const REPAIR=Object.freeze({starterKg:10,capacityKg:24,hpPerKg:5,rateHpS:5});
+  const RESERVE_KEY='orbital-outlaws.fuel-reserve-kg.v1';
+  function storedReserve(){
+    const saved=localStorage.getItem(RESERVE_KEY);
+    const value=saved===null?SAFE.reserveKg(ENGINE.propellantKg):Number(saved);
+    return Number.isFinite(value)&&value>=0&&value<=ENGINE.propellantKg?value:SAFE.reserveKg(ENGINE.propellantKg);
+  }
 
   const palette = { cyan: '#62d9f6', green:'#67e0aa', red:'#ff7184', yellow:'#edbe6b', purple:'#bd9efa' };
   let W = 840, H = 550, dpr = 1;
@@ -91,7 +97,8 @@
       newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30),newPickup(295,1.1,'parts',8)
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
     orbitVisible:true, predictive:false, trajectoryIntel:false, ephemerisOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
-    collisionCooldown:new Map(), playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false};
+    collisionCooldown:new Map(), playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false,
+    playerReserveKg:storedReserve()};
     if(oldTech){Object.assign(state,oldTech);player.credits=oldPilot.credits;}
     // Seeded salvage keeps one stable claim ID across encounter resets.
     state.pickups.filter(p=>p.type==='credits').forEach((pod,i)=>pod.id='starter-credits-'+i);
@@ -736,8 +743,8 @@
     if(!state.player.alive){logEvent('Destroyed ships cannot donate fuel.','danger');return;}
     const key=$('nav-target').value;
     const target=navTarget(key);
-    const ally=target?.isAlly?target:state.ally;
-    if(!ally?.alive){logEvent('Select a living friendly craft in Navigation.','danger');return;}
+    const ally=target?.isAlly?target:null;
+    if(!ally?.alive){logEvent('Select a living friendly craft in Navigation before offering fuel.','danger');return;}
     if(!pilotLink?.offerFuel(ally.id,20))logEvent('Fuel transfer could not be sent.','danger');
     else logEvent('Fuel offer sent to '+ally.name+'; transfer needs ≤18 km and <2.5 km/s relative speed.');
   }
@@ -780,17 +787,38 @@
     return null;
   }
 
+  function applyPlayerReserve(kg){
+    if(!Number.isFinite(kg)||kg<0||kg>ENGINE.propellantKg)return;
+    if(Math.abs(state.playerReserveKg-kg)<.000001)return;
+    state.playerReserveKg=kg;
+    localStorage.setItem(RESERVE_KEY,String(kg));
+    state.navPlan=null;
+    state.navFailure='';
+    if(state.autopilot)abortNav('Protected fuel reserve changed; replan before engaging.');
+    logEvent('Protected fuel reserve set to '+kg.toFixed(1)+' kg. Manual thrust remains unrestricted.','good');
+    updateHud();
+  }
+  function requestReserveSetting(e){
+    const kg=Number(e.detail?.kg);
+    if(!Number.isFinite(kg)||kg<0||kg>ENGINE.propellantKg)return;
+    if(persistentFlight){
+      if(!flightOnline||!pilotLink?.setReserve(kg)){
+        logEvent('Reserve preference not saved: connect to the flight server.','danger');
+        updateHud();
+      }
+    }else applyPlayerReserve(kg);
+  }
   function planNav(){
     if(state.ended)return null;
     const key=$('nav-target').value,target=navTarget(key);
     if(!target){state.navPlan=null;logEvent('Select a valid target before planning.');return null;}
-    const reserve=SAFE.reserveKg(state.player.fuelMax);
+    const reserve=state.playerReserveKg;
     const usableFuel=Math.max(0,state.player.fuel-reserve);
     let diagnostics=null;
     const plan=usableFuel>0?NAV.plan(state.player,target,{mu:WORLD.mu,inner:WORLD.crashRadius+7,outer:WORLD.outerRadius-10,
       massKg:mass(state.player),propellantKg:usableFuel,exhaustKmS,extended:true,
       onDiagnostics:report=>{diagnostics=report;}}):null;
-    const safety=plan?SAFE.authorize({fuelKg:state.player.fuel,capacityKg:state.player.fuelMax,massKg:mass(state.player),dvKmS:plan.dv,exhaustKmS}):null;
+    const safety=plan?SAFE.authorize({fuelKg:state.player.fuel,capacityKg:state.player.fuelMax,massKg:mass(state.player),dvKmS:plan.dv,exhaustKmS,reserve:reserve}):null;
     state.navPlan=plan&&safety.ok?{...plan,targetKey:key,calculatedAt:state.t,safety}:null;
     state.navFailure='';
     if(state.navPlan)logEvent('Conservative route: '+plan.dv.toFixed(2)+' km/s, '+plan.eta.toFixed(0)+' s; '+safety.reserveKg.toFixed(0)+' kg fuel protected.','good');
@@ -821,7 +849,7 @@
     if(!state.navOwned){logEvent('Buy the rendezvous computer to engage.');return;}
     const plan=state.navPlan&&state.navPlan.targetKey===$('nav-target').value&&state.t-state.navPlan.calculatedAt<1?state.navPlan:planNav();
     if(!plan)return;
-    const safety=SAFE.authorize({fuelKg:state.player.fuel,capacityKg:state.player.fuelMax,massKg:mass(state.player),dvKmS:plan.dv,exhaustKmS});
+    const safety=SAFE.authorize({fuelKg:state.player.fuel,capacityKg:state.player.fuelMax,massKg:mass(state.player),dvKmS:plan.dv,exhaustKmS,reserve:state.playerReserveKg});
     if(!safety.ok){state.navPlan=null;logEvent('Autopilot REFUSED: insufficient fuel for safe execution margin.','danger');updateHud();return;}
     state.autopilot={targetKey:plan.targetKey,plan,phase:'wait',startAt:state.t+plan.wait,
       dueAt:state.t+plan.wait+plan.flight,remaining:{...plan.dv1},spentAtStart:state.player.fuel,
@@ -965,7 +993,7 @@
     $('quick-speed').textContent=e.v.toFixed(1)+' km/s';
     $('quick-peri').textContent=Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' km':'—';
     $('quick-apo').textContent=Number.isFinite(e.ra)?Math.max(0,e.ra-WORLD.radius).toFixed(1)+' km':'ESCAPE';
-    $('quick-reserve').textContent=SAFE.reserveKg(p.fuelMax).toFixed(0)+' kg (autopilot)';
+    $('quick-reserve').textContent=state.playerReserveKg.toFixed(1)+' kg (autopilot & donations)';
     $('quick-flight').textContent=state.autopilot?state.autopilot.phase.toUpperCase():state.rescue?'ALLY ASSIST':'FREE';
     if($('ship-panel')?.dataset.vueManaged!=='true'){
       $('hull-value').textContent=Math.round(p.hp)+'%';$('hull-bar').style.width=clamp(p.hp,0,100)+'%';
@@ -999,15 +1027,8 @@
     const liveHostiles=state.enemies.filter(ship=>ship.alive).length;
     const activeAllies=(state.ally.alive?1:0)+(state.allies||[]).filter(ally=>ally.alive).length;
     $('mission-status').textContent=liveHostiles+' hostile'+(liveHostiles!==1?'s':'')+' · '+activeAllies+' active allies';
-    $('escort-status').textContent=state.ally.alive?'ONLINE':'LOST';
-    $('escort-status').style.color=state.ally.alive?palette.green:palette.red;
-    $('escort-hull').textContent=state.ally.alive?Math.ceil(state.ally.hp)+' / 80':'DESTROYED';
-    $('escort-ammo').textContent=state.ally.alive?String(state.ally.ammo):'—';
-    $('escort-fuel').textContent=state.ally.alive?state.ally.fuel.toFixed(1)+' kg':'—';
-    $('escort-state').textContent=!state.ally.alive?'ESCORT LOST':state.serverAssistance?.length?'FUEL SUPPORT MISSIONS: '+state.serverAssistance.length:state.rescue?'RESCUE: '+state.rescue.activity.toUpperCase()+' / '+state.rescue.phase.toUpperCase():(liveHostiles?'ENGAGING HOSTILES':'HOLDING ORBIT');
     $('sos-btn').disabled=state.ended||!p.alive||(persistentFlight&&!flightOnline)||(!persistentFlight&&!state.ally.alive);
     $('sos-btn').textContent=(state.rescue||state.serverAssistance?.some(o=>o.recipient==='player'))?'⚑ ASSISTANCE REQUESTED':'⚑ REQUEST FUEL ASSISTANCE';
-    $('escort-help-btn').disabled=state.ended||!p.alive||(persistentFlight&&!flightOnline)||(!persistentFlight&&!state.ally.alive);
     $('escort-donate-btn').disabled=!persistentFlight||!flightOnline||!p.alive||state.ended;
     // Reinforcements are now created by the guarded FastAPI dev endpoint only.
     if(document.querySelector('.upgrades')?.dataset.vueManaged!=='true'){
@@ -1057,7 +1078,7 @@
       apoapsis:Number.isFinite(e.ra)?Math.max(0,e.ra-WORLD.radius).toFixed(1)+' km':'ESCAPE',
       period:Number.isFinite(e.period)?e.period.toFixed(1)+' s':'UNBOUND',
       predicted:state.dangerPrediction?'IMPACT':e.e>=1?'UNBOUND':'BOUND',
-      reserve:SAFE.reserveKg(p.fuelMax).toFixed(0)+' kg (autopilot)',
+      reserve:state.playerReserveKg.toFixed(1)+' kg (autopilot & donations)',
       flight:!p.alive?'LOST':state.autopilot?state.autopilot.phase.toUpperCase():state.serverAssistance?.some(o=>o.recipient==='player')?'ALLY ASSIST':'FREE'
     }}));
     window.dispatchEvent(new CustomEvent('orbital-targeting-state',{detail:{
@@ -1069,7 +1090,7 @@
       shotMiss:!state.trajectoryIntel?'Requires analyzer':fp&&fp.missKm!==null?fp.missKm.toFixed(1)+' km':'—'
     }}));
     window.dispatchEvent(new CustomEvent('orbital-navigation-state',{detail:{
-      locked:!state.navOwned,phase:state.autopilot?.phase||'IDLE',
+      locked:!state.navOwned,phase:state.autopilot?.phase||'IDLE',reserveKg:state.playerReserveKg,
       deltaV:state.navPlan?state.navPlan.dv.toFixed(2)+' km/s':'—',
       eta:state.navPlan?state.navPlan.eta.toFixed(0)+' s':'—',
       fuel:state.navPlan?SAFE.requiredFuel(mass(p),state.navPlan.dv,exhaustKmS).toFixed(1)+' kg (ideal)':'—',
@@ -1174,7 +1195,7 @@
     $('nav-engage').title='Buy or engage ('+keyLabel(hotkeys.engageNav)+')';
     $('nav-next').title='Next navigation target ('+keyLabel(hotkeys.nextNav)+')';
     $('nav-abort').title='Abort ('+keyLabel(hotkeys.abortNav)+')';
-    $('sos-btn').title='Ask AEGIS-01 for fuel ('+keyLabel(hotkeys.sos)+')';
+    $('sos-btn').title='Request allied fuel assistance ('+keyLabel(hotkeys.sos)+')';
   }
   function renderHotkeys(){
     const list=$('hotkey-list');list.replaceChildren();
@@ -1285,8 +1306,8 @@
     $('nav-toggle').addEventListener('click',()=>toggleConsole('nav'));
     $('telemetry-toggle').addEventListener('click',()=>toggleConsole('telemetry'));
     $('sos-btn').addEventListener('click',requestFuelHelp);
-    $('escort-help-btn').addEventListener('click',requestFuelHelp);
     $('escort-donate-btn').addEventListener('click',donateFuelToAlly);
+    window.addEventListener('orbital-set-reserve',requestReserveSetting);
     $('settings-btn').addEventListener('click',openSettings);
     $('settings-close').addEventListener('click',closeSettings);
     $('settings-done').addEventListener('click',closeSettings);
@@ -1348,6 +1369,7 @@
       onProgress:progress=>{
         const previous={predictive:state.predictive,trajectoryIntel:state.trajectoryIntel,navOwned:state.navOwned,ephemerisOwned:state.ephemerisOwned};
         state.player.credits=progress.credits;
+        if(typeof progress.reserve_kg==='number')applyPlayerReserve(progress.reserve_kg);
         state.predictive=Boolean(progress.upgrades.predictive);
         state.trajectoryIntel=Boolean(progress.upgrades.trajectory);
         state.navOwned=Boolean(progress.upgrades.nav);
