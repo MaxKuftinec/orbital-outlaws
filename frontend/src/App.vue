@@ -89,19 +89,18 @@ export default defineComponent({
         </div>
         <div class="canvas-wrap" id="canvas-workspace">
           <button type="button" id="fullscreen-btn" class="fullscreen-btn" aria-label="Enter fullscreen cockpit">⛶ Fullscreen</button>
-          <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat."></canvas>
-          <NavigationPanel :console="true" />
+          <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat"></canvas>
           <TelemetryPanel :console="true" />
         <ShipPanel />
           <button type="button" id="sos-btn" class="sos-btn" title="Request a fuel rendezvous from a friendly spacecraft">⚑ REQUEST FUEL ASSISTANCE</button>
           <div class="canvas-overlay top-left"><span class="tiny-dot blue"></span><span id="target-indicator">TRACKING: RAIDER-01</span></div>
           <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom <span class="keyboard-tag">N/C/E/X</span> nav <span class="keyboard-tag">H</span> help</div>
-          <!-- Status is announced in Comms; the map remains visible and pannable after death. -->
+          <!-- Status is announced in Comms; the map remains visible and pannable after death -->
           <div id="game-over" hidden style="display:none"><span id="game-over-details"></span></div>
         </div>
         <div class="mission-strip"><span class="objective-icon">◎</span><span><strong>OBJECTIVE</strong></span><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
         <section class="flight-controls" aria-label="Spacecraft flight controls">
-          <div class="control-description"><strong>ATTITUDE & PROPULSION</strong><small>Point ship using nose/tail RCS. Aim the ±28° main gimbal with your cursor, then hold W to burn. Left-click selects targets or manual gun aim.</small></div>
+          <div class="control-description"><strong>ATTITUDE & PROPULSION</strong><small>Point ship using nose/tail RCS. Aim the ±28° main gimbal with your cursor, then hold W to burn. Left-click selects targets or manual gun aim</small></div>
           <div class="control-grid">
             <button type="button" data-thrust="rotate-left" class="thruster" aria-label="Hold to rotate counter-clockwise"><b>⟲</b><strong>ROTATE LEFT</strong><small>A / ←</small></button>
             <button type="button" data-thrust="rotate-right" class="thruster" aria-label="Hold to rotate clockwise"><b>⟳</b><strong>ROTATE RIGHT</strong><small>D / →</small></button>
@@ -109,7 +108,7 @@ export default defineComponent({
             <button type="button" data-thrust="main" class="thruster" aria-label="Hold for main engine thrust"><b>▲</b><strong>MAIN ENGINE</strong><small>W / ↑</small></button>
             <button type="button" id="fire-btn" class="fire-button" aria-label="Fire at selected target"><b>⌖</b><strong>FIRE</strong><small>SPACE</small></button>
           </div>
-          <div class="control-note">Left-click a raider to lock guns, click empty space for cursor-following manual aim, then hold SPACE to fire. W fires the engine. Right/middle drag or Shift+drag pans. Mouse wheel zooms toward cursor. <button id="lock-btn" type="button">Lock nearest raider ↗</button></div>
+          <div class="control-note">Left-click a raider to lock guns, click empty space for cursor-following manual aim, then hold SPACE to fire. W fires the engine. Right/middle drag or Shift+drag pans. Mouse wheel zooms toward cursor <button id="lock-btn" type="button">Lock nearest raider ↗</button></div>
         </section>
       </section>
 
