@@ -29,7 +29,8 @@ class StubStore:
         if self.hp > 0:
             raise ValueError('Ship is still alive')
         self.hp = 100
-        return {'pilot_id':pilot_id,'hp':100,'progress_preserved':True}
+        self.credits=65;self.upgrades={}
+        return {'pilot_id':pilot_id,'hp':100,'progress_preserved':False}
 
     def spawn_ally(self, pilot_id):
         return {'ship': {'id': 'ally-02', 'name': 'ALLY-02'}, 'intent': 'flyby', 'faction': 'ally', 'ship_count': 1}
@@ -79,7 +80,7 @@ def test_websocket_sector_combat_and_ephemeris(monkeypatch):
     pilot='a'*32
     with TestClient(app) as client:
         assert client.get('/').json()['status']=='ok'
-        with client.websocket_connect(f'/api/players/{pilot}/live') as ws:
+        with client.websocket_connect(f'/players/{pilot}/live') as ws:
             welcome=receive_type(ws,'welcome')
             assert welcome['progress']['credits']==65
             assert welcome['encounter']['snapshot']['enemies'][0]['alive'] is False
@@ -96,7 +97,7 @@ def test_websocket_sector_combat_and_ephemeris(monkeypatch):
             assert receive_type(ws,'progress')['progress']['credits']==20
             ws.send_json({'type':'salvage','id':'forged-credit','credits':50})
             assert 'server-owned' in receive_type(ws,'error')['message']
-        with client.websocket_connect(f'/api/players/{pilot}/live') as ws:
+        with client.websocket_connect(f'/players/{pilot}/live') as ws:
             resumed=receive_type(ws,'welcome')
             assert resumed['progress']['upgrades']['ephemeris']
             assert resumed['encounter']['snapshot']['player']['ammo']==35
@@ -108,14 +109,14 @@ def test_websocket_denies_public_development_access(monkeypatch):
     monkeypatch.delenv('ORBITAL_DEV_COMMANDS',raising=False)
     with TestClient(app) as client:
         with pytest.raises(WebSocketDisconnect):
-            with client.websocket_connect('/api/players/'+'b'*32+'/live'):
+            with client.websocket_connect('/players/'+'b'*32+'/live'):
                 pass
 
 
 def test_dev_spawn_raider_is_explicitly_guarded(monkeypatch):
     import app.main as main
     monkeypatch.setattr(main, 'store', lambda: StubStore())
-    url = '/api/dev/players/' + 'c' * 32 + '/raiders'
+    url = '/dev/players/' + 'c' * 32 + '/raiders'
     with TestClient(app) as client:
         monkeypatch.delenv('ORBITAL_DEV_COMMANDS', raising=False)
         assert client.post(url).status_code == 403
@@ -123,13 +124,13 @@ def test_dev_spawn_raider_is_explicitly_guarded(monkeypatch):
         spawned = client.post(url)
         assert spawned.status_code == 201, spawned.text
         assert spawned.json()['ship']['id'] == 'raider-03'
-        assert client.post('/api/dev/players/not-a-pilot/raiders').status_code == 400
+        assert client.post('/dev/players/not-a-pilot/raiders').status_code == 400
 
 
 def test_dev_ally_spawn_is_also_guarded(monkeypatch):
     import app.main as main
     monkeypatch.setattr(main, 'store', lambda: StubStore())
-    url = '/api/dev/players/' + 'd' * 32 + '/allies'
+    url = '/dev/players/' + 'd' * 32 + '/allies'
     with TestClient(app) as client:
         monkeypatch.delenv('ORBITAL_DEV_COMMANDS', raising=False)
         assert client.post(url).status_code == 403
@@ -138,7 +139,7 @@ def test_dev_ally_spawn_is_also_guarded(monkeypatch):
         assert response.status_code == 201
         assert response.json()['ship']['id'] == 'ally-02'
         assert response.json()['faction'] == 'ally'
-        assert client.post('/api/dev/players/bad/allies').status_code == 400
+        assert client.post('/dev/players/bad/allies').status_code == 400
 
 
 
@@ -146,15 +147,15 @@ def test_dev_respawn_requires_flag_and_only_revives_destroyed_ship(monkeypatch):
     import app.main as main
     db=StubStore()
     monkeypatch.setattr(main,'store',lambda:db)
-    url='/api/dev/players/'+'a'*32+'/respawn'
+    url='/dev/players/'+'a'*32+'/respawn'
     with TestClient(app) as client:
         monkeypatch.delenv('ORBITAL_DEV_COMMANDS',raising=False)
         assert client.post(url).status_code==403
         monkeypatch.setenv('ORBITAL_DEV_COMMANDS','1')
-        assert client.post('/api/dev/players/wrong/respawn').status_code==400
+        assert client.post('/dev/players/wrong/respawn').status_code==400
         assert client.post(url).status_code==409
         db.hp=0
         revived=client.post(url)
         assert revived.status_code==200,revived.text
         assert revived.json()['hp']==100
-        assert revived.json()['progress_preserved'] is True
+        assert revived.json()['progress_preserved'] is False

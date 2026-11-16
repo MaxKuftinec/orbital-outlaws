@@ -191,6 +191,82 @@ class WorldStore:
     def spawn_ally(self, pilot_id: str) -> dict:
         return self.spawn_ship(pilot_id, 'ally')
 
+    def request_assistance(self, pilot_id: str, recipient_id: str = 'player'):
+        """Request fuel delivery; server NPC guidance only, no instantaneous reward."""
+        self.player_encounter(pilot_id)
+        entity_id = 'pilot-' + pilot_id
+        with self.sessions.begin() as db:
+            saved = db.scalars(select(EncounterSnapshot).where(
+                EncounterSnapshot.entity_id == entity_id).with_for_update()).one()
+            sector = copy.deepcopy(saved.snapshot)
+            recipients = {'player': sector['player'],
+                          **{a['id']: a for a in [sector['ally'], *sector.get('allies', [])]}}
+            recipient = recipients.get(recipient_id)
+            if not recipient or not recipient.get('alive', True):
+                raise ValueError('Recipient not active')
+            if recipient_id == 'player':
+                _, _, _, flight = self._at(db, 'kestrel', entity_id)
+                if flight.fuel_kg >= 199.9: raise ValueError('Tank already full')
+            elif recipient['fuel'] >= recipient.get('fuelMax', 170)-.1:
+                raise ValueError('Tank already full')
+            if any(o['recipient'] == recipient_id for o in sector.setdefault('assistance', [])):
+                raise ValueError('Assistance already requested')
+            sector['assistance'].append({'recipient': recipient_id, 'donor': None,
+                                         'faction': 'friendly', 'createdAt': sector['t'],
+                                         'nextDecision': sector['t']})
+            sector_event(sector, sector['t'], f"Fuel assistance requested for {recipient_id}.")
+            saved.snapshot = sector
+            saved.saved_at_utc = time.time()
+            return {'status': 'queued', 'recipient': recipient_id}
+
+    def offer_fuel(self, pilot_id: str, target_id: str, requested_kg: float = 20.):
+        """Safe player-to-ally delivery debits real player mass/fuel."""
+        if not math.isfinite(requested_kg) or not 0 < requested_kg <= 35:
+            raise ValueError('Transfer must be >0 and <=35 kg')
+        self.player_encounter(pilot_id)
+        entity_id = 'pilot-' + pilot_id
+        with self.sessions.begin() as db:
+            world = db.get(World, 'kestrel')
+            entity = db.scalars(select(Entity).where(
+                Entity.id == entity_id).with_for_update()).one()
+            saved = db.scalars(select(EncounterSnapshot).where(
+                EncounterSnapshot.entity_id == entity_id).with_for_update()).one()
+            sector = copy.deepcopy(saved.snapshot)
+            if not sector['player']['alive']:
+                raise ValueError('Destroyed ships cannot transfer fuel')
+            ally = next((a for a in [sector['ally'], *sector.get('allies', [])]
+                         if a['id'] == target_id and a.get('alive', True)), None)
+            if not ally: raise ValueError('Select an active allied craft')
+            now = self.now(world)
+            _, _, _, current = self._at(db, 'kestrel', entity_id, now)
+            separation = math.hypot(current.x-ally['x'], current.y-ally['y'])
+            relative = math.hypot(current.vx-ally['vx'], current.vy-ally['vy'])
+            if separation > 18 or relative >= 2.5:
+                raise ValueError(f'Rendezvous required: {separation:.1f} km and {relative:.1f} km/s '
+                                 '(limits: 18 km and 2.5 km/s)')
+            moved = min(requested_kg, max(0., current.fuel_kg-25.),
+                        max(0., ally.get('fuelMax', 170.)-ally['fuel']))
+            if moved < .1: raise ValueError('No surplus fuel or recipient tank full')
+            state = State(current.x, current.y, current.vx, current.vy,
+                          current.mass_kg-moved, current.fuel_kg-moved,
+                          current.heading, current.omega)
+            peri, apo = orbital_envelope(state, world.mu)
+            entity.checkpoint_s = now
+            entity.checkpoint = state.as_dict()
+            entity.periapsis_km, entity.apoapsis_km = peri, apo
+            entity.version += 1
+            ally['fuel'] += moved
+            sector_event(sector, sector['t'],
+                         f"KESTREL-7 delivered {moved:.1f} kg propellant to {ally['name']}.", 'good')
+            saved.snapshot = sector
+            saved.saved_at_utc = time.time()
+            db.add(Event(world_id='kestrel', entity_id=entity_id, at_s=now,
+                         kind='fuel_transfer', payload={'target': target_id, 'kg': moved},
+                         after=state.as_dict(),
+                         idempotency_key='fuel:'+str(__import__('uuid').uuid4())))
+            return {'target': target_id, 'transferred_kg': moved,
+                    'remaining_fuel_kg': state.fuel_kg}
+
     def respawn_player(self, pilot_id: str) -> dict:
         """Replace a destroyed ship without resetting the persistent sector or economy."""
         entity_id = 'pilot-' + pilot_id
@@ -240,6 +316,9 @@ class WorldStore:
                          'manual course control online.','good')
             saved.snapshot = snapshot
             saved.saved_at_utc = time.time()
+            progress = db.get(PlayerProgress, entity_id)
+            progress.credits = 65
+            progress.upgrades = {}
 
             db.add(Event(world_id='kestrel', entity_id=entity_id,
                          at_s=now,kind='respawn',payload={'reason':'dev-respawn'},
@@ -252,7 +331,8 @@ class WorldStore:
                 'spawn_radius_km':math.hypot(state.x,state.y),
                 'initial_heading_deg':math.degrees(launch['launchDirection']) % 360,
                 'arrival_control':'manual',
-                'progress_preserved':True,
+                'progress_preserved':False,
+                'starter_credits':65,
                 'sector_preserved':True
             }
 

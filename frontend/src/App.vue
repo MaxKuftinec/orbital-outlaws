@@ -3,15 +3,18 @@ import { defineComponent } from 'vue'
 import CommsPanel from './components/CommsPanel.vue'
 import ShipPanel from './components/ShipPanel.vue'
 import TechnologyMarket from './components/TechnologyMarket.vue'
+import TelemetryPanel from './components/TelemetryPanel.vue'
+import TargetingPanel from './components/TargetingPanel.vue'
+import NavigationPanel from './components/NavigationPanel.vue'
 
 const legacyFiles = [
   'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
-  'arrival.js', 'persistence.js', 'workspace.js', 'game.js'
+  'arrival.js', 'persistence.js', 'workspace.js', 'rendering.js', 'game.js'
 ]
 
 export default defineComponent({
   name: 'OrbitalCockpit',
-  components: { CommsPanel, ShipPanel, TechnologyMarket },
+  components: { CommsPanel, ShipPanel, TechnologyMarket, TelemetryPanel, TargetingPanel, NavigationPanel },
   data() {
     return {
       backendOnline: false,
@@ -67,7 +70,7 @@ export default defineComponent({
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
-        <div><div class="eyebrow">PROTOTYPE 0.14</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+        <div><div class="eyebrow">PROTOTYPE 0.15</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
       <div class="top-actions"><v-chip :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Live · flight and upgrades saved' : backendOnline ? 'Backend online · connecting flight' : 'Local gameplay · backend offline' }}</v-chip>
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">ENCOUNTER TIME</span><strong id="sim-clock">00:00</strong></div></div>
@@ -87,31 +90,14 @@ export default defineComponent({
         <div class="canvas-wrap" id="canvas-workspace">
           <button type="button" id="fullscreen-btn" class="fullscreen-btn" aria-label="Enter fullscreen cockpit">⛶ Fullscreen</button>
           <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat."></canvas>
-          <div class="nav-command" id="nav-command" role="group" aria-label="Navigation console">
-            <div class="nav-command-head"><button type="button" class="panel-drag-handle" data-drag-handle title="Drag navigation panel" aria-label="Drag navigation panel">⠿</button><button type="button" id="nav-toggle" class="console-toggle" aria-controls="nav-command-body" aria-expanded="true">◈ NAVIGATION</button><span id="nav-quick-status">COMPUTER LOCKED</span></div>
-            <div id="nav-command-body" class="nav-command-body">
-            <div class="nav-command-select"><select id="nav-target" class="nav-target" aria-label="Rendezvous destination"></select><button type="button" id="nav-next" class="small-btn" title="Next navigation target (N)" aria-label="Cycle navigation targets">↻</button></div>
-            <div class="nav-command-actions"><button type="button" id="nav-plan" class="wide-subtle-btn" title="Calculate route (C)">CALCULATE</button><button type="button" id="nav-engage" class="buy-btn" title="Install navigation computer or engage route (E)">BUY NAV 60¤</button><button type="button" id="nav-abort" class="small-btn" title="Abort autopilot (X)" disabled>ABORT</button></div>
-            <div class="nav-command-readout" id="nav-quick-metrics" aria-live="polite">Pick a contact · press C to calculate</div>
-            </div>
-          </div>
-          <div class="telemetry-console collapsed" id="telemetry-console" role="group" aria-label="On-screen orbital telemetry">
-            <button type="button" class="panel-drag-handle" data-drag-handle title="Drag telemetry panel" aria-label="Drag telemetry panel">⠿</button>
-            <button type="button" class="console-toggle" id="telemetry-toggle" aria-controls="telemetry-console-body" aria-expanded="false">◉ TELEMETRY</button>
-            <div class="telemetry-console-body" id="telemetry-console-body">
-              <div><span>Altitude</span><strong id="quick-alt">—</strong></div>
-              <div><span>Speed</span><strong id="quick-speed">—</strong></div>
-              <div><span>Periapsis</span><strong id="quick-peri">—</strong></div>
-              <div><span>Apoapsis</span><strong id="quick-apo">—</strong></div>
-              <div><span>Fuel reserve</span><strong id="quick-reserve">—</strong></div>
-              <div><span>Flight status</span><strong id="quick-flight">—</strong></div>
-            </div>
-          </div>
+          <NavigationPanel :console="true" />
+          <TelemetryPanel :console="true" />
         <ShipPanel />
           <button type="button" id="sos-btn" class="sos-btn" title="Ask AEGIS-01 for propellant">⚑ REQUEST FUEL ASSISTANCE</button>
           <div class="canvas-overlay top-left"><span class="tiny-dot blue"></span><span id="target-indicator">TRACKING: RAIDER-01</span></div>
           <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom <span class="keyboard-tag">N/C/E/X</span> nav <span class="keyboard-tag">H</span> help</div>
-          <div id="game-over" class="game-over hidden" role="alertdialog" aria-modal="false" aria-labelledby="game-over-title"><span class="failure-mark">✕</span><h2 id="game-over-title">SHIP LOST</h2><p id="game-over-details">Your orbit ended.</p><button id="retry-btn" class="primary-btn">Try again ↻</button></div>
+          <!-- Status is announced in Comms; the map remains visible and pannable after death. -->
+          <div id="game-over" hidden style="display:none"><span id="game-over-details"></span></div>
         </div>
         <div class="mission-strip"><span class="objective-icon">◎</span><span><strong>OBJECTIVE</strong></span><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
         <section class="flight-controls" aria-label="Spacecraft flight controls">
@@ -129,7 +115,7 @@ export default defineComponent({
 
       <aside class="sidebar" aria-label="Spacecraft instruments">
 
-        <section class="panel ally-panel"><div class="panel-heading"><span>FRIENDLY ESCORT</span><span id="escort-status" class="status-pill">ONLINE</span></div><div class="ship-name" style="color:#67e0aa">★ AEGIS-01</div><div class="metric-row"><span>Hull integrity</span><strong id="escort-hull">80 / 80</strong></div><div class="metric-row"><span>Ammunition</span><strong id="escort-ammo">120</strong></div><div class="metric-row"><span>Propellant</span><strong id="escort-fuel">—</strong></div><div class="mini-note" id="escort-state">ENGAGING HOSTILES</div><button type="button" class="wide-subtle-btn" id="escort-help-btn">⚑ Request fuel assistance</button></section>
+        <section class="panel ally-panel"><div class="panel-heading"><span>FRIENDLY ESCORT</span><span id="escort-status" class="status-pill">ONLINE</span></div><div class="ship-name" style="color:#67e0aa">★ AEGIS-01</div><div class="metric-row"><span>Hull integrity</span><strong id="escort-hull">80 / 80</strong></div><div class="metric-row"><span>Ammunition</span><strong id="escort-ammo">120</strong></div><div class="metric-row"><span>Propellant</span><strong id="escort-fuel">—</strong></div><div class="mini-note" id="escort-state">ENGAGING HOSTILES</div><button type="button" class="wide-subtle-btn" id="escort-help-btn">⚑ Request fuel assistance</button><button type="button" class="wide-subtle-btn" id="escort-donate-btn" title="Donate up to 20 kg to your selected friendly craft after matching position and velocity">⇄ Offer 20 kg to selected ally</button></section>
         <section class="panel propulsion">
           <div class="panel-heading"><span>PROPULSION</span><span>SCOUT MK-I</span></div>
           <div class="metric-row"><span>Dry mass</span><strong id="dry-mass">900 kg</strong></div>
@@ -140,36 +126,10 @@ export default defineComponent({
           <div class="metric-row"><span>Ship heading</span><strong id="ship-heading">0°</strong></div>
           <div class="metric-row"><span>Angular speed</span><strong id="spin-value">0°/s</strong></div>
         </section>
-        <section class="panel instruments">
-          <div class="panel-heading"><span>ORBITAL TELEMETRY</span><span class="status-pill">NEWTONIAN</span></div>
-          <div class="metric-row"><span>Altitude</span><strong id="alt-value">—</strong></div>
-          <div class="metric-row"><span>Speed</span><strong id="speed-value">—</strong></div>
-          <div class="metric-row"><span>Periapsis</span><strong id="peri-value">—</strong></div>
-          <div class="metric-row"><span>Apoapsis</span><strong id="apo-value">—</strong></div>
-          <div class="metric-row"><span>Orbit period</span><strong id="period-value">—</strong></div>
-          <div class="metric-row"><span>Predicted path</span><strong id="path-status">SAFE</strong></div>
-        </section>
-        <section class="panel targeting">
-          <div class="panel-heading"><span>TARGET ACQUISITION</span><span id="target-state" class="status-pill hostile">HOSTILE</span></div>
-          <div class="target-name" id="target-name">RAIDER-01</div>
-          <div class="metric-row"><span>Range</span><strong id="range-value">—</strong></div>
-          <div class="metric-row"><span>Hull</span><strong id="target-hull">—</strong></div>
-          <div class="metric-row"><span>Weapon</span><strong>Ballistic rounds</strong></div>
-          <div class="metric-row"><span>Bullet reaches cursor range in</span><strong id="shot-time">—</strong></div>
-          <div class="metric-row"><span>Estimated separation at arrival</span><strong id="shot-miss">Requires analyzer</strong></div>
-          <div class="mini-note">Cyan curve: actual predicted ballistic shot. After upgrading: purple ghost shows where your selected target will be when the shot reaches the cursor range, assuming no new burn.</div>
-          <button id="next-target" class="wide-subtle-btn">Next target ↗</button>
-        </section>
+        <TelemetryPanel />
+        <TargetingPanel />
         <TechnologyMarket />
-        <section class="panel autopilot-panel">
-          <div class="panel-heading"><span>RENDEZVOUS COMPUTER</span><span id="autopilot-chip" class="status-pill">LOCKED</span></div>
-          <div class="mini-note">Navigation selection, route calculation and autopilot controls are always visible on the map. The computer scans short and long coast windows, favouring affordable Δv.</div>
-          <div class="metric-row"><span>Estimated total Δv</span><strong id="nav-dv">—</strong></div>
-          <div class="metric-row"><span>Arrival in</span><strong id="nav-eta">—</strong></div>
-          <div class="metric-row"><span>Propellant estimate</span><strong id="nav-fuel">—</strong></div>
-          <div class="metric-row"><span>Guidance status</span><strong id="nav-status">No plan</strong></div>
-          <div class="control-note">Alt+click empty space to place a fixed-position orbital waypoint. Manual controls override the autopilot. Estimates assume instantaneous burns; real engines need correction.</div>
-        </section>
+        <NavigationPanel />
         <CommsPanel />
       </aside>
     </main>
@@ -182,7 +142,7 @@ export default defineComponent({
         <div class="settings-bottom"><button type="button" id="hotkey-reset" class="small-btn">Restore defaults</button><button type="button" id="settings-done" class="buy-btn">Done</button></div>
       </div>
     </div>
-    <footer class="footer-note">Orbital Outlaws · Vue preview 0.14 <span>Autonomous server-side sector · persistent upgrades · configurable panels</span></footer>
+    <footer class="footer-note">Orbital Outlaws · Vue preview 0.15 <span>Autonomous server-side sector · persistent upgrades · configurable panels</span></footer>
   </div>
 
   <v-alert v-if="startupError" color="error" variant="tonal" class="game-startup-error">{{ startupError }}</v-alert>

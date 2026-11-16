@@ -24,7 +24,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app=FastAPI(title='Orbital Outlaws',version='0.14.0',lifespan=lifespan)
+app=FastAPI(title='Orbital Outlaws',version='0.15.0',lifespan=lifespan)
 
 
 def require_dev_commands():
@@ -45,7 +45,7 @@ class PlayerInput(BaseModel):
 
 
 
-@app.websocket('/api/players/{pilot_id}/live')
+@app.websocket('/players/{pilot_id}/live')
 async def pilot_live(ws: WebSocket,pilot_id: str):
     # Anonymous pilot IDs are permitted ONLY in trusted local development.
     if os.getenv('ORBITAL_DEV_COMMANDS')!='1' or len(pilot_id)!=32 or any(c not in '0123456789abcdef' for c in pilot_id):
@@ -89,15 +89,24 @@ async def pilot_live(ws: WebSocket,pilot_id: str):
                     progress=await run_in_threadpool(database.player_purchase,pilot_id,
                                                      str(message.get('upgrade','')))
                     await ws.send_json({'type':'progress','progress':progress})
+                elif kind=='request_assistance':
+                    outcome=await run_in_threadpool(database.request_assistance,pilot_id,
+                                                     str(message.get('recipient','player')))
+                    await ws.send_json({'type':'assistance','result':outcome})
+                elif kind=='offer_fuel':
+                    outcome=await run_in_threadpool(database.offer_fuel,pilot_id,
+                                                     str(message.get('target','')),
+                                                     float(message.get('kg',20)))
+                    await ws.send_json({'type':'assistance','result':outcome})
                 else:
-                    raise ValueError('Only flight inputs and purchases are accepted; NPCs and loot are server-owned')
+                    raise ValueError('Only flight inputs, purchases and authorized fuel-assistance orders are accepted; NPCs and loot are server-owned')
             except (ValueError,ValidationError,LookupError) as exc:
                 await ws.send_json({'type':'error','message':str(exc)})
     except WebSocketDisconnect:
         pass
 
 
-@app.post('/api/players/{pilot_id}')
+@app.post('/players/{pilot_id}')
 def connect_player(pilot_id: str):
     require_dev_commands()
     if len(pilot_id)!=32 or any(c not in '0123456789abcdef' for c in pilot_id):
@@ -105,13 +114,13 @@ def connect_player(pilot_id: str):
     return store().connect_player(pilot_id)
 
 
-@app.get('/api/players/{pilot_id}')
+@app.get('/players/{pilot_id}')
 def player_state(pilot_id: str):
     require_dev_commands()
     return store().get_entity('kestrel','pilot-'+pilot_id)
 
 
-@app.post('/api/players/{pilot_id}/input')
+@app.post('/players/{pilot_id}/input')
 def player_input(pilot_id: str, command: PlayerInput):
     require_dev_commands()
     try:
@@ -122,7 +131,7 @@ def player_input(pilot_id: str, command: PlayerInput):
 
 
 
-@app.post('/api/dev/players/{pilot_id}/raiders', status_code=201)
+@app.post('/dev/players/{pilot_id}/raiders', status_code=201)
 def spawn_dev_raider(pilot_id: str):
     """Explicit dev-only enemy spawn. Intentionally absent from the game UI."""
     require_dev_commands()
@@ -135,7 +144,7 @@ def spawn_dev_raider(pilot_id: str):
 
 
 
-@app.post('/api/dev/players/{pilot_id}/allies', status_code=201)
+@app.post('/dev/players/{pilot_id}/allies', status_code=201)
 def spawn_dev_ally(pilot_id: str):
     """Create one incoming allied spacecraft; no player-facing spawn control."""
     require_dev_commands()
@@ -147,9 +156,9 @@ def spawn_dev_ally(pilot_id: str):
         raise HTTPException(404, str(exc)) from exc
 
 
-@app.post('/api/dev/players/{pilot_id}/respawn')
+@app.post('/dev/players/{pilot_id}/respawn')
 def respawn_dev_pilot(pilot_id: str):
-    """Replace a destroyed pilot ship; existing credits, upgrades and NPCs survive."""
+    """Replace destroyed ship, reset credits/upgrades, retain NPC sector."""
     require_dev_commands()
     if len(pilot_id) != 32 or any(ch not in '0123456789abcdef' for ch in pilot_id):
         raise HTTPException(400, 'Expected 32-character pilot ID')
@@ -163,7 +172,34 @@ def respawn_dev_pilot(pilot_id: str):
 
 @app.get('/')
 def health():
-    return {'status':'ok','architecture':'lazy-orbits','authority':'player-flight-only'}
+    return {'status':'ok','architecture':'lazy-orbits','authority':'sector-authoritative'}
+
+
+class FuelRequest(BaseModel):
+    recipient: str = 'player'
+
+
+class FuelOffer(BaseModel):
+    target: str
+    kg: float = Field(default=20, gt=0, le=35)
+
+
+@app.post('/players/{pilot_id}/request-assistance')
+def request_assistance(pilot_id: str, body: FuelRequest):
+    require_dev_commands()
+    try:
+        return store().request_assistance(pilot_id, body.recipient)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.post('/players/{pilot_id}/offer-fuel')
+def offer_fuel(pilot_id: str, body: FuelOffer):
+    require_dev_commands()
+    try:
+        return store().offer_fuel(pilot_id, body.target, body.kg)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 class SpawnBody(BaseModel):
@@ -184,13 +220,13 @@ class ImpulseBody(BaseModel):
     reserve_kg: float=Field(default=0,ge=0)
 
 
-@app.get('/api/worlds/{world_id}')
+@app.get('/worlds/{world_id}')
 def world(world_id: str):
     if world_id!='kestrel':raise HTTPException(404,'Unknown world')
     return store().ensure_world(world_id)
 
 
-@app.post('/api/worlds/{world_id}/entities',status_code=201)
+@app.post('/worlds/{world_id}/entities',status_code=201)
 def spawn(world_id: str,body: SpawnBody):
     require_dev_commands()
     try:
@@ -202,21 +238,21 @@ def spawn(world_id: str,body: SpawnBody):
     except ValueError as exc:raise HTTPException(409,str(exc)) from exc
 
 
-@app.get('/api/worlds/{world_id}/entities/{entity_id}')
+@app.get('/worlds/{world_id}/entities/{entity_id}')
 def get_entity(world_id: str,entity_id: str,at_s: float|None=None):
     try:return store().get_entity(world_id,entity_id,at_s)
     except LookupError as exc:raise HTTPException(404,str(exc)) from exc
     except ValueError as exc:raise HTTPException(400,str(exc)) from exc
 
 
-@app.get('/api/worlds/{world_id}/viewport')
+@app.get('/worlds/{world_id}/viewport')
 def viewport(world_id: str,cx: float=0,cy: float=0,radius_km:float=Query(700,gt=0,le=100000),at_s:float|None=None):
     try:return store().viewport(world_id,cx,cy,radius_km,at_s)
     except LookupError as exc:raise HTTPException(404,str(exc)) from exc
     except ValueError as exc:raise HTTPException(400,str(exc)) from exc
 
 
-@app.post('/api/worlds/{world_id}/entities/{entity_id}/impulses')
+@app.post('/worlds/{world_id}/entities/{entity_id}/impulses')
 def impulse(world_id: str,entity_id: str,body: ImpulseBody):
     require_dev_commands()
     try:return store().apply_impulse(world_id,entity_id,body.dvx,body.dvy,body.idempotency_key,body.reserve_kg)

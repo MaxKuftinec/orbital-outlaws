@@ -37,7 +37,7 @@
   }
   function shoot(start,destination,T,mu,inner,outer){
     const coast=propagate(start,T,mu,.22,inner,outer);
-    if(!coast.safe) return null;
+    // The unpowered coast may escape even when a departure burn makes a safe transfer.
     let vx=start.vx+(destination.x-coast.x)/Math.max(T,1);
     let vy=start.vy+(destination.y-coast.y)/Math.max(T,1);
     for(let iteration=0;iteration<9;iteration++){
@@ -90,7 +90,7 @@
     const mass=options.massKg??1100;
     const propellant=options.propellantKg??200;
     const maxDv=exhaust*Math.log(mass/Math.max(1,mass-propellant));
-    let best=null;
+    let best=null, reachable=0, minimumDv=Infinity;
     for(const wait of waits){
       const departure=propagate(start,wait,mu,.18,inner,outer);
       if(!departure.safe)continue;
@@ -98,12 +98,19 @@
         const targetFuture=targetAt(target,wait+flight,mu,inner,outer);
         if(!targetFuture.safe)continue;
         const s=shoot(departure,targetFuture,flight,mu,inner,outer);
-        if(!s || !Number.isFinite(s.dv) || s.dv>maxDv*.96)continue;
+        if(!s || !Number.isFinite(s.dv))continue;
+        reachable++;
+        minimumDv=Math.min(minimumDv,s.dv);
+        if(s.dv>maxDv*.96)continue;
         // Slight preference for earlier arrival and a margin for finite burns/corrections.
         const rank=s.dv+.018*(wait+flight);
         if(!best||rank<best.rank){best={...s,wait,rank,eta:wait+flight,coastPath:s.path,departure:{x:departure.x,y:departure.y},arrival:{x:targetFuture.x,y:targetFuture.y},availableDv:maxDv};}
       }
     }
+    if(typeof options.onDiagnostics==='function')options.onDiagnostics({
+      maxDv,reachable,minimumDv:Number.isFinite(minimumDv)?minimumDv:null,
+      samples:waits.length*flights.length,found:!!best
+    });
     return best;
   }
   return {propagate,targetAt,shoot,plan};
