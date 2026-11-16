@@ -4,7 +4,7 @@ import { NAVIGATION_EVENT,NAV_OPTIONS_EVENT, type NavigationView, type NavOption
 const EMPTY:NavigationView = {
   locked:true,phase:'LOCKED',deltaV:'—',eta:'—',fuel:'—',status:'No plan',quick:'COMPUTER LOCKED',
   metrics:'Pick a contact · press C to calculate',engageText:'BUY NAV 60¤',
-  engageDisabled:false,abortDisabled:true,selected:'',reserveKg:36
+  engageDisabled:false,abortDisabled:true,donateDisabled:true,selected:'',reserveKg:36
 }
 export default defineComponent({
   name:'NavigationPanel',
@@ -26,6 +26,7 @@ export default defineComponent({
       this.navigation.selected=detail.selected
     },
     selectTarget(e:Event){this.navigation.selected=(e.target as HTMLSelectElement).value},
+    offerFuel(){window.dispatchEvent(new CustomEvent('orbital-offer-fuel'))},
     setReserve(e:Event){
       const input=e.target as HTMLInputElement
       const kg=Number(input.value)
@@ -80,6 +81,7 @@ export default defineComponent({
     <div class="metric-row"><span>Guidance status</span><strong id="nav-status">{{ navigation.status }}</strong></div>
     <div class="control-note">Alt+click to set a waypoint. Manual steering disengages autopilot. Estimates assume impulsive burns; live thrust must correct.</div>
     <button type="button" class="wide-subtle-btn" id="escort-donate-btn"
+            :disabled="navigation.donateDisabled" @click="offerFuel"
             title="Offer 20 kg to your selected friendly spacecraft once within 18 km and below 2.5 km/s relative speed">
       ⇄ Offer 20 kg to selected ally
     </button>

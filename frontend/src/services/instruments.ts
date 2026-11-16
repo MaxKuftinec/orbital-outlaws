@@ -15,6 +15,6 @@ export interface NavOption { key: string; text: string }
 export interface NavigationView {
   locked: boolean; phase: string; deltaV: string; eta: string
   fuel: string; status: string; quick: string; metrics: string
-  engageText: string; engageDisabled: boolean; abortDisabled: boolean
+  engageText: string; engageDisabled: boolean; abortDisabled: boolean; donateDisabled: boolean
   selected: string; reserveKg: number
 }

@@ -55,3 +55,13 @@ test('navigation reports budget vs unsolved geometry',()=>{
   assert.ok(diagnostic.maxDv>0);
   assert.equal(diagnostic.samples,1);
 });
+
+
+test('fuel donation is Vue-owned and does not require a legacy DOM node at initialization',()=>{
+  const nav=read('frontend/src/components/NavigationPanel.vue');
+  assert.match(nav,/@click="offerFuel"/);
+  assert.match(nav,/orbital-offer-fuel/);
+  assert.match(game,/window.addEventListener\('orbital-offer-fuel',donateFuelToAlly\)/);
+  assert.doesNotMatch(game,/\$\('escort-donate-btn'\)\.addEventListener/);
+  assert.doesNotMatch(game,/\$\('escort-donate-btn'\)\.disabled/);
+});

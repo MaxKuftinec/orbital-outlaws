@@ -1029,7 +1029,7 @@
     $('mission-status').textContent=liveHostiles+' hostile'+(liveHostiles!==1?'s':'')+' · '+activeAllies+' active allies';
     $('sos-btn').disabled=state.ended||!p.alive||(persistentFlight&&!flightOnline)||(!persistentFlight&&!state.ally.alive);
     $('sos-btn').textContent=(state.rescue||state.serverAssistance?.some(o=>o.recipient==='player'))?'⚑ ASSISTANCE REQUESTED':'⚑ REQUEST FUEL ASSISTANCE';
-    $('escort-donate-btn').disabled=!persistentFlight||!flightOnline||!p.alive||state.ended;
+    // Donation button is Vue-owned; its enabled state arrives via navigation events.
     // Reinforcements are now created by the guarded FastAPI dev endpoint only.
     if(document.querySelector('.upgrades')?.dataset.vueManaged!=='true'){
       $('upgrade-status').textContent=state.predictive?'Installed · lead shot active':'40 ¤';
@@ -1099,7 +1099,8 @@
       metrics:state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${state.navPlan.safety.estimatedKg.toFixed(1)} kg ideal`:state.navFailure||'Pick a contact · press C to calculate',
       engageText:state.navOwned?'ENGAGE':'BUY NAV 60¤',
       engageDisabled:state.ended||!p.alive||!!state.autopilot||(persistentFlight&&!flightOnline)||(!state.navOwned&&p.credits<60),
-      abortDisabled:!state.autopilot,selected:$('nav-target').value
+      abortDisabled:!state.autopilot,donateDisabled:!persistentFlight||!flightOnline||!p.alive||state.ended,
+      selected:$('nav-target').value
     }}));
     window.dispatchEvent(new CustomEvent('orbital-cockpit-state',{detail:{
       ship:{
@@ -1306,7 +1307,7 @@
     $('nav-toggle').addEventListener('click',()=>toggleConsole('nav'));
     $('telemetry-toggle').addEventListener('click',()=>toggleConsole('telemetry'));
     $('sos-btn').addEventListener('click',requestFuelHelp);
-    $('escort-donate-btn').addEventListener('click',donateFuelToAlly);
+    window.addEventListener('orbital-offer-fuel',donateFuelToAlly);
     window.addEventListener('orbital-set-reserve',requestReserveSetting);
     $('settings-btn').addEventListener('click',openSettings);
     $('settings-close').addEventListener('click',closeSettings);
