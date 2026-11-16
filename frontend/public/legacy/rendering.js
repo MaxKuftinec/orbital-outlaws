@@ -104,7 +104,7 @@
     ctx.restore();
   }
   function drawEphemeris(){
-    if(!state.ephemerisOwned)return;
+    if(!state.ephemerisOwned||!state.ephemerisVisible)return;
     const target=getEphemerisTarget();
     if(!target?.alive)return;
     const now=performance.now();

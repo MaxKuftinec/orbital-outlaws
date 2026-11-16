@@ -45,6 +45,35 @@ npm run dev
 
 Open http://localhost:5173. Vite proxies `/players` (including WebSocket), `/worlds` and `/dev` to FastAPI and maps `/backend-health` to the backend root.
 
+## Allied fleet fuel assistance and Ephemeris controls (v0.18.1)
+
+The **REQUEST FUEL ASSISTANCE** button (H) is an SOS for KESTREL-7.
+All available friendly NPCs, including spawned AEGIS visitors that have
+completed their approach, can be selected as donors. Each physically
+transfers at most 35 kg per rendezvous. If the receiver is still below
+75% of tank capacity and other craft have reserve fuel, the order remains
+active and can assign a different donor for another delivery. NPCs also
+issue automatic requests when a same-faction vessel drops under 18% fuel.
+
+To help a particular ally, click *any* living friendly spacecraft on
+the map or choose its name in the Navigation dropdown. The navigation
+panel shows its propellant, distance, relative speed, and live donor
+assignment. Click **Request assistance for selected ally** to order an
+available NPC donor to rendezvous with that spacecraft. Click
+**Transfer up to 20 kg to selected ally** to donate from KESTREL-7 once
+within **18 km** and below **2.5 km/s** relative speed, while respecting
+your protected propellant reserve. The control disables itself when
+physical transfer conditions are not met. A queued NPC order does not
+guarantee success; it still needs a safe, fuel-affordable orbital rendezvous.
+
+The separate **Ephemeris ON/OFF** control above the map appears when
+the Ephemeris Computer is installed. It independently toggles the
+selected contact's projected **unpowered** orbital path and T+60/T+120s
+markers. Clicking a different allied ship on the map selects that
+specific craft and shows its ephemeris, rather than silently displaying
+the original escort or a hostile. The normal `Trajectory` button
+continues to govern your own predicted path.
+
 ## Gameplay
 
 W: main engine. A/D: rotate via RCS. S: stabilize. Space: fire (server validates ammo/cooldown). R: repair (server validates spare parts and hull). Aim with cursor, right/middle drag the map, mouse wheel to zoom.

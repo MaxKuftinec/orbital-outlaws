@@ -357,11 +357,14 @@ def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list
                           and a.get('arrivalPhase') not in ACTIVE_ARRIVAL
                           and a.get('fuel', 0) > 55.]
             if candidates:
+                used=set(order.get('usedDonors',[]))
                 donor = min(candidates,key=lambda a:
+                    (10000. if a['id'] in used and len(candidates)>len(used) else 0.)+
                     (2000. if risk_report(a,[player,*allies,*enemies],mu)['level']!='nominal' else 0.)+
                     distance(a,recipient)+max(0.,90.-a['fuel'])*4.)
                 order['donor'] = donor['id']
                 reserved_donors.add(donor['id'])
+                event(sector,when,f"{donor['name']} assigned to refuel {recipient['name']}.",'neutral')
             else:
                 remaining.append(order)
                 continue
@@ -400,6 +403,23 @@ def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list
                 recipient['mass_kg'] = receiver_mass + moved
             event(sector, when, f"{donor['name']} transferred {moved:.1f} kg propellant to "
                   f"{recipient['name']} ({relative:.2f} km/s relative; {thermal_mj:.1f} MJ damped).", 'good')
+            # A rescue does not silently terminate after the first 35 kg packet.
+            # Other available craft may take the next transfer; no free fuel is
+            # created and each packet still needs a real low-speed rendezvous.
+            remaining_need=max(0.,.75*recipient.get('fuelMax',200.)-recipient['fuel'])
+            if remaining_need > 5. and when-order['createdAt']<900:
+                other_donors=[a for a in allies if a['id'] not in set([donor['id'],*order.get('usedDonors',[])])
+                              and a['id']!=recipient['id']
+                              and a.get('alive',True) and a.get('arrivalPhase') not in ACTIVE_ARRIVAL
+                              and a.get('fuel',0.)>55.]
+                if other_donors:
+                    order.setdefault('usedDonors',[]).append(donor['id'])
+                    order['donor']=None
+                    order.pop('navigation',None)
+                    order['nextDecision']=when+2.
+                    remaining.append(order)
+                    event(sector,when,f"{recipient['name']} still needs propellant; "
+                          f"requesting a follow-up delivery from the friendly fleet.",'neutral')
             continue
         if not order.get('navigation') and not donor.get('burn') and when >= order.get('nextDecision', 0):
             planned = guide_fuel_donor(donor, recipient, mu, when, order)

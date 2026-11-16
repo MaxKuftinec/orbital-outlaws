@@ -10,7 +10,7 @@
     }
     return id;
   }
-  function attach({controls,onState,onProgress,onEncounter,onConnected,onError}){
+  function attach({controls,onState,onProgress,onEncounter,onAssistance,onConnected,onError}){
     const origin=new URL(root.ORBITAL_API_BASE_URL||'/',location.href);
     const address=(origin.protocol==='https:'?'wss:':'ws:')+'//'+origin.host+
       origin.pathname.replace(/\/$/,'')+'/players/'+pilotId()+'/live';
@@ -44,6 +44,7 @@
             connected=true;last='';onConnected(true);tick();
           }
         }else if(data.type==='progress')onProgress(data.progress);
+        else if(data.type==='assistance')onAssistance?.(data.result);
         else if(data.type==='error')onError(data.message);
       };
       ws.onerror=()=>onError('WebSocket connection error');

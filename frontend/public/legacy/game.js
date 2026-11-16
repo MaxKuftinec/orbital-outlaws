@@ -97,7 +97,7 @@
     state = {t:0, player, ally, allies:[], enemies:[e1,e2], shots:[], pickups:[
       newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30),newPickup(295,1.1,'parts',8)
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
-    orbitVisible:true, predictive:false, trajectoryIntel:false, ephemerisOwned:false, captureOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
+    orbitVisible:true, ephemerisVisible:true, selectedNavKey:'', predictive:false, trajectoryIntel:false, ephemerisOwned:false, captureOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
     collisionCooldown:new Map(), playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false,
     playerReserveKg:storedReserve()};
     if(oldTech){Object.assign(state,oldTech);player.credits=oldPilot.credits;}
@@ -110,6 +110,7 @@
     $('game-over').classList.add('hidden');
  
     $('orbit-btn').classList.add('selected');$('orbit-btn').setAttribute('aria-pressed','true');
+    $('ephemeris-visibility-btn').classList.remove('selected');
     updateZoom();
     logEvent('Coast is free. Starter grant: 65 ¤ for testing upgrades.','good');
     logEvent('AEGIS-01 friendly escort online. Reinforcements disabled by default.','good');
@@ -137,7 +138,7 @@
     if(!checkpoint?.snapshot)return;
     const saved=checkpoint.snapshot;
     if(!Array.isArray(saved.enemies)||!Array.isArray(saved.pickups)||!saved.ally)return;
-    const previous=state.enemies.map(e=>e.id+':'+e.alive).join(',');
+    const previous=JSON.stringify([state.enemies.map(e=>[e.id,e.alive]),state.ally.id+':'+state.ally.alive,(state.allies||[]).map(a=>[a.id,a.alive]),state.pickups.map(p=>[p.id,p.alive])]);
     state.enemies=mergeLiveBodies(state.enemies,saved.enemies);
     state.ally=mergeLiveBodies([state.ally],[saved.ally])[0];
     state.allies=mergeLiveBodies(state.allies||[],saved.allies||[]);
@@ -176,7 +177,7 @@
       logEvent(e.message,e.category||'neutral');
     }
     if(seenSectorEvents.size>150)seenSectorEvents.clear();
-    if(previous!==state.enemies.map(e=>e.id+':'+e.alive).join(','))updateTargetOptions();
+    if(previous!==JSON.stringify([state.enemies.map(e=>[e.id,e.alive]),state.ally.id+':'+state.ally.alive,(state.allies||[]).map(a=>[a.id,a.alive]),state.pickups.map(p=>[p.id,p.alive])]))updateTargetOptions();
     state.lastPrediction=-999;state.lastBallistic=-999;
     updateHud();
   }
@@ -687,6 +688,7 @@
     if(key?.startsWith('pickup:'))return state.pickups.some(p=>p.id===key.slice(7)&&p.alive);
     if(key?.startsWith('enemy:'))return state.enemies.some(p=>p.id===key.slice(6)&&p.alive);
     if(key==='ally')return state.ally.alive;
+    if(key?.startsWith('ally:'))return (state.allies||[]).some(a=>a.id===key.slice(5)&&a.alive);
     return false;
   }
   function navTarget(key){
@@ -698,13 +700,15 @@
     return null;
   }
   function updateTargetOptions(preferred){
-    const select=$('nav-target');const previous=preferred||select.value;
+    const select=$('nav-target');const previous=preferred||state.selectedNavKey||select.value;
     const entries=[...state.pickups.filter(p=>p.alive).map(p=>({key:'pickup:'+p.id,text:(p.type==='wreck'?'Wreck':'Salvage '+p.type)+' · '+p.id.slice(-4)})),
       ...state.enemies.filter(e=>e.alive).map(e=>({key:'enemy:'+e.id,text:e.name+' · hostile'})),
       ...(state.ally.alive?[{key:'ally',text:'AEGIS-01 · friendly escort'}]:[]),
       ...(state.allies||[]).filter(a=>a.alive).map(a=>({key:'ally:'+a.id,text:a.name+' · friendly visitor'}))];
     if(state.waypoint)entries.unshift({key:'waypoint',text:'Map waypoint (fixed location)'});
     const selected=entries.some(item=>item.key===previous)?previous:entries[0]?.key||'';
+    state.selectedNavKey=selected;
+    if(state.ephemerisCache?.key!==navTarget(selected)?.id)state.ephemerisCache=null;
     if(select.dataset.vueManaged==='true'){
       window.dispatchEvent(new CustomEvent('orbital-navigation-options',{detail:{options:entries,selected}}));
       return;
@@ -719,6 +723,7 @@
     select.selectedIndex=(select.selectedIndex+1)%select.options.length;
     state.navPlan=null;
     const key=select.value;
+    state.selectedNavKey=key;state.ephemerisCache=null;
     if(key.startsWith('enemy:')){state.targetId=key.slice(6);state.aimMode='locked';state.lastBallistic=-999;}
     logEvent('Navigation target: '+select.selectedOptions[0].textContent);
     if(select.dataset.vueManaged==='true')window.dispatchEvent(new CustomEvent('orbital-navigation-options',{
@@ -802,13 +807,30 @@
     if(ally.fuel<rescueFuelFloor()+24){startRescueLeg('scavenge');return;}
     startRescueLeg('deliver');
   }
+  function requestSelectedAllyAssistance(){
+    if(!persistentFlight||!flightOnline){logEvent('Connected flight required for allied rescue orders.','danger');return;}
+    const recipient=navTarget(state.selectedNavKey);
+    if(!recipient?.isAlly||!recipient.alive){
+      logEvent('Select a living ally in Navigation before requesting assistance.','danger');return;
+    }
+    if(!pilotLink?.requestAssistance(recipient.id)){
+      logEvent('Could not transmit assistance order for '+recipient.name+'.','danger');return;
+    }
+    logEvent('Requested a fuel-rescue rendezvous for '+recipient.name+'.','neutral');
+  }
   function donateFuelToAlly(){
     if(!persistentFlight||!flightOnline){logEvent('Live server is required for player donations.','danger');return;}
     if(!state.player.alive){logEvent('Destroyed ships cannot donate fuel.','danger');return;}
-    const key=$('nav-target').value;
+    const key=state.selectedNavKey;
     const target=navTarget(key);
     const ally=target?.isAlly?target:null;
     if(!ally?.alive){logEvent('Select a living friendly craft in Navigation before offering fuel.','danger');return;}
+    const separation=magnitude(ally.x-state.player.x,ally.y-state.player.y);
+    const relative=magnitude(ally.vx-state.player.vx,ally.vy-state.player.vy);
+    if(separation>18||relative>=2.5){
+      logEvent('Cannot transfer fuel: '+separation.toFixed(1)+' km separation, '+
+        relative.toFixed(2)+' km/s relative; approach within 18 km and below 2.5 km/s.','danger');return;
+    }
     if(!pilotLink?.offerFuel(ally.id,20))logEvent('Fuel transfer could not be sent.','danger');
     else logEvent('Fuel offer sent to '+ally.name+'; transfer needs ≤18 km and <2.5 km/s relative speed.');
   }
@@ -874,7 +896,7 @@
   }
   function planNav(){
     if(state.ended)return null;
-    const key=$('nav-target').value,target=navTarget(key);
+    const key=state.selectedNavKey,target=navTarget(key);
     if(!target){state.navPlan=null;logEvent('Select a valid target before planning.');return null;}
     const reserve=state.playerReserveKg;
     const usableFuel=Math.max(0,state.player.fuel-reserve);
@@ -1102,6 +1124,26 @@
     $('mission-status').textContent=liveHostiles+' hostile'+(liveHostiles!==1?'s':'')+' · '+activeAllies+' active allies';
     $('sos-btn').disabled=state.ended||!p.alive||(persistentFlight&&!flightOnline)||(!persistentFlight&&!state.ally.alive);
     $('sos-btn').textContent=(state.rescue||state.serverAssistance?.some(o=>o.recipient==='player'))?'⚑ ASSISTANCE REQUESTED':'⚑ REQUEST FUEL ASSISTANCE';
+    const ephemerisToggle=$('ephemeris-visibility-btn');
+    ephemerisToggle.disabled=!state.ephemerisOwned;
+    ephemerisToggle.textContent=state.ephemerisVisible?'◎ Ephemeris ON':'◎ Ephemeris OFF';
+    ephemerisToggle.setAttribute('aria-pressed',String(state.ephemerisOwned&&state.ephemerisVisible));
+    ephemerisToggle.classList.toggle('selected',state.ephemerisOwned&&state.ephemerisVisible);
+    const selectedAlly=navTarget(state.selectedNavKey);
+    const friendly=selectedAlly?.isAlly&&selectedAlly.alive?selectedAlly:null;
+    const allyRange=friendly?magnitude(friendly.x-p.x,friendly.y-p.y):Infinity;
+    const allyRelative=friendly?magnitude(friendly.vx-p.vx,friendly.vy-p.vy):Infinity;
+    const alliance=(state.serverAssistance||[]).find(o=>o.recipient===friendly?.id);
+    const donorStatus=state.serverAssistance?.filter(o=>o.recipient==='player'||o.recipient===friendly?.id).map(o=>{
+      const donor=[state.ally,...(state.allies||[])].find(a=>a.id===o.donor);
+      return (o.recipient==='player'?'For you':friendly?.name||'Ally')+' · '+(donor?.name||'Awaiting donor')+
+        (o.navigation?' · '+o.navigation.phase:' · rendezvous');
+    }).join(' | ')||'No active fuel transfers';
+    const canDonate=!!friendly&&persistentFlight&&flightOnline&&!state.ended&&p.alive&&
+      allyRange<=18&&allyRelative<2.5&&p.fuel>state.playerReserveKg+.1&&
+      friendly.fuel<friendly.fuelMax-.1;
+    const canRequestForAlly=!!friendly&&persistentFlight&&flightOnline&&!state.ended&&
+      p.alive&&friendly.fuel<friendly.fuelMax-.1&&!alliance;
     // Donation button is Vue-owned; its enabled state arrives via navigation events.
     // Reinforcements are now created by the guarded FastAPI dev endpoint only.
     if(document.querySelector('.upgrades') && document.querySelector('.upgrades').dataset.vueManaged!=='true'){
@@ -1172,8 +1214,13 @@
       metrics:state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${state.navPlan.safety.estimatedKg.toFixed(1)} kg ideal`:state.navFailure||'Pick a contact · press C to calculate',
       engageText:state.navOwned?'ENGAGE':'BUY NAV 60¤',
       engageDisabled:state.ended||!p.alive||!!state.autopilot||(persistentFlight&&!flightOnline)||(!state.navOwned&&p.credits<60),
-      abortDisabled:!state.autopilot,donateDisabled:!persistentFlight||!flightOnline||!p.alive||state.ended,
-      selected:$('nav-target').value
+      abortDisabled:!state.autopilot,donateDisabled:!canDonate,
+      requestAllyDisabled:!canRequestForAlly,
+      allyInfo:friendly?(friendly.name+' · '+friendly.fuel.toFixed(1)+' / '+friendly.fuelMax+
+        ' kg fuel · '+allyRange.toFixed(1)+' km away · '+allyRelative.toFixed(2)+' km/s relative'):
+        'Select a living friendly spacecraft in Navigation or click its icon on the map.',
+      assistInfo:donorStatus,
+      selected:state.selectedNavKey
     }}));
     window.dispatchEvent(new CustomEvent('orbital-cockpit-state',{detail:{
       ship:{
@@ -1215,7 +1262,7 @@
   const renderer=window.OrbitalRenderer.create({
     ctx,WORLD,ENGINE,palette,NAV,getState:()=>state,
     getViewport:()=>({W,H,dpr,starfield,encounterReady}),
-    toScreen,scale,clamp,getEphemerisTarget:()=>navTarget($('nav-target').value)||aliveTarget()
+    toScreen,scale,clamp,getEphemerisTarget:()=>navTarget(state.selectedNavKey)
   });
   function draw(){renderer.draw();}
   function frame(now){
@@ -1379,10 +1426,21 @@
     $('nav-engage').addEventListener('click',purchaseOrEngage);
     $('nav-next').addEventListener('click',cycleNavigationTarget);
     $('nav-abort').addEventListener('click',()=>abortNav());
-    $('nav-target').addEventListener('change',()=>{state.navPlan=null;updateHud();});
+    $('nav-target').addEventListener('change',()=>{state.selectedNavKey=$('nav-target').value;state.ephemerisCache=null;state.navPlan=null;updateHud();});
     $('nav-toggle').addEventListener('click',()=>toggleConsole('nav'));
     $('telemetry-toggle').addEventListener('click',()=>toggleConsole('telemetry'));
     $('sos-btn').addEventListener('click',requestFuelHelp);
+    $('ephemeris-visibility-btn').addEventListener('click',()=>{
+      if(!state.ephemerisOwned)return;
+      state.ephemerisVisible=!state.ephemerisVisible;state.ephemerisCache=null;
+      logEvent('Ephemeris trajectory '+(state.ephemerisVisible?'shown':'hidden')+'.');updateHud();
+    });
+    window.addEventListener('orbital-target-selected',e=>{
+      const key=e.detail?.key;
+      if(typeof key!=='string'||!navKeyExists(key))return;
+      state.selectedNavKey=key;state.ephemerisCache=null;state.navPlan=null;updateHud();
+    });
+    window.addEventListener('orbital-request-ally-assistance',requestSelectedAllyAssistance);
     window.addEventListener('orbital-offer-fuel',donateFuelToAlly);
     window.addEventListener('orbital-set-reserve',requestReserveSetting);
     $('settings-btn').addEventListener('click',openSettings);
@@ -1410,7 +1468,19 @@
       let candidate=null,dist=Infinity;
       for(const enemy of state.enemies)if(enemy.alive){const d=magnitude(p.x-enemy.x,p.y-enemy.y);if(d<Math.max(23,23/scale())&&d<dist){dist=d;candidate=enemy;}}
       if(candidate){state.targetId=candidate.id;state.aimMode='locked';state.lastBallistic=-999;state.navPlan=null;logEvent('Target lock: '+candidate.name);updateTargetOptions('enemy:'+candidate.id);updateHud();return;}
-      if(state.ally.alive&&magnitude(p.x-state.ally.x,p.y-state.ally.y)<Math.max(23,23/scale())){updateTargetOptions('ally');state.navPlan=null;logEvent('Friendly escort selected as navigation target.','good');return;}
+      let clickedAlly=null,clickedAllyDistance=Infinity;
+      for(const ally of [state.ally,...(state.allies||[])])if(ally.alive){
+        const d=magnitude(p.x-ally.x,p.y-ally.y);
+        if(d<Math.max(23,23/scale())&&d<clickedAllyDistance){
+          clickedAlly=ally;clickedAllyDistance=d;
+        }
+      }
+      if(clickedAlly){
+        updateTargetOptions(clickedAlly.id===state.ally.id?'ally':'ally:'+clickedAlly.id);
+        state.navPlan=null;state.ephemerisVisible=true;state.ephemerisCache=null;
+        logEvent(clickedAlly.name+' selected · '+(state.ephemerisOwned?'Ephemeris trajectory visible.':'Ephemeris computer not installed.'),'good');
+        updateHud();return;
+      }
       for(const pickup of state.pickups)if(pickup.alive){const d=magnitude(p.x-pickup.x,p.y-pickup.y);if(d<Math.max(17,19/scale())&&d<dist){dist=d;candidate=pickup;}}
       if(candidate&&candidate.type){updateTargetOptions('pickup:'+candidate.id);state.navPlan=null;logEvent('Navigation target selected: '+candidate.type+'.');return;}
       e.preventDefault();state.aimMode='manual';state.mouseTarget=p;state.gimbalTarget=p;state.lastBallistic=-999;logEvent('Manual gun aim: curved shot path shown. Hold SPACE to fire.');updateHud();
@@ -1458,6 +1528,12 @@
         if(!previous.ephemerisOwned&&state.ephemerisOwned)logEvent('Ephemeris computer installed · orbital predictions unlocked.','good');
         if(!previous.captureOwned&&state.captureOwned)logEvent('Salvage Capture Rig installed · capture tolerance now 8 km/s.','good');
         state.lastBallistic=-999;updateHud();
+      },
+      onAssistance:result=>{
+        if(result?.status==='queued')logEvent('Server accepted assistance order for '+result.recipient+'.','good');
+        else if(result?.transferred_kg!==undefined)
+          logEvent('Transfer complete: '+result.transferred_kg.toFixed(1)+' kg sent to '+result.target+'.','good');
+        updateHud();
       },
       onError:message=>{encounterReady=true;logEvent('Flight server: '+message.slice(0,110),'danger');},
       onConnected:online=>{

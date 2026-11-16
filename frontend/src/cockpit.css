@@ -176,7 +176,7 @@
 
 
 /* Rendezvous: its own glowing intercept monitor, rather than a generic gate icon. */
-.upgrades .upgrade-entry .tech-icon.tech-icon--rendezvous{
+.upgrades .upgrade-entry .tech-icon.tech-icon--nav{
   background-image:url('/tech/rendezvous-monitor.webp');
   background-position:center;background-size:cover;
 }

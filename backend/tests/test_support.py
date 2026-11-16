@@ -80,3 +80,44 @@ def test_autonomous_guidance_queues_navigation_without_instant_dv():
     assert guide_fuel_donor(donor,recipient,310000.,0.,order)
     assert 'navigation' in order
     assert (donor['vx'],donor['vy'],donor['fuel'])==before
+
+
+def test_player_rescue_can_handoff_between_multiple_allied_donors():
+    """Two escorts are both eligible; an unfinished request gets a second donor."""
+    player={'id':'player','isPlayer':True,'name':'KESTREL-7','x':300.,
+            'y':0.,'vx':0.,'vy':32.,'fuel':15.,'fuelMax':200.,'alive':True}
+    first=ship('ally-01',300.,0.,True)
+    first.update(x=300.,y=0.,vx=0.,vy=32.,fuel=140.)
+    second=ship('ally-02',300.,0.,True)
+    second.update(x=300.,y=0.,vx=0.,vy=32.,fuel=140.)
+    sector={'assistance':[{'recipient':'player','donor':None,'faction':'friendly',
+                           'createdAt':0.,'nextDecision':0.}], 'events':[]}
+    effects={'fuel':0.,'player_dvx':0.,'player_dvy':0.}
+    support_orders(sector,player,[first,second],[],1.,310000.,effects)
+    assert effects['fuel']==35.
+    assert len(sector['assistance'])==1
+    assert sector['assistance'][0]['donor'] is None
+    assert sector['assistance'][0]['usedDonors']==['ally-01']
+    support_orders(sector,player,[first,second],[],2.,310000.,effects)
+    assert effects['fuel']==70.
+    assert first['fuel']==105.
+    assert second['fuel']==105.
+    assert player['fuel']==85.
+    assert any('AEGIS-02' in e['message'] for e in sector['events'])
+
+
+def test_selected_ally_can_request_rescue_from_another_friendly_npc():
+    recipient=ship('ally-02',300.,0.,True)
+    recipient.update(x=300.,y=0.,vx=0.,vy=32.,fuel=15.)
+    donor=ship('ally-01',300.,0.,True)
+    donor.update(x=300.,y=0.,vx=0.,vy=32.,fuel=140.)
+    player={'id':'player','isPlayer':True,'name':'KESTREL-7','x':250.,'y':0.,
+            'vx':0.,'vy':30.,'fuel':180.,'fuelMax':200.,'alive':True}
+    sector={'assistance':[{'recipient':recipient['id'],'donor':None,
+                           'createdAt':0.,'nextDecision':0.}], 'events':[]}
+    effects={'fuel':0.}
+    support_orders(sector,player,[donor,recipient],[],1.,310000.,effects)
+    assert donor['fuel']==105.
+    assert recipient['fuel']==50.
+    assert effects['fuel']==0.
+    assert any('AEGIS-01' in e['message'] for e in sector['events'])
