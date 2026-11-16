@@ -11,6 +11,7 @@ class StubStore:
         self.version = 0
         self.ammo = 36
         self.hp = 85
+        self.reserve_kg = 36.
 
     def ensure_world(self):
         return {'id': 'kestrel'}
@@ -36,7 +37,13 @@ class StubStore:
         return {'ship': {'id': 'ally-02', 'name': 'ALLY-02'}, 'intent': 'flyby', 'faction': 'ally', 'ship_count': 1}
 
     def player_progress(self, pilot_id):
-        return {'credits':self.credits,'upgrades':dict(self.upgrades)}
+        return {'credits':self.credits,'upgrades':dict(self.upgrades),'reserve_kg':self.reserve_kg}
+
+    def set_player_reserve(self,pilot_id,kg):
+        if not 0 <= kg <= 200:
+            raise ValueError('Invalid reserve')
+        self.reserve_kg=kg
+        return self.player_progress(pilot_id)
 
     def player_encounter(self, pilot_id):
         return {'saved_at_utc':1234, 'snapshot':{
@@ -93,6 +100,8 @@ def test_websocket_sector_combat_and_ephemeris(monkeypatch):
             assert update['encounter']['snapshot']['player']['hp']==86
             ws.send_json({'type':'purchase','upgrade':'ephemeris'})
             assert receive_type(ws,'progress')['progress']['credits']==20
+            ws.send_json({'type':'reserve','kg':74})
+            assert receive_type(ws,'progress')['progress']['reserve_kg']==74
             ws.send_json({'type':'purchase','upgrade':'ephemeris'})
             assert receive_type(ws,'progress')['progress']['credits']==20
             ws.send_json({'type':'salvage','id':'forged-credit','credits':50})
@@ -100,6 +109,7 @@ def test_websocket_sector_combat_and_ephemeris(monkeypatch):
         with client.websocket_connect(f'/players/{pilot}/live') as ws:
             resumed=receive_type(ws,'welcome')
             assert resumed['progress']['upgrades']['ephemeris']
+            assert resumed['progress']['reserve_kg']==74
             assert resumed['encounter']['snapshot']['player']['ammo']==35
 
 
