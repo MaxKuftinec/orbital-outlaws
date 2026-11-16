@@ -2,8 +2,10 @@
 import { onMounted, ref } from 'vue'
 
 const backendOnline = ref(false)
+const persistentOnline = ref(false)
+window.addEventListener('orbital-persistence', ((e: CustomEvent) => { persistentOnline.value = e.detail.online }) as EventListener)
 const startupError = ref('')
-const legacyFiles = ['navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js', 'arrival.js', 'game.js']
+const legacyFiles = ['navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js', 'arrival.js', 'persistence.js', 'game.js']
 
 function loadLegacyScript(filename: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -16,6 +18,7 @@ function loadLegacyScript(filename: string): Promise<void> {
 }
 
 onMounted(async () => {
+  ;(window as typeof window & { ORBITAL_API_BASE_URL?: string }).ORBITAL_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
   try {
     // Mount Vue's cockpit before installing game.js DOM listeners
     for (const filename of legacyFiles) await loadLegacyScript(filename)
@@ -23,7 +26,8 @@ onMounted(async () => {
     startupError.value = error instanceof Error ? error.message : String(error)
   }
   try {
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? ''}/`)
+    const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+    const response = await fetch(base ? `${base}/` : '/backend-health')
     backendOnline.value = response.ok
   } catch {
     backendOnline.value = false
@@ -41,7 +45,7 @@ onMounted(async () => {
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
         <div><div class="eyebrow">PROTOTYPE 0.7</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
-      <div class="top-actions"><v-chip :color="backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ backendOnline ? 'Backend ready (foundation)' : 'Local gameplay · backend offline' }}</v-chip>
+      <div class="top-actions"><v-chip :color="backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Persistent flight · server authoritative' : backendOnline ? 'Backend online · local flight until connected' : 'Local gameplay · backend offline' }}</v-chip>
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">MISSION TIME</span><strong id="sim-clock">00:00</strong></div></div>
         <label class="speed-label">Speed <select id="sim-speed" aria-label="Simulation speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
         <v-btn density="compact" variant="tonal"  id="settings-btn" type="button" class="action-btn" title="Change hotkeys">⚙ Controls</v-btn>

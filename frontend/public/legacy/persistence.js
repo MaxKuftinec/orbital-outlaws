@@ -1,0 +1,54 @@
+/* Persistent pilot transport; never sends client positions, velocities, or fuel. */
+(function(root){
+  'use strict';
+  const key = 'orbital-outlaws.pilot.v1';
+  const base = (root.ORBITAL_API_BASE_URL || '').replace(/\/$/, '');
+  function pilotId(){
+    let id = localStorage.getItem(key);
+    if(!id || !/^[a-f0-9]{32}$/.test(id)){
+      id = crypto.randomUUID().replace(/-/g, '');
+      localStorage.setItem(key,id);
+    }
+    return id;
+  }
+  function attach({controls, onState, onConnected}){
+    const url = base + '/api/players/' + pilotId();
+    let connected = false, busy = false, previous = '', lastPoll = 0, lastError = '';
+    async function request(path, init){
+      const response = await fetch(url + path, {cache:'no-store',...init});
+      if(!response.ok) throw new Error('Flight API '+response.status+': '+await response.text());
+      return response.json();
+    }
+    async function tick(){
+      if(busy || document.hidden) return;
+      busy = true;
+      try{
+        if(!connected){
+          onState(await request('',{method:'POST'}));
+          connected = true;
+          onConnected(true);
+        }else{
+          const command = controls();
+          const fingerprint = JSON.stringify(command);
+          const active = command.thrust || command.turn || command.stabilize;
+          const now = performance.now();
+          if(active || fingerprint !== previous){
+            onState(await request('/input',{method:'POST',headers:{'Content-Type':'application/json'},body:fingerprint}));
+            previous = fingerprint;
+          }else if(now-lastPoll>550){
+            onState(await request(''));
+            lastPoll = now;
+          }
+        }
+        lastError = '';
+      }catch(error){
+        if(String(error)!==lastError){console.warn('Persistent flight unavailable:',error);lastError=String(error);}
+        if(connected){connected=false;onConnected(false);}
+      }finally{busy=false;}
+    }
+    const timer = setInterval(tick,250);
+    tick();
+    return ()=>clearInterval(timer);
+  }
+  root.OrbitalPersistence = {attach};
+})(window);

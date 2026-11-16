@@ -26,6 +26,7 @@
   const palette = { cyan: '#62d9f6', green:'#67e0aa', red:'#ff7184', yellow:'#edbe6b', purple:'#bd9efa' };
   let W = 840, H = 550, dpr = 1;
   let state;
+  let persistentFlight = false;
   let lastFrame = performance.now(), accumulator = 0, nextHud = 0;
   let lastFrameId;
   let starfield = [];
@@ -281,9 +282,15 @@
     state.t+=dt;
     const initial=new Map([state.player,state.ally,...state.enemies].filter(s=>s.alive).map(s=>[s.id,{x:s.x,y:s.y}]));
     const player=state.player;
-    applyShipStep(player,dt);
+    if(persistentFlight){
+      // Cosmetic client prediction only. Server snapshots overwrite this state.
+      stepBody(player,dt);
+      player.heading=normAngle(player.heading+player.omega*dt);
+      player.thrustVector=null;
+      player.rcsFiring=0;
+    }else applyShipStep(player,dt);
     if(state.ended)return;
-    state.repairing=state.down.has('repair')&&repairHull(player,dt);
+    state.repairing=!persistentFlight&&state.down.has('repair')&&repairHull(player,dt);
     const ally=state.ally;
     if(ally.alive){
       applyShipStep(ally,dt);
@@ -397,11 +404,14 @@
   function collect(pod) {
     pod.alive=false;
     const p=state.player;
-    if(pod.type==='fuel') {p.fuel=Math.min(p.fuelMax,p.fuel+pod.amount);logEvent('Recovered '+pod.amount+' kg propellant.','good');}
+    if(pod.type==='fuel') {
+      if(persistentFlight) logEvent('Fuel salvage is not yet persistent.','danger');
+      else {p.fuel=Math.min(p.fuelMax,p.fuel+pod.amount);logEvent('Recovered '+pod.amount+' kg propellant.','good');}
+    }
     if(pod.type==='ammo') {p.ammo+=pod.amount;logEvent('Recovered '+pod.amount+' ballistic rounds.','good');}
     if(pod.type==='credits') {p.credits+=pod.amount;logEvent('Recovered '+pod.amount+' salvage credits.','good');}
     if(pod.type==='parts') {const received=Math.min(pod.amount,REPAIR.capacityKg-p.repairParts);p.repairParts+=received;logEvent(received>0?'Recovered '+received.toFixed(1)+' kg repair materials.':'Repair storage already full.','good');}
-    if(pod.type==='wreck') {p.credits+=50;p.ammo+=12;p.fuel=Math.min(p.fuelMax,p.fuel+25);const parts=Math.min(6,REPAIR.capacityKg-p.repairParts);p.repairParts+=parts;logEvent('Wreck salvaged: +50 ¤, +25 kg propellant, +12 ammo, +'+parts.toFixed(1)+' kg parts.','good');}
+    if(pod.type==='wreck') {p.credits+=50;p.ammo+=12;if(!persistentFlight)p.fuel=Math.min(p.fuelMax,p.fuel+25);const parts=Math.min(6,REPAIR.capacityKg-p.repairParts);p.repairParts+=parts;logEvent('Wreck salvaged (combat loot remains local).','good');}
     if(state.autopilot?.targetKey==='pickup:'+pod.id){state.autopilot=null;state.navPlan=null;logEvent('Rendezvous complete. Salvage secured!','good');}
     sparks(pod.x,pod.y,palette.green,12);updateTargetOptions();
   }
@@ -513,6 +523,7 @@
     updateHud();return true;
   }
   function requestFuelHelp(){
+    if(persistentFlight){logEvent('Server fuel transfers not implemented yet.','danger');return;}
     if(state.ended)return;
     if(!state.ally.alive){logEvent('No friendly rescue craft available.','danger');return;}
     if(state.player.fuel>=state.player.fuelMax-.1){logEvent('Your tanks are already full.');return;}
@@ -579,6 +590,7 @@
     state.autopilot=null;logEvent(message);updateHud();
   }
   function engageNav(){
+    if(persistentFlight){logEvent('Server autopilot not implemented yet; fly manually.','danger');return;}
     if(!state.navOwned){logEvent('Buy the rendezvous computer to engage.');return;}
     const plan=state.navPlan&&state.navPlan.targetKey===$('nav-target').value&&state.t-state.navPlan.calculatedAt<1?state.navPlan:planNav();
     if(!plan)return;
@@ -724,7 +736,7 @@
     $('hull-value').textContent=Math.round(p.hp)+'%';$('hull-bar').style.width=clamp(p.hp,0,100)+'%';
     $('fuel-value').textContent=`${p.fuel.toFixed(1)} / ${p.fuelMax} kg`;$('fuel-bar').style.width=(100*p.fuel/p.fuelMax)+'%';
     $('repair-parts').textContent=p.repairParts.toFixed(1)+' / '+REPAIR.capacityKg+' kg';
-    $('repair-btn').disabled=state.ended||p.hp>=100||p.repairParts<=.00001;
+    $('repair-btn').disabled=persistentFlight||state.ended||p.hp>=100||p.repairParts<=.00001;
     $('repair-btn').textContent=state.repairing?'REPAIRING… (R)':'HOLD R · REPAIR';
     $('ammo-value').textContent=p.ammo;
     $('credits-value').innerHTML=p.credits+' <i>¤</i>';
@@ -752,9 +764,9 @@
     $('escort-ammo').textContent=state.ally.alive?String(state.ally.ammo):'—';
     $('escort-fuel').textContent=state.ally.alive?state.ally.fuel.toFixed(1)+' kg':'—';
     $('escort-state').textContent=!state.ally.alive?'ESCORT LOST':state.rescue?'RESCUE: '+state.rescue.activity.toUpperCase()+' / '+state.rescue.phase.toUpperCase():(liveHostiles?'ENGAGING HOSTILES':'HOLDING ORBIT');
-    $('sos-btn').disabled=state.ended||!state.ally.alive;
+    $('sos-btn').disabled=persistentFlight||state.ended||!state.ally.alive;
     $('sos-btn').textContent=state.rescue?'⚑ ASSISTANCE REQUESTED':'⚑ REQUEST FUEL ASSISTANCE';
-    $('escort-help-btn').disabled=state.ended||!state.ally.alive;
+    $('escort-help-btn').disabled=persistentFlight||state.ended||!state.ally.alive;
     $('reinforce-btn').textContent='Reinforcements: '+(state.reinforcements?'ON':'OFF');
     $('reinforce-btn').setAttribute('aria-pressed',String(state.reinforcements));
     $('upgrade-status').textContent=state.predictive?'Installed · lead shot active':'40 ¤';
@@ -782,7 +794,7 @@
     $('nav-eta').textContent=state.navPlan?state.navPlan.eta.toFixed(0)+' s':'—';
     $('nav-fuel').textContent=state.navPlan?SAFE.requiredFuel(mass(p),state.navPlan.dv,exhaustKmS).toFixed(1)+' kg (ideal)':'—';
     $('nav-engage').textContent=state.navOwned?'ENGAGE':'BUY NAV 60¤';
-    $('nav-engage').disabled=state.ended||(!state.navOwned&&p.credits<60)||(state.navOwned&&(!state.navPlan||!!state.autopilot));
+    $('nav-engage').disabled=persistentFlight||state.ended||(!state.navOwned&&p.credits<60)||(state.navOwned&&(!state.navPlan||!!state.autopilot));
     $('nav-abort').disabled=!state.autopilot;
     $('nav-quick-status').textContent=state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED';
     $('nav-quick-metrics').textContent=state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${state.navPlan.safety.estimatedKg.toFixed(1)} kg ideal · ${state.navPlan.safety.reserveKg.toFixed(0)} kg reserved`: 'Pick a contact · press C to calculate';
@@ -1093,4 +1105,39 @@
   }
   function togglePause(){if(state.ended)return;state.paused=!state.paused;state.down.clear();state.pointerThrust=false;$('pause-btn').textContent=state.paused?'▶ Resume':'Ⅱ Pause';}
   bindControls();updateHotkeyHints();reset();fitCanvas();lastFrameId=requestAnimationFrame(frame);
+  if(window.OrbitalPersistence){
+    window.OrbitalPersistence.attach({
+      controls:()=>{
+        const p=state.player;
+        const target=state.gimbalTarget;
+        const desired=target?Math.atan2(target.y-p.y,target.x-p.x):p.heading;
+        return {
+          thrust:!state.paused&&!state.ended&&state.down.has('main'),
+          turn:state.paused||state.ended?0:Number(state.down.has('rotate-right'))-Number(state.down.has('rotate-left')),
+          stabilize:!state.paused&&!state.ended&&state.down.has('stabilize'),
+          gimbal:clamp(normAngle(desired-p.heading),-ENGINE.gimbalMax,ENGINE.gimbalMax)
+        };
+      },
+      onState:result=>{
+        const p=state.player,s=result.state;
+        for(const key of ['x','y','vx','vy','heading','omega'])if(Number.isFinite(s[key]))p[key]=s[key];
+        p.fuel=s.fuel_kg;
+        p.dryMass=s.mass_kg-s.fuel_kg-p.repairParts;
+        state.lastPrediction=-999;
+        state.lastBallistic=-999;
+      },
+      onConnected:online=>{
+        if(online){
+          persistentFlight=true;
+          state.speed=1;$('sim-speed').value='1';$('sim-speed').disabled=true;
+          state.autopilot=null;
+          logEvent('Server-authoritative orbital flight connected. Combat/loot are still local.','good');
+        }else{
+          // Keep the pilot read-only while offline: never silently switch to local authority.
+          logEvent('Flight server disconnected. Inputs suspended; orbit will resume from server.','danger');
+        }
+        window.dispatchEvent(new CustomEvent('orbital-persistence',{detail:{online}}));
+      }
+    });
+  }
 })();
