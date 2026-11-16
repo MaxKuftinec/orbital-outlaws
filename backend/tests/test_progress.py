@@ -8,9 +8,9 @@ def test_persistent_credits_upgrades_and_idempotent_salvage(postgres_url):
     store.ensure_world()
     pilot=uuid4().hex
     store.connect_player(pilot)
-    assert store.player_progress(pilot)=={'credits':65,'upgrades':{}}
+    assert store.player_progress(pilot)=={'credits':65,'upgrades':{},'reserve_kg':36.}
     bought=store.player_purchase(pilot,'predictive')
-    assert bought=={'credits':25,'upgrades':{'predictive':True}}
+    assert bought=={'credits':25,'upgrades':{'predictive':True},'reserve_kg':36.}
     assert store.player_purchase(pilot,'predictive')==bought
     with pytest.raises(ValueError,match='Insufficient credits'):
         store.player_purchase(pilot,'nav')
