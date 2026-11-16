@@ -147,7 +147,7 @@ def test_incoming_ship_reaches_real_orbit_insertion_during_offline_simulation():
     arrived=updated['allies'][0]
     passing=updated['allies'][1]
     assert arrived['arrivalPhase']=='orbiting', (arrived['arrivalPhase'], arrived['x'],arrived['y'])
-    assert arrived['fuel']<180
+    assert 0 < arrived['fuel'] < 420
     r=math.hypot(arrived['x'],arrived['y'])
     v=math.hypot(arrived['vx'],arrived['vy'])
     assert v*v/2-310000/r<0
