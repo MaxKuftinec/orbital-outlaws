@@ -11,8 +11,10 @@ def advance(state: State, start_s: float, at_s: float, mu: float, control=None, 
     if dt < 0:
         raise ValueError('Cannot advance backwards')
     active = min(dt, max(0, expires_s - start_s)) if control else 0
-    if active:
+    if active and (control['thrust'] or control['turn'] or control['stabilize']):
         state = burn_segment(state, active, mu, control)
+    else:
+        active = 0
     return propagate(state, dt - active, mu)
 
 
