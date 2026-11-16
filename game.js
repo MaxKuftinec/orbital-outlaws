@@ -26,7 +26,8 @@
   const palette = { cyan: '#62d9f6', green:'#67e0aa', red:'#ff7184', yellow:'#edbe6b', purple:'#bd9efa' };
   let W = 840, H = 550, dpr = 1;
   let state;
-  let persistentFlight = false;
+  let persistentFlight = false, flightOnline = false;
+  let flightHistory = [], correction = null;
   let lastFrame = performance.now(), accumulator = 0, nextHud = 0;
   let lastFrameId;
   let starfield = [];
@@ -65,7 +66,12 @@
   }
   function escapeHtml(str) { return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
   function reset() {
+    const oldPilot = persistentFlight && state ? state.player : null;
     const player = newShip('player','KESTREL-7',260,-0.67,palette.cyan,true);
+    if(oldPilot){
+      for(const key of ['x','y','vx','vy','heading','omega','fuel'])player[key]=oldPilot[key];
+      player.dryMass=oldPilot.dryMass;
+    }
     const e1 = newShip('raider-01','RAIDER-01',280,0.17,palette.red);
     const e2 = newShip('raider-02','RAIDER-02',323,-2.02,palette.purple);
     const ally = newShip('ally-01','AEGIS-01',272,-0.21,palette.green);
@@ -109,6 +115,55 @@
   function unit(x,y){const m=magnitude(x,y)||1;return {x:x/m,y:y/m};}
   function normAngle(a){return Math.atan2(Math.sin(a),Math.cos(a));}
   function mass(ship){return ship.dryMass+ship.fuel+(ship.repairParts||0);}
+
+  // The browser predicts flight at the render tick; these fields are corrected
+  // from server snapshots without ever hard-setting the visible ship mid-flight.
+  function flightSample(p){
+    return {x:p.x,y:p.y,vx:p.vx,vy:p.vy,heading:p.heading,omega:p.omega,
+      fuel:p.fuel,mass:mass(p)};
+  }
+  function flightControls(){
+    const p=state.player,target=state.gimbalTarget;
+    const desired=target?Math.atan2(target.y-p.y,target.x-p.x):p.heading;
+    return {
+      thrust:!state.paused&&!state.ended&&state.down.has('main'),
+      turn:state.paused||state.ended?0:Number(state.down.has('rotate-right'))-Number(state.down.has('rotate-left')),
+      stabilize:!state.paused&&!state.ended&&state.down.has('stabilize'),
+      gimbal:state.down.has('main')?clamp(normAngle(desired-p.heading),-ENGINE.gimbalMax,ENGINE.gimbalMax):0
+    };
+  }
+  function applyFlightCorrection(p,dt){
+    if(!correction)return;
+    const f=1-Math.exp(-12*dt);
+    const fuelFix=correction.fuel*f, massFix=correction.mass*f;
+    for(const key of ['x','y','vx','vy','omega','fuel']){
+      const amount=correction[key]*f;
+      p[key]+=amount;
+      correction[key]-=amount;
+    }
+    const headingFix=correction.heading*f;
+    p.heading=normAngle(p.heading+headingFix);
+    correction.heading-=headingFix;
+    p.dryMass+=massFix-fuelFix;
+    correction.mass-=massFix;
+  }
+  function reconcileFlight(p,s,atMs){
+    const reference=flightHistory.reduce((nearest,sample)=>
+      Math.abs(sample.ms-atMs)<Math.abs(nearest.ms-atMs)?sample:nearest,flightHistory[0]);
+    if(!persistentFlight||!flightOnline||!reference||Math.abs(reference.ms-atMs)>500){
+      for(const key of ['x','y','vx','vy','heading','omega'])p[key]=s[key];
+      p.fuel=s.fuel_kg;
+      p.dryMass=s.mass_kg-s.fuel_kg-p.repairParts;
+      correction=null;flightHistory=[];
+      return;
+    }
+    const base=reference.state;
+    const estimate={...s,fuel:s.fuel_kg,mass:s.mass_kg};
+    correction={};
+    for(const key of ['x','y','vx','vy','omega','fuel','mass'])
+      correction[key]=estimate[key]-base[key];
+    correction.heading=normAngle(estimate.heading-base.heading);
+  }
   function repairHull(ship,dt){
     // Deliberately simple field repair: consumes cargo mass, never restores a destroyed ship
     if(!ship.alive || ship.hp>=100 || ship.repairParts<=0 || dt<=0)return false;
@@ -251,6 +306,7 @@
     const effectiveDiameterKm=4; // A generous gameplay envelope; the literal ship is 14 m long.
     for(let i=0;i<vessels.length;i++)for(let j=i+1;j<vessels.length;j++){
       const a=vessels[i],b=vessels[j],a0=initial.get(a.id),b0=initial.get(b.id);
+      if(persistentFlight && (a.isPlayer||b.isPlayer))continue; // Player collision physics is not yet server authoritative.
       if(!a0||!b0)continue;
       const pair=[a.id,b.id].sort().join(':');
       if((state.collisionCooldown.get(pair)||-1)>state.t)continue;
@@ -283,11 +339,17 @@
     const initial=new Map([state.player,state.ally,...state.enemies].filter(s=>s.alive).map(s=>[s.id,{x:s.x,y:s.y}]));
     const player=state.player;
     if(persistentFlight){
-      // Cosmetic client prediction only. Server snapshots overwrite this state.
-      stepBody(player,dt);
-      player.heading=normAngle(player.heading+player.omega*dt);
-      player.thrustVector=null;
-      player.rcsFiring=0;
+      if(flightOnline){
+        // Immediate local prediction, independent of the 250 ms network cadence.
+        applyShipStep(player,dt);
+        applyFlightCorrection(player,dt);
+      }else{
+        stepBody(player,dt);
+        player.heading=normAngle(player.heading+player.omega*dt);
+        player.thrustVector=null;player.rcsFiring=0;
+      }
+      flightHistory.push({ms:performance.now(),state:flightSample(player)});
+      while(flightHistory.length>2&&performance.now()-flightHistory[0].ms>1400)flightHistory.shift();
     }else applyShipStep(player,dt);
     if(state.ended)return;
     state.repairing=state.down.has('repair')&&repairHull(player,dt);
@@ -1107,27 +1169,16 @@
   bindControls();updateHotkeyHints();reset();fitCanvas();lastFrameId=requestAnimationFrame(frame);
   if(window.OrbitalPersistence){
     window.OrbitalPersistence.attach({
-      controls:()=>{
-        const p=state.player;
-        const target=state.gimbalTarget;
-        const desired=target?Math.atan2(target.y-p.y,target.x-p.x):p.heading;
-        return {
-          thrust:!state.paused&&!state.ended&&state.down.has('main'),
-          turn:state.paused||state.ended?0:Number(state.down.has('rotate-right'))-Number(state.down.has('rotate-left')),
-          stabilize:!state.paused&&!state.ended&&state.down.has('stabilize'),
-          gimbal:state.down.has('main')?clamp(normAngle(desired-p.heading),-ENGINE.gimbalMax,ENGINE.gimbalMax):0
-        };
-      },
+      controls:flightControls,
       onState:result=>{
-        const p=state.player,s=result.state;
-        for(const key of ['x','y','vx','vy','heading','omega'])if(Number.isFinite(s[key]))p[key]=s[key];
-        p.fuel=s.fuel_kg;
-        p.dryMass=s.mass_kg-s.fuel_kg-p.repairParts;
+        const p=state.player;
+        reconcileFlight(p,result.state,result.clientSampleMs||performance.now());
         state.lastPrediction=-999;
         state.lastBallistic=-999;
       },
       onError:message=>logEvent('Persistent flight unavailable: '+message.slice(0,90),'danger'),
       onConnected:online=>{
+        flightOnline=online;
         if(online){
           persistentFlight=true;
           state.speed=1;$('sim-speed').value='1';$('sim-speed').disabled=true;

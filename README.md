@@ -37,7 +37,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The Vite server proxies `/api` to FastAPI and `/backend-health` to **FastAPI's `/` endpoint**. On initial connection, a browser-local pilot ID is generated and its ship is inserted in PostgreSQL; subsequent visits reuse it. Press W to thrust, A/D to rotate, S to stabilize, and move the mouse to gimbal the engine. Position, orientation and fuel are reconciled from the server. The backend owns a 1× real-time clock, even when the browser is paused.
+Open http://localhost:5173. The Vite server proxies `/api` to FastAPI and `/backend-health` to **FastAPI's `/` endpoint**. On initial connection, a browser-local pilot ID is generated and its ship is inserted in PostgreSQL; subsequent visits reuse it. Press W to thrust, A/D to rotate, S to stabilize, and move the mouse to gimbal the engine. Position, orientation and fuel are reconciled from the server. The browser predicts inputs every 15 ms and eases server corrections over rendering frames rather than snapping to each 250 ms response. The backend owns a 1× real-time clock, even when the browser is paused.
 
 **Persistence test:** thrust for a few seconds, note the fuel and orbit, refresh the browser. The same ship should resume with the reduced fuel, advanced along its orbit.
 
@@ -45,7 +45,7 @@ Open http://localhost:5173. The Vite server proxies `/api` to FastAPI and `/back
 
 - The backend stores sparse state checkpoints + event history, propagates unpowered Kepler orbits lazily, and integrates short finite-thrust/RCS control windows. Controls are renewed while held, but **expire after 0.4 seconds** if the browser stops sending them. There is no perpetual offline thrust.
 - **Do not expose this server publicly** with `ORBITAL_DEV_COMMANDS=1`: player IDs are anonymous browser IDs, not authentication. The older arbitrary spawn and impulse development endpoints also remain enabled.
-- When persistent flight is active, **fuel salvage/transfers and autopilot engagement are disabled**. Repair, damage and inventory remain local and do not persist. Combat, ammo, credits, hits, NPCs and AI remain **client-local** for now. The browser's prediction is visual only and its state is never sent to the server.
+- When persistent flight is active, **fuel salvage/transfers and autopilot engagement are disabled**. Repair, damage and inventory remain local and do not persist. Combat, ammo, credits, hits, NPCs and AI remain **client-local** for now. The browser's prediction is visual only and its state is never sent to the server. Network responses provide checkpoints that correct buffered local predicted states, without visually stepping the ship.
 - If the backend cannot connect, the legacy local game still runs. Offline standalone `orbital-outlaws.html` remains v0.6 local-only.
 - PostgreSQL `create_all` creates new tables but does not migrate existing columns. Production requires schema migrations, authenticated commands, collision/event scheduling and reconciliation of all entities and inventory.
 

@@ -15,9 +15,13 @@
     const url = base + '/api/players/' + pilotId();
     let connected = false, busy = false, previous = '', lastPoll = 0, lastError = '';
     async function request(path, init){
+      const sentAt=performance.now();
       const response = await fetch(url + path, {cache:'no-store',...init});
       if(!response.ok) throw new Error('Flight API '+response.status+': '+await response.text());
-      return response.json();
+      const result=await response.json();
+      // Approximate server snapshot time between browser send/receive timestamps.
+      result.clientSampleMs=(sentAt+performance.now())/2;
+      return result;
     }
     async function tick(){
       if(busy || document.hidden) return;
