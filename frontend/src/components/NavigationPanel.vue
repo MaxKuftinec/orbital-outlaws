@@ -4,7 +4,7 @@ import { NAVIGATION_EVENT,NAV_OPTIONS_EVENT, type NavigationView, type NavOption
 const EMPTY:NavigationView = {
   locked:true,phase:'LOCKED',deltaV:'—',eta:'—',fuel:'—',status:'No plan',quick:'COMPUTER LOCKED',
   metrics:'Pick a contact · press C to calculate',engageText:'BUY NAV 60¤',
-  engageDisabled:false,abortDisabled:true,selected:''
+  engageDisabled:false,abortDisabled:true,selected:'',reserveKg:36
 }
 export default defineComponent({
   name:'NavigationPanel',
@@ -25,7 +25,16 @@ export default defineComponent({
       this.options=[...detail.options]
       this.navigation.selected=detail.selected
     },
-    selectTarget(e:Event){this.navigation.selected=(e.target as HTMLSelectElement).value}
+    selectTarget(e:Event){this.navigation.selected=(e.target as HTMLSelectElement).value},
+    setReserve(e:Event){
+      const input=e.target as HTMLInputElement
+      const kg=Number(input.value)
+      if(!input.value.trim()||!Number.isFinite(kg)||kg<0||kg>200){
+        input.value=String(this.navigation.reserveKg)
+        return
+      }
+      window.dispatchEvent(new CustomEvent('orbital-set-reserve',{detail:{kg}}))
+    }
   }
 })
 </script>
@@ -61,7 +70,18 @@ export default defineComponent({
     <div class="metric-row"><span>Estimated total Δv</span><strong id="nav-dv">{{ navigation.deltaV }}</strong></div>
     <div class="metric-row"><span>Arrival in</span><strong id="nav-eta">{{ navigation.eta }}</strong></div>
     <div class="metric-row"><span>Propellant estimate</span><strong id="nav-fuel">{{ navigation.fuel }}</strong></div>
+    <div class="metric-row reserve-setting">
+      <label for="fuel-reserve-kg">Protected propellant</label>
+      <div><input id="fuel-reserve-kg" type="number" min="0" max="200" step="1"
+                  :value="navigation.reserveKg" @change="setReserve" aria-label="Protected fuel reserve in kilograms" />
+        <span>kg</span></div>
+    </div>
+    <div class="mini-note">Autopilot and fuel donations protect this much fuel. Manual thrust can still consume it. Set 0 kg to disable the reserve.</div>
     <div class="metric-row"><span>Guidance status</span><strong id="nav-status">{{ navigation.status }}</strong></div>
     <div class="control-note">Alt+click to set a waypoint. Manual steering disengages autopilot. Estimates assume impulsive burns; live thrust must correct.</div>
+    <button type="button" class="wide-subtle-btn" id="escort-donate-btn"
+            title="Offer 20 kg to your selected friendly spacecraft once within 18 km and below 2.5 km/s relative speed">
+      ⇄ Offer 20 kg to selected ally
+    </button>
   </section>
 </template>
