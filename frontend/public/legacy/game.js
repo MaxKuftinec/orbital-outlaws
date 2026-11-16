@@ -1118,7 +1118,7 @@
   const renderer=window.OrbitalRenderer.create({
     ctx,WORLD,ENGINE,palette,NAV,getState:()=>state,
     getViewport:()=>({W,H,dpr,starfield,encounterReady}),
-    toScreen,scale,clamp,navTarget
+    toScreen,scale,clamp,getEphemerisTarget:()=>navTarget($('nav-target').value)||aliveTarget()
   });
   function draw(){renderer.draw();}
   function frame(now){
