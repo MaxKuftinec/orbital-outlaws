@@ -1222,10 +1222,15 @@
   function openSettings(){settingsOpen=true;capturingAction=null;state.down.clear();$('settings-modal').classList.remove('hidden');renderHotkeys();$('hotkey-feedback').textContent='';$('settings-close').focus();}
   function closeSettings(){settingsOpen=false;capturingAction=null;$('settings-modal').classList.add('hidden');$('settings-btn').focus();}
   function toggleConsole(which){
-    const id=which==='nav'?'nav-command':'telemetry-console',label=which==='nav'?'nav':'telemetry';
+    const id=which==='nav'?'nav-command':'telemetry-console';
+    if(window.OrbitalHUD?.togglePanelById){
+      window.OrbitalHUD.togglePanelById(id);
+      return;
+    }
     const element=$(id),collapsed=element.classList.toggle('collapsed');
-    $(label+'-toggle').setAttribute('aria-expanded',String(!collapsed));
-    $(label+'-toggle-arrow').textContent=collapsed?'▾':'▴';
+    $(which+'-toggle').setAttribute('aria-expanded',String(!collapsed));
+    const arrow=$(which+'-toggle-arrow');
+    if(arrow)arrow.textContent=collapsed?'▾':'▴';
   }
 
   function bindControls(){
