@@ -96,7 +96,7 @@ def destroy(sector: dict, body: dict, when: float, cause: str):
         return
     body['alive'] = False
     event(sector, when, f"{body['name']} destroyed ({cause}).", 'danger')
-    if body.get('isAlly'):
+    if body.get('isAlly') or body.get('isPlayer'):
         return
     sector['pickups'].append({
         **{k: body[k] for k in ('x', 'y', 'vx', 'vy')},
@@ -157,7 +157,9 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
         return sector, {'credits': 0, 'fuel': 0, 'player_dvx': 0., 'player_dvy': 0.}
     effects = {'credits': 0, 'fuel': 0, 'player_dvx': 0., 'player_dvy': 0.}
     player = {**start_player.as_dict(), **sector['player'],
-              'name': 'KESTREL-7', 'id': 'player', 'isPlayer': True}
+              'name': 'KESTREL-7', 'id': 'player', 'isPlayer': True,
+              'fuel': start_player.fuel_kg,
+              'dryMass': start_player.mass_kg-start_player.fuel_kg}
     elapsed = 0.
     time_step = max(.25, min(12., seconds / 15000))
     while elapsed < seconds-1e-8:
@@ -207,6 +209,7 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
         for index,shot in enumerate(sector['shots']):
             if not shot.get('alive',True):
                 continue
+            previous.setdefault('shot-'+str(index),{k:shot[k] for k in ('x','y')})
             move(shot,dt,mu)
             if not shot['alive'] or when-shot['born'] > 30:
                 shot['alive']=False
