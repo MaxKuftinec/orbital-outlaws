@@ -1,33 +1,26 @@
-# Orbital Outlaws — v0.8.1 persistent flight preview
+# Orbital Outlaws — v0.9 live-flight prototype
 
-> **Partial migration.** Vue still runs the v0.6 local combat prototype. With PostgreSQL and `ORBITAL_DEV_COMMANDS=1`, **the player's orbital position, velocity, heading, rotation and propellant are backend-authoritative** and survive browser refresh and offline time. NPCs, combat, damage, salvage, inventory, upgrades and autopilot are still local and **do not persist**.
+**Live flight and progression are persistent.** The Vue cockpit uses a bidirectional **WebSocket** to receive authoritative PostgreSQL-backed orbital snapshots, send controls, purchase technology and submit development-only salvage credit claims. The browser predicts the ship every 15 ms and smoothly reconciles snapshots. **Combat, projectiles, damage, NPC AI, ammunition, repairs and physical salvage are still local.** This is not yet a fully authoritative multiplayer universe.
 
 ## Start the backend (Windows PowerShell)
 
-You need an existing PostgreSQL database. SQLAlchemy will create tables, not the database.
+Create a PostgreSQL database first, then in the project:
 
 ```powershell
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-Copy-Item .env.example .env
 ```
 
-Edit `backend/.env`:
+Create or edit `backend/.env`:
 
 ```dotenv
 DATABASE_URL=postgresql+psycopg://USER:PASSWORD@localhost:5432/orbital_outlaws
 ORBITAL_DEV_COMMANDS=1
 ```
 
-Start FastAPI:
-
-```powershell
-uvicorn app.main:app --reload --port 8000
-```
-
-Check [http://localhost:8000/](http://localhost:8000/) for the root health endpoint or visit [http://localhost:8000/docs](http://localhost:8000/docs). The backend creates `worlds`, `entities`, `events` and `flight_controls` in PostgreSQL.
+Run `uvicorn app.main:app --reload --port 8000`. FastAPI **GET `/`** remains the health endpoint. SQLAlchemy creates the new `player_progress` and `salvage_claims` tables in the *existing* database. No SQLite is used.
 
 ## Start the frontend
 
@@ -37,17 +30,17 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The Vite server proxies `/api` to FastAPI and `/backend-health` to **FastAPI's `/` endpoint**. On initial connection, a browser-local pilot ID is generated and its ship is inserted in PostgreSQL; subsequent visits reuse it. Press W to thrust, A/D to rotate, S to stabilize, and move the mouse to gimbal the engine. Position, orientation and fuel are reconciled from the server. The browser predicts inputs every 15 ms and eases server corrections over rendering frames instead of snapping to server responses. Control changes are sent immediately; held controls receive periodic lease-renewal messages (roughly 4 Hz). The backend owns a 1× real-time clock, even when the browser is paused.
+Open http://localhost:5173. Vite proxies WebSocket upgrades on `/api` and the health check `/backend-health` to FastAPI `/`.
 
-**Persistence test:** thrust for a few seconds, note the fuel and orbit, refresh the browser. The same ship should resume with the reduced fuel, advanced along its orbit.
+The game has **no Pause or time-speed multiplier**. The universe clock continues on the server even when nobody has the tab open. Unpowered motion is calculated lazily from orbital checkpoints. W/A/D/S and the gimbal are predicted immediately on the browser, with server snapshots ~10 Hz and held-control lease renewals ~5 Hz. Inputs expire after 0.4 seconds without renewal.
 
-## Scope and safety
+Credits begin at 65 ¤. Buying **Predictive (40 ¤)**, **Trajectory (25 ¤)** or **Navigation (60 ¤)** is checked by PostgreSQL and persists through refresh. The starter credit pickups and wreck credit rewards are submitted as idempotent claims. The same pickup ID can only be credited once per pilot, even if a local encounter is reset. The **technology remains owned after refreshing**, but navigation *autopilot itself* is not yet server-authoritative and remains disabled in persistent mode. Ammo, repair parts, enemy ships and encounter resets are still local.
 
-- The backend stores sparse state checkpoints + event history, propagates unpowered Kepler orbits lazily, and integrates short finite-thrust/RCS control windows. Controls are renewed while held, but **expire after 0.4 seconds** if the browser stops sending them. There is no perpetual offline thrust.
-- **Do not expose this server publicly** with `ORBITAL_DEV_COMMANDS=1`: player IDs are anonymous browser IDs, not authentication. The older arbitrary spawn and impulse development endpoints also remain enabled.
-- When persistent flight is active, **fuel salvage/transfers and autopilot engagement are disabled**. Repair, damage and inventory remain local and do not persist. Combat, ammo, credits, hits, NPCs and AI remain **client-local** for now. The browser's prediction is visual only and its state is never sent to the server. Network responses provide checkpoints that correct buffered local predicted states, without visually stepping the ship.
-- If the backend cannot connect, the legacy local game still runs. Offline standalone `orbital-outlaws.html` remains v0.6 local-only.
-- PostgreSQL `create_all` creates new tables but does not migrate existing columns. Production requires schema migrations, authenticated commands, collision/event scheduling and reconciliation of all entities and inventory.
+### Important security boundary
+
+**Do not expose this backend publicly with `ORBITAL_DEV_COMMANDS=1`.** Player IDs are stored in the browser and are **not authenticated**; WebSocket purchase, flight and credit claims are development-only. **Salvage claims are reported by the browser and can be forged.** Persistent credits are useful for playtesting, but they are **not cheat-resistant** until we move pickup acquisition, NPCs, and combat to server authority. This milestone is not production multiplayer.
+
+The earlier HTTP API is retained for debugging and read-only queries; live gameplay uses WebSocket. The offline `orbital-outlaws.html` is an older standalone v0.6 local-only build and retains its original controls.
 
 ## Tests
 
@@ -56,13 +49,15 @@ cd backend
 python -m pytest -q
 cd ..
 node --test tests/*.test.cjs
+cd frontend
+npm run build
 ```
 
-Set `TEST_DATABASE_URL` to a **separate PostgreSQL test database** to run persistence integration tests; without it they are skipped. The pure physics and JavaScript tests require no server.
+For database integration tests, set `TEST_DATABASE_URL` to a **separate PostgreSQL testing database**. Without it, integration tests are skipped; WebSocket protocol tests use an in-memory stub.
 
 ## Next milestones
 
-1. Backend-authoritative collisions, weapons, damage and salvage; inventory consistency.
-2. Server-scheduled NPC decisions, arrivals and cross-entity interactions.
-3. Live region subscriptions and frontend prediction/reconciliation improvements.
-4. Authenticated accounts, production migrations, concurrency safety and multiplayer.
+1. Server-authoritative collision and combat event scheduling, including salvage reward validation.
+2. Persist ammunition, hull, repairs, NPCs and other game-world entities.
+3. Authenticated player accounts and migration scripts.
+4. Scalable region subscriptions, prediction/reconciliation and multiplayer contention handling.
