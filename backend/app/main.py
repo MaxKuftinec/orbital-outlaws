@@ -89,6 +89,11 @@ async def pilot_live(ws: WebSocket,pilot_id: str):
                     progress=await run_in_threadpool(database.player_purchase,pilot_id,
                                                      str(message.get('upgrade','')))
                     await ws.send_json({'type':'progress','progress':progress})
+                elif kind=='reserve':
+                    settings=ReserveConfig.model_validate(message)
+                    progress=await run_in_threadpool(database.set_player_reserve,pilot_id,
+                                                     settings.kg)
+                    await ws.send_json({'type':'progress','progress':progress})
                 elif kind=='request_assistance':
                     outcome=await run_in_threadpool(database.request_assistance,pilot_id,
                                                      str(message.get('recipient','player')))
@@ -99,7 +104,7 @@ async def pilot_live(ws: WebSocket,pilot_id: str):
                                                      float(message.get('kg',20)))
                     await ws.send_json({'type':'assistance','result':outcome})
                 else:
-                    raise ValueError('Only flight inputs, purchases and authorized fuel-assistance orders are accepted; NPCs and loot are server-owned')
+                    raise ValueError('Only flight inputs, purchases, reserve settings and authorized fuel-assistance orders are accepted; NPCs and loot are server-owned')
             except (ValueError,ValidationError,LookupError) as exc:
                 await ws.send_json({'type':'error','message':str(exc)})
     except WebSocketDisconnect:
@@ -173,6 +178,21 @@ def respawn_dev_pilot(pilot_id: str):
 @app.get('/')
 def health():
     return {'status':'ok','architecture':'lazy-orbits','authority':'sector-authoritative'}
+
+
+class ReserveConfig(BaseModel):
+    kg: float = Field(ge=0, le=200, allow_inf_nan=False)
+
+
+@app.post('/players/{pilot_id}/reserve')
+def set_reserve(pilot_id: str, config: ReserveConfig):
+    require_dev_commands()
+    try:
+        return store().set_player_reserve(pilot_id, config.kg)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 class FuelRequest(BaseModel):
