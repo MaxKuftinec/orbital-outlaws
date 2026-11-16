@@ -57,12 +57,11 @@ class WorldStore:
             world = db.get(World, 'kestrel')
             entity = db.get(Entity, entity_id)
             if not entity:
-                angle = -.67
-                radius = 260
-                speed = math.sqrt(world.mu/radius)
-                state = State(radius*math.cos(angle), radius*math.sin(angle),
-                              -speed*math.sin(angle), speed*math.cos(angle),
-                              1110, 200, angle+math.pi/2, 0)
+                angle = 2 * math.pi * secrets.randbits(53) / 2**53
+                launch = incoming_ship('pilot-01', angle, 'flyby', mu=world.mu)
+                state = State(launch['x'], launch['y'],
+                              launch['vx'], launch['vy'], 1110, 200,
+                              launch['heading'], 0)
                 peri, apo = orbital_envelope(state, world.mu)
                 entity = Entity(id=entity_id, world_id='kestrel', kind='player',
                                 checkpoint_s=self.now(world), checkpoint=state.as_dict(),
