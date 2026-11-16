@@ -886,10 +886,11 @@
     }
   }
   function spawnEnemy() {
+    const spawnRadiusKm=1450;
     const angle=rand(-Math.PI,Math.PI);
     const id='raider-'+Math.random().toString(36).slice(2,7);
-    const bot = newShip(id,'RAIDER-'+String(Math.floor(rand(10,99))),r,angle,palette.red);
-    Object.assign(bot,ARRIVAL.inboundState(angle,1450,rand(-29,-24),rand(10,13),Math.random()<.5?-1:1));
+    const bot = newShip(id,'RAIDER-'+String(Math.floor(rand(10,99))),spawnRadiusKm,angle,palette.red);
+    Object.assign(bot,ARRIVAL.inboundState(angle,spawnRadiusKm,rand(-29,-24),rand(10,13),Math.random()<.5?-1:1));
     bot.heading=Math.atan2(bot.vy,bot.vx);
     state.enemies.push(bot);logEvent('Inbound ship detected beyond sector boundary: '+bot.name,'danger');
   }
