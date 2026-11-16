@@ -17,13 +17,13 @@ function loadLegacyScript(filename: string): Promise<void> {
 
 onMounted(async () => {
   try {
-    // Mount Vue's cockpit before installing game.js DOM listeners.
+    // Mount Vue's cockpit before installing game.js DOM listeners
     for (const filename of legacyFiles) await loadLegacyScript(filename)
   } catch (error) {
     startupError.value = error instanceof Error ? error.message : String(error)
   }
   try {
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? ''}/api/health`)
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? ''}/`)
     backendOnline.value = response.ok
   } catch {
     backendOnline.value = false
@@ -39,7 +39,7 @@ onMounted(async () => {
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
-        <div><div class="eyebrow">PHYSICS SANDBOX • VUE MIGRATION • PROTOTYPE 0.7</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+        <div><div class="eyebrow">PROTOTYPE 0.7</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
       <div class="top-actions"><v-chip :color="backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ backendOnline ? 'Backend ready (foundation)' : 'Local gameplay · backend offline' }}</v-chip>
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">MISSION TIME</span><strong id="sim-clock">00:00</strong></div></div>
@@ -53,7 +53,7 @@ onMounted(async () => {
     <main class="game-layout">
       <section class="arena-shell" aria-label="Orbital gameplay area">
         <div class="arena-head">
-          <div><span class="section-kicker">SECTOR 01</span><div class="arena-title">Kestrel gravity well <span class="online"><span class="dot live"></span> LIVE PHYSICS</span></div></div>
+          <div><span class="section-kicker">SECTOR 01</span><div class="arena-title">Kestrel gravity well <span class="online"></span></div></div>
           <div class="arena-actions"><v-btn density="compact" variant="tonal"  id="reinforce-btn" class="small-btn" aria-pressed="false" title="Allow new pirate spawns">Reinforcements: OFF</v-btn><v-btn density="compact" variant="tonal"  id="orbit-btn" class="small-btn selected" aria-pressed="true">◌ Trajectory</v-btn><v-btn density="compact" variant="tonal"  id="zoom-out" class="small-btn" aria-label="Zoom out">−</v-btn><span id="zoom-level" class="zoom-text">1.0×</span><v-btn density="compact" variant="tonal"  id="zoom-in" class="small-btn" aria-label="Zoom in">+</v-btn></div>
         </div>
         <div class="canvas-wrap">
@@ -82,7 +82,7 @@ onMounted(async () => {
           <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom <span class="keyboard-tag">N/C/E/X</span> nav <span class="keyboard-tag">H</span> help</div>
           <div id="game-over" class="game-over hidden" role="alertdialog" aria-modal="false" aria-labelledby="game-over-title"><span class="failure-mark">✕</span><h2 id="game-over-title">SHIP LOST</h2><p id="game-over-details">Your orbit ended.</p><button id="retry-btn" class="primary-btn">Try again ↻</button></div>
         </div>
-        <div class="mission-strip"><span class="objective-icon">◎</span><span><strong>OBJECTIVE</strong> · Stay in orbit. Outmaneuver raiders. Collect salvage.</span><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
+        <div class="mission-strip"><span class="objective-icon">◎</span><span><strong>OBJECTIVE</strong></span><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
         <section class="flight-controls" aria-label="Spacecraft flight controls">
           <div class="control-description"><strong>ATTITUDE & PROPULSION</strong><small>Point ship using nose/tail RCS. Aim the ±28° main gimbal with your cursor, then hold W to burn. Left-click selects targets or manual gun aim.</small></div>
           <div class="control-grid">
@@ -115,7 +115,6 @@ onMounted(async () => {
           <div class="metric-row"><span>Effective exhaust</span><strong id="exhaust-vel">320 km/s</strong></div>
           <div class="metric-row"><span>Ship heading</span><strong id="ship-heading">0°</strong></div>
           <div class="metric-row"><span>Angular speed</span><strong id="spin-value">0°/s</strong></div>
-          <div class="mini-note">Mass is conserved by ejecting propellant; acceleration rises as the ship becomes lighter. Extreme engine performance is fictional.</div>
         </section>
         <section class="panel instruments">
           <div class="panel-heading"><span>ORBITAL TELEMETRY</span><span class="status-pill">NEWTONIAN</span></div>
@@ -125,7 +124,6 @@ onMounted(async () => {
           <div class="metric-row"><span>Apoapsis</span><strong id="apo-value">—</strong></div>
           <div class="metric-row"><span>Orbit period</span><strong id="period-value">—</strong></div>
           <div class="metric-row"><span>Predicted path</span><strong id="path-status">SAFE</strong></div>
-          <div class="mini-note">Distances are displayed in km and times in s. The fictional Kestrel body is extremely dense; gravity follows inverse-square Newtonian physics.</div>
         </section>
         <section class="panel targeting">
           <div class="panel-heading"><span>TARGET ACQUISITION</span><span id="target-state" class="status-pill hostile">HOSTILE</span></div>

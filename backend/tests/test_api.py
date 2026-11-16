@@ -5,13 +5,13 @@ from app.store import WorldStore
 
 
 def test_api_create_query_persist(monkeypatch,tmp_path):
-    # Switch the dependency cache to an isolated on-disk database for this test.
+    # Switch the dependency cache to an isolated on-disk database for this test
     import app.main as main
     main.store.cache_clear()
     monkeypatch.setenv('DATABASE_URL',f'sqlite:///{tmp_path}/universe.sqlite')
     monkeypatch.setenv('ORBITAL_DEV_COMMANDS','1')
     with TestClient(app) as client:
-        assert client.get('/api/health').json()['status']=='ok'
+        assert client.get('/').json()['status']=='ok'
         v=math.sqrt(310000/260)
         create=client.post('/api/worlds/kestrel/entities',json={
             'id':'Kestrel-test','kind':'ship','x':260,'y':0,'vx':0,'vy':v,'mass_kg':1110,'fuel_kg':200})

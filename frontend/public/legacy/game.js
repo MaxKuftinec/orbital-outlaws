@@ -109,14 +109,14 @@
   function normAngle(a){return Math.atan2(Math.sin(a),Math.cos(a));}
   function mass(ship){return ship.dryMass+ship.fuel+(ship.repairParts||0);}
   function repairHull(ship,dt){
-    // Deliberately simple field repair: consumes cargo mass, never restores a destroyed ship.
+    // Deliberately simple field repair: consumes cargo mass, never restores a destroyed ship
     if(!ship.alive || ship.hp>=100 || ship.repairParts<=0 || dt<=0)return false;
     const restored=Math.min(REPAIR.rateHpS*dt,100-ship.hp,ship.repairParts*REPAIR.hpPerKg);
     if(restored<=0)return false;
     ship.hp=Math.min(100,ship.hp+restored);
     const usedKg=restored/REPAIR.hpPerKg;
     ship.repairParts=Math.max(0,ship.repairParts-usedKg);
-    ship.dryMass+=usedKg; // Repair material becomes hull structure; total mass is conserved.
+    ship.dryMass+=usedKg; // Repair material becomes hull structure; total mass is conserved
     return true;
   }
   function burn(ship,dt,dir,rcs=false,minReserve=0){

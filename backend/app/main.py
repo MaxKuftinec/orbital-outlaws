@@ -27,7 +27,7 @@ def require_dev_commands():
         raise HTTPException(403,'Development commands disabled; enable ORBITAL_DEV_COMMANDS=1 in a trusted local environment')
 
 
-@app.get('/api/health')
+@app.get('/')
 def health():
     return {'status':'ok','architecture':'lazy-orbits','authority':'foundation-only'}
 
