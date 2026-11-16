@@ -1,4 +1,4 @@
-# Orbital Outlaws — v0.15 Vue instruments, salvage flybys and fuel cooperation
+# Orbital Outlaws — v0.16 configurable reserves and streamlined Navigation
 
 A persistent 2D Newtonian orbital combat prototype using **Vue 3 + Vuetify (Options API)**, **FastAPI**, **PostgreSQL** and a bidirectional **WebSocket**.
 
@@ -104,13 +104,21 @@ velocity heading (full 360°); the pilot steers manually, unlike programmed
 NPC flyby/orbit missions. The game camera recenters on respawn; no new
 respawn button was added to the cockpit.
 
-**Friendly Escort panel:** This reports the original AEGIS-01 resident's hull,
-ammunition and propellant. Additional allied visitors appear on the map and
-in Navigation, but are not yet aggregated into this panel. Its fuel-assistance
-button now queues a server-authoritative rescue mission. You can offer up to 20 kg to a selected
-ally using the escort panel; the two ships must be within 18 km with relative speed below 2.5 km/s,
-and the player keeps at least 25 kg fuel. Allied NPCs and raiders can autonomously assist their
-own low-fuel faction members with fuel-reserving rendezvous and transfers.
+**Fuel assistance:** The old Friendly Escort panel is gone. Friendlies remain visible on the map
+and in Navigation. The **Request Fuel Assistance** button on the canvas queues a server-controlled
+rescue. To help a selected ally, use **Offer 20 kg to selected ally** in the Navigation sidebar;
+transfer requires being within 18 km at less than 2.5 km/s relative speed.
+Other allied NPCs and raiders autonomously assist same-faction NPCs.
+
+**Pilot-configurable fuel reserve:** In the Navigation sidebar, set **Protected propellant** to
+any value from 0 to 200 kg (default **36 kg**, formerly the hardcoded 18% of the starter tank).
+This value governs autopilot planning/burn cutoff **and** the minimum fuel retained when
+donating to allies. A reserve of 0 deliberately removes those protections. **Manual thrust
+can still use all remaining fuel**. Connected pilots store their preference in PostgreSQL's
+new `player_settings` table and keep it across ship destruction/respawn; local-only cockpit
+sessions retain it in browser storage. Changing reserve aborts an active autopilot and
+invalidates its previous route, requiring recalculation. NPCs keep independent AI reserves.
+The server also exposes `POST /players/{pilot_id}/reserve` with `{"kg":36}` (dev-only).
 ### Gradual Vue migration
 
 **Migrated:** `CommsPanel.vue`, `ShipPanel.vue` and `TechnologyMarket.vue`, all using Vue **Options API**. The legacy game emits typed `orbital-comms` and `orbital-cockpit-state` events through the interfaces in `frontend/src/services/`. Vue now renders Comms messages, ship hull/fuel/ammo/credits and technology ownership with reactive state. Market purchases flow back through `orbital-market-purchase` actions rather than raw button event listeners. The old standalone HTML retains a compatibility DOM path.
@@ -186,7 +194,7 @@ The development live WebSocket uses anonymous browser pilot IDs; **never expose 
 
 The UI **Request Fuel Assistance** button sends a persistent WebSocket support request. The server chooses an allied donor, guides it with limited impulse corrections, requires a genuine low-relative-speed rendezvous and transfers mass from the donor's tank. NPCs may also ask friendly NPCs (including same-faction raiders) for assistance automatically. This remains rudimentary AI, not yet a globally optimized transfer planner.
 
-To assist an ally, select a friendly target in Navigation, get within **18 km** and **2.5 km/s** relative speed, then click **Offer 20 kg to selected ally**. The server limits each transfer to 35 kg, honors a 25 kg donor reserve and never creates free fuel.
+To assist an ally, select a friendly target in Navigation, get within **18 km** and **2.5 km/s** relative speed, then click **Offer 20 kg to selected ally**. The server limits each transfer to 35 kg, honors your configurable donor reserve and never creates free fuel.
 
 Developers can alternatively use `POST /players/{pilot_id}/request-assistance` with `{\"recipient\":\"player\"}` and `POST /players/{pilot_id}/offer-fuel` with `{\"target\":\"ally-01\",\"kg\":20}`. These endpoints require `ORBITAL_DEV_COMMANDS=1`. In Swagger at `http://127.0.0.1:8000/docs` no `/api` prefix is used.
 
