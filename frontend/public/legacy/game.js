@@ -27,6 +27,7 @@
   let W = 840, H = 550, dpr = 1;
   let state;
   let persistentFlight = false, flightOnline = false, pilotLink = null;
+  let encounterReady = !window.OrbitalPersistence;
   let flightHistory = [], correction = null;
   let lastFrame = performance.now(), accumulator = 0, nextHud = 0;
   let lastFrameId;
@@ -1069,7 +1070,14 @@
     ctx.restore();
   }
   function draw(){
-    if(!state)return;ctx.setTransform(dpr,0,0,dpr,0,0);drawBackground();drawTrails();
+    if(!state)return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);drawBackground();
+    if(!encounterReady){
+      ctx.fillStyle='#a6dbe8';ctx.font='bold 14px system-ui';ctx.textAlign='center';
+      ctx.fillText('RESTORING PERSISTENT SECTOR…',W/2,H/2);ctx.textAlign='left';
+      return;
+    }
+    drawTrails();
     for(const pod of state.pickups)drawPickup(pod);
     drawShots();for(const e of state.enemies)drawShip(e);drawShip(state.ally);drawShip(state.player);drawAim();drawParticles();
     if(state.ended){ctx.fillStyle='#060e1870';ctx.fillRect(0,0,W,H);}
@@ -1077,7 +1085,7 @@
   function frame(now){
     const realDelta=Math.min(Math.max((now-lastFrame)/1000,0),.06);
     lastFrame=now;
-    if(state&&!state.ended){
+    if(state&&!state.ended&&encounterReady){
       accumulator+=realDelta;
       let steps=0;
       while(accumulator>=.015 && steps<22){step(.015);accumulator-=.015;steps++;if(state.ended)break;}
@@ -1261,7 +1269,7 @@
   if(window.OrbitalPersistence){
     pilotLink=window.OrbitalPersistence.attach({
       controls:flightControls,
-      onEncounter:restoreEncounter,
+      onEncounter:checkpoint=>{restoreEncounter(checkpoint);encounterReady=true;},
       onState:result=>{
         const p=state.player;
         reconcileFlight(p,result.state,result.clientSampleMs||performance.now());
@@ -1279,7 +1287,7 @@
         if(!previous.navOwned&&state.navOwned)logEvent('Rendezvous technology installed persistently.','good');
         state.lastBallistic=-999;updateHud();
       },
-      onError:message=>logEvent('Flight server: '+message.slice(0,110),'danger'),
+      onError:message=>{encounterReady=true;logEvent('Flight server: '+message.slice(0,110),'danger');},
       onConnected:online=>{
         flightOnline=online;
         if(online){
