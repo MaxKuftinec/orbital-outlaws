@@ -431,7 +431,7 @@ class WorldStore:
                 db.add(SalvageClaim(entity_id=entity_id,claim_id=claim_id,amount=amount))
                 progress.credits+=amount
             result={'credits':progress.credits,'upgrades':dict(progress.upgrades)}
-        return result
+        return self.player_progress(pilot_id)
 
     def player_input(self, pilot_id: str, thrust: bool, turn: int, stabilize: bool, gimbal: float):
         """Advance using the previous leased input, then atomically set the next input."""
