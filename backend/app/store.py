@@ -4,10 +4,10 @@ Collision graph / active thrusters are not yet authoritative. The safe role of t
 first API is durable snapshots, impulsive manoeuvre events and Kepler coasts
 """
 from __future__ import annotations
-import math, time
+import math, time, json
 from sqlalchemy import create_engine, select, and_, or_
 from sqlalchemy.orm import sessionmaker
-from .models import Base, World, Entity, Event, FlightControl, PlayerProgress, SalvageClaim
+from .models import Base, World, Entity, Event, FlightControl, PlayerProgress, SalvageClaim, EncounterSnapshot
 from .physics import State, propagate, orbital_envelope, apply_impulse
 from .flight import advance, LEASE_S
 
@@ -77,6 +77,31 @@ class WorldStore:
             elif not db.get(PlayerProgress,entity_id):
                 db.add(PlayerProgress(entity_id=entity_id,credits=65,upgrades={}))
         return self.get_entity('kestrel', entity_id)
+
+    def player_encounter(self,pilot_id: str):
+        with self.sessions() as db:
+            saved=db.get(EncounterSnapshot,'pilot-'+pilot_id)
+            return {'saved_at_utc':saved.saved_at_utc,'snapshot':saved.snapshot} if saved else None
+
+    def save_encounter(self,pilot_id: str,snapshot: dict):
+        """Development-only NPC checkpoint. Never considered authoritative combat."""
+        if (not isinstance(snapshot,dict)
+                or not isinstance(snapshot.get('enemies'),list)
+                or len(snapshot['enemies'])>60
+                or not isinstance(snapshot.get('pickups'),list)
+                or len(snapshot['pickups'])>200
+                or not isinstance(snapshot.get('ally'),dict)
+                or len(json.dumps(snapshot))>180_000):
+            raise ValueError('Invalid encounter snapshot')
+        with self.sessions.begin() as db:
+            entity_id='pilot-'+pilot_id
+            saved=db.get(EncounterSnapshot,entity_id)
+            if not saved:
+                saved=EncounterSnapshot(entity_id=entity_id)
+                db.add(saved)
+            saved.saved_at_utc=time.time()
+            saved.snapshot=snapshot
+        return {'saved_at_utc':saved.saved_at_utc}
 
     PRICES={'predictive':40,'trajectory':25,'nav':60}
 

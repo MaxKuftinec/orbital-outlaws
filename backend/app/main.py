@@ -52,7 +52,8 @@ async def pilot_live(ws: WebSocket,pilot_id: str):
     try:
         flight=await run_in_threadpool(database.connect_player,pilot_id)
         progress=await run_in_threadpool(database.player_progress,pilot_id)
-        await ws.send_json({'type':'welcome','flight':flight,'progress':progress})
+        encounter=await run_in_threadpool(database.player_encounter,pilot_id)
+        await ws.send_json({'type':'welcome','flight':flight,'progress':progress,'encounter':encounter})
         while True:
             try:
                 message=await asyncio.wait_for(ws.receive_json(),timeout=.1)
@@ -69,6 +70,8 @@ async def pilot_live(ws: WebSocket,pilot_id: str):
                 elif kind=='purchase':
                     progress=await run_in_threadpool(database.player_purchase,pilot_id,str(message.get('upgrade','')))
                     await ws.send_json({'type':'progress','progress':progress})
+                elif kind=='encounter':
+                    await run_in_threadpool(database.save_encounter,pilot_id,message['snapshot'])
                 elif kind=='salvage':
                     progress=await run_in_threadpool(database.player_salvage,pilot_id,str(message.get('id','')),int(message.get('credits',0)))
                     await ws.send_json({'type':'progress','progress':progress,'claim_id':str(message['id'])})

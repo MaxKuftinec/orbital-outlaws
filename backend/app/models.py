@@ -63,3 +63,10 @@ class SalvageClaim(Base):
     entity_id: Mapped[str]=mapped_column(ForeignKey('entities.id'),primary_key=True)
     claim_id: Mapped[str]=mapped_column(String(128),primary_key=True)
     amount: Mapped[int]=mapped_column(Integer,nullable=False)
+
+class EncounterSnapshot(Base):
+    """Temporary pilot-scoped checkpoint until NPC simulation becomes authoritative."""
+    __tablename__='encounter_snapshots'
+    entity_id: Mapped[str]=mapped_column(ForeignKey('entities.id'),primary_key=True)
+    saved_at_utc: Mapped[float]=mapped_column(Float,nullable=False)
+    snapshot: Mapped[dict]=mapped_column(JSON,nullable=False)
