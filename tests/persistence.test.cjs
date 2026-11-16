@@ -40,7 +40,7 @@ function harness(){
     onError:reason=>errors.push(reason)
   });
   return {
-    sockets,sent,events,docEvents,document,handle,snapshots,progress,statuses,errors,
+    sockets,sent,events,docEvents,document,store,handle,snapshots,progress,statuses,errors,
     setControl:value=>{control=value;},setTime:value=>{now=value;},tick:()=>interval()
   };
 }
@@ -105,4 +105,18 @@ test('hidden tab sends neutral controls; disconnects clear connected state',()=>
   h.sockets[0].close();
   assert.deepEqual(h.statuses,[true,false]);
   assert.equal(h.handle.purchase('nav'),false);
+});
+
+
+test('unacknowledged salvage is queued and cleared only after server acknowledgement',()=>{
+  const h=harness();
+  assert.equal(h.handle.salvage('starter-credits-1',30),true);
+  assert.equal(h.sent.length,0,'claim must not be sent before welcome');
+  h.sockets[0].emit({type:'welcome',flight:{state:{}},progress:{credits:65,upgrades:{}}});
+  assert.equal(h.sent.at(-1).type,'salvage');
+  assert.equal(h.sent.at(-1).id,'starter-credits-1');
+  const key='orbital-outlaws.pending-salvage.v1';
+  assert.equal(JSON.parse(h.store.get(key)).length,1);
+  h.sockets[0].emit({type:'progress',progress:{credits:95,upgrades:{}},claim_id:'starter-credits-1'});
+  assert.equal(JSON.parse(h.store.get(key)).length,0,'acknowledged credit claim must leave retry queue');
 });
