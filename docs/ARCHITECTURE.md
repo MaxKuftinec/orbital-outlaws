@@ -38,3 +38,7 @@ The authoritative world clock is a stored epoch; a query `at_s` is seconds since
 `worlds` stores the gravity parameter and epoch; `entities` stores last checkpoint, current orbital envelope and version; `events` stores post-event states and idempotent command IDs. PostgreSQL is required; its URL is loaded from `backend/.env`. Avoid per-frame database writes.
 
 For interacting bodies: durable event queue; coarse radial/spatial orbit indexes; exact predicted encounter times; transactional resolution with locks in deterministic `(at_s,event_priority,entity_id)` order. Cross-sector dependencies cannot be resolved by eagerly updating only the queried entity.
+
+## Persistent manual pilot (experimental)
+
+The browser uses an anonymous local pilot ID to resume a PostgreSQL entity. A `flight_controls` row stores a 0.4-second lease for main thrust, RCS turn/stabilization and gimbal. The server integrates only the leased control interval and then lazily propagates an unpowered Kepler orbit. Each control update produces an event plus a checkpoint; viewport and history reads reconstruct leased movement without trusting client coordinates. The ship is authoritative for motion and fuel only; collision, combat, inventory and NPC events still need server-side causal resolution. `ORBITAL_DEV_COMMANDS=1` must never be exposed publicly.

@@ -10,11 +10,9 @@ from .store import WorldStore
 
 load_dotenv()
 
-DB_URL = os.getenv("DATABASE_URL")
-
 @lru_cache
 def store() -> WorldStore:
-    return WorldStore(DB_URL)
+    return WorldStore(os.environ['DATABASE_URL'])
 
 
 @asynccontextmanager

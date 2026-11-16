@@ -1,5 +1,5 @@
 """Server-authoritative, lease-limited manual flight controls (km, seconds, kg)."""
-from math import atan2, ceil, cos, exp, hypot, log, pi, remainder, sin, sqrt
+from math import ceil, cos, hypot, log, pi, remainder, sin
 from .physics import State, propagate
 
 LEASE_S = 0.4
