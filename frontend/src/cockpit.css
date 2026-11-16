@@ -180,3 +180,9 @@
   background-image:url('/tech/rendezvous-monitor.webp');
   background-position:center;background-size:cover;
 }
+
+/* v0.16 configurable propellant protection. */
+.reserve-setting input{width:76px;background:#10273a;border:1px solid #385368;border-radius:6px;color:#e5f1f5;text-align:right;padding:5px 7px;font-size:12px;font-variant-numeric:tabular-nums}
+.reserve-setting>div{display:flex;align-items:center;gap:5px}
+.reserve-setting>div span{color:#a9c6d5;font-size:11px}
+.reserve-setting input:focus-visible{outline:2px solid #62d9f6;outline-offset:2px}
