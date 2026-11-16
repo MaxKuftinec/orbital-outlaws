@@ -152,7 +152,7 @@
       if(!p.alive){
         if(state.autopilot)abortNav('Spacecraft destroyed; guidance terminated.');
         state.down.clear();
-        $('game-over-details').textContent='Ship destroyed. Use POST /api/dev/players/{pilot_id}/respawn in your local FastAPI /docs, then resume.';
+        $('game-over-details').textContent='Ship destroyed. Use POST /dev/players/{pilot_id}/respawn in your local FastAPI /docs, then resume.';
         $('game-over').classList.remove('hidden');
       }else $('game-over').classList.add('hidden');
     }
