@@ -2,7 +2,7 @@
 (function(root){
   'use strict';
   root.OrbitalRenderer={
-    create({ctx,WORLD,ENGINE,palette,NAV,getState,getViewport,toScreen,scale,clamp,navTarget}){
+    create({ctx,WORLD,ENGINE,palette,NAV,getState,getViewport,toScreen,scale,clamp,getEphemerisTarget}){
       const TWO_PI=Math.PI*2;
       let state,W,H,dpr,starfield,encounterReady;
   function pathWorld(points,stroke,lineWidth=1,dash=[]) {
@@ -105,7 +105,7 @@
   }
   function drawEphemeris(){
     if(!state.ephemerisOwned)return;
-    const target=navTarget($('nav-target').value)||aliveTarget();
+    const target=getEphemerisTarget();
     if(!target?.alive)return;
     const now=performance.now();
     if(!state.ephemerisCache||state.ephemerisCache.key!==target.id||
