@@ -886,7 +886,7 @@
     $('nav-engage').textContent=state.navOwned?'ENGAGE':'BUY NAV 60¤';
     $('nav-engage').disabled=(persistentFlight&&state.navOwned)||state.ended||(!state.navOwned&&p.credits<60)||(state.navOwned&&(!state.navPlan||!!state.autopilot));
     $('nav-abort').disabled=!state.autopilot;
-    $('nav-quick-status').textContent=state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED';
+    $('nav-quick-status').textContent=persistentFlight&&state.navOwned?'INSTALLED · AUTO PENDING':state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED';
     $('nav-quick-metrics').textContent=state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${state.navPlan.safety.estimatedKg.toFixed(1)} kg ideal · ${state.navPlan.safety.reserveKg.toFixed(0)} kg reserved`: 'Pick a contact · press C to calculate';
 
   }
@@ -1219,7 +1219,7 @@
           $('reset-btn').textContent='↻ Reset encounter';
           $('reset-btn').title='Resets local combat only; persistent ship position and fuel are preserved.';
           state.autopilot=null;
-          logEvent('Server-authoritative orbital flight connected. Combat/loot are still local.','good');
+          logEvent('Live flight and technology connected. Combat remains local.','good');
         }else{
           // Keep the pilot read-only while offline: never silently switch to local authority.
           logEvent('Flight server disconnected. Inputs suspended; orbit will resume from server.','danger');

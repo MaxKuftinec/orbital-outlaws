@@ -45,7 +45,7 @@ onMounted(async () => {
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
         <div><div class="eyebrow">PROTOTYPE 0.9</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
-      <div class="top-actions"><v-chip :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Persistent flight · server authoritative' : backendOnline ? 'Backend online · local flight until connected' : 'Local gameplay · backend offline' }}</v-chip>
+      <div class="top-actions"><v-chip :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Live · flight and upgrades saved' : backendOnline ? 'Backend online · connecting flight' : 'Local gameplay · backend offline' }}</v-chip>
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">ENCOUNTER TIME</span><strong id="sim-clock">00:00</strong></div></div>
         
         <v-btn density="compact" variant="tonal"  id="settings-btn" type="button" class="action-btn" title="Change hotkeys">⚙ Controls</v-btn>
@@ -167,7 +167,7 @@ onMounted(async () => {
         <div class="settings-bottom"><button type="button" id="hotkey-reset" class="small-btn">Restore defaults</button><button type="button" id="settings-done" class="buy-btn">Done</button></div>
       </div>
     </div>
-    <footer class="footer-note">Orbital Outlaws · Vue preview 0.9 <span>Full-width orbit · configurable controls · fuel-safe guidance · allied rescue</span></footer>
+    <footer class="footer-note">Orbital Outlaws · Vue preview 0.9 <span>Live orbital flight · persistent upgrades · local combat preview</span></footer>
   </div>
 
   <v-alert v-if="startupError" color="error" variant="tonal" class="game-startup-error">{{ startupError }}</v-alert>
