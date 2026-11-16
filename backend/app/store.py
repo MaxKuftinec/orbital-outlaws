@@ -170,6 +170,7 @@ class WorldStore:
             vessel = incoming_ship(f'{prefix}-{number:02d}', angle, intent,
                                    is_ally, world.mu)
             vessel['nextDecision'] = sector['t'] + 4
+            vessel['courseBurnAt'] = sector['t'] + 2.5
             collection.append(vessel)
             sector_event(sector, sector['t'], f"{vessel['name']} approaching Kestrel "
                          f"on a {intent} mission.", 'good' if is_ally else 'danger')
@@ -180,6 +181,8 @@ class WorldStore:
                          'x': vessel['x'], 'y': vessel['y']},
                 'intent': intent,
                 'faction': faction,
+                'initial_heading_deg': math.degrees(vessel['launchDirection']) % 360,
+                'orbit_direction': 'counterclockwise' if vessel['orbitDirection'] > 0 else 'clockwise',
                 'ship_count': len(collection)
             }
 
@@ -188,6 +191,71 @@ class WorldStore:
 
     def spawn_ally(self, pilot_id: str) -> dict:
         return self.spawn_ship(pilot_id, 'ally')
+
+    def respawn_player(self, pilot_id: str) -> dict:
+        """Replace a destroyed ship without resetting the persistent sector or economy."""
+        entity_id = 'pilot-' + pilot_id
+        with self.sessions() as db:
+            if db.get(Entity, entity_id) is None:
+                raise LookupError('Unknown pilot')
+        self.player_encounter(pilot_id)
+        with self.sessions.begin() as db:
+            world = db.get(World, 'kestrel')
+            entity = db.scalars(select(Entity).where(
+                Entity.id == entity_id).with_for_update()).one()
+            saved = db.scalars(select(EncounterSnapshot).where(
+                EncounterSnapshot.entity_id == entity_id).with_for_update()).one()
+            snapshot = copy.deepcopy(saved.snapshot)
+            if snapshot['player']['alive']:
+                raise ValueError('Ship is still alive; respawn only follows destruction')
+
+            angle = 2 * math.pi * secrets.randbits(53) / 2**53
+            # Reuse the NPC's outer launch geometry and independent 360° velocity.
+            # Unlike an NPC, a player chooses their own burn/arrival intention.
+            launch = incoming_ship('pilot-01', angle, 'flyby', mu=world.mu)
+            now = self.now(world)
+            state = State(launch['x'], launch['y'],
+                          launch['vx'], launch['vy'], 1110., 200.,
+                          launch['heading'], 0.)
+            peri, apo = orbital_envelope(state, world.mu)
+            entity.checkpoint_s = now
+            entity.checkpoint = state.as_dict()
+            entity.periapsis_km, entity.apoapsis_km = peri, apo
+            entity.version += 1
+
+            flight = db.get(FlightControl, entity_id)
+            flight.thrust = False
+            flight.turn = 0
+            flight.stabilize = False
+            flight.gimbal = 0.
+            flight.expires_s = 0.
+
+            previous = snapshot['player']
+            snapshot['player'] = {
+                'hp':100., 'ammo':36, 'repairParts':10.,
+                'alive':True, 'gunReady':now,
+                'respawnCount':previous.get('respawnCount',0)+1
+            }
+            sector_event(snapshot, snapshot['t'],
+                         'KESTREL-7 replacement ship launched beyond Kestrel; '
+                         'manual course control online.','good')
+            saved.snapshot = snapshot
+            saved.saved_at_utc = time.time()
+
+            db.add(Event(world_id='kestrel', entity_id=entity_id,
+                         at_s=now,kind='respawn',payload={'reason':'dev-respawn'},
+                         after=state.as_dict(),
+                         idempotency_key='respawn:'+str(__import__('uuid').uuid4())))
+            return {
+                'pilot_id':pilot_id,
+                'state':state.as_dict(),
+                'hp':snapshot['player']['hp'],
+                'spawn_radius_km':math.hypot(state.x,state.y),
+                'initial_heading_deg':math.degrees(launch['launchDirection']) % 360,
+                'arrival_control':'manual',
+                'progress_preserved':True,
+                'sector_preserved':True
+            }
 
     def player_fire(self, pilot_id: str, dx: float, dy: float):
         self.player_encounter(pilot_id)
