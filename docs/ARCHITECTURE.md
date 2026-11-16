@@ -63,3 +63,27 @@ Fullscreen Navigation, Telemetry and Ship panels are floating canvas HUD windows
 This initial version is pilot-scoped. Player flight and propellant remain in \`entities\`/\`flight_controls\`, and sector collisions may append a \`sector_interaction\` checkpoint/event to the player entity. NPC offline catch-up uses adaptive finite slices rather than a globally scheduled exact spacetime event queue. It does not yet guarantee synchronized inter-player causality, and is not a production-scale server simulation.
 
 \`backend/app/reset_dev.py\` provides explicitly confirmed pilot/world database resets. The frontend Options API shell (matching the Axore Vue convention) supports independent docking, minimizing and dragging for every HUD panel; layout is local browser state and not part of the universe.
+
+## v0.13 incoming faction visitors, reward accounting, Vue panel migration
+
+The development-only `POST /api/dev/players/{pilot_id}/raiders` and
+`POST /api/dev/players/{pilot_id}/allies` each create one ship inside the
+pilot's persisted `encounter_snapshots`. Arrivals start beyond 950 km from
+Kestrel with negative radial velocity and positive two-body orbital energy.
+Each independently receives a 50/50 `flyby`/`orbit` arrival intention.
+A flyby retains its hyperbolic trajectory. Orbit-intent ships burn actual
+propellant using an instantaneous delta-v near periapsis to match circular
+velocity; their status becomes `orbiting` only after a successful capture.
+The baseline AEGIS escort remains the `ally` field; additional friendlies
+are stored as `allies` and participate in targeting, combat, collisions and
+the streamed snapshot, rendered by the browser.
+
+Salvage effects and Comms messages are computed from actual acquired
+resources, including partial fuel/repair-part pickups near capacity.
+Unrewarded full-capacity pickups are not consumed.
+
+The first fully reactive Options API panels are Comms, Ship and Technology
+Market. `frontend/src/services/cockpit.ts` defines the typed state bridge
+and purchase events; the legacy standalone HTML retains DOM compatibility.
+The next migration targets remaining telemetry/navigation and renderer
+separation.

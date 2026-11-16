@@ -1,4 +1,4 @@
-# Orbital Outlaws — v0.12 autonomous sector / Vue cockpit migration
+# Orbital Outlaws — v0.13 inbound spacecraft and reactive cockpit
 
 A persistent 2D Newtonian orbital combat prototype using **Vue 3 + Vuetify (Options API)**, **FastAPI**, **PostgreSQL** and a bidirectional **WebSocket**.
 
@@ -62,24 +62,27 @@ Technology purchases are persistent in PostgreSQL. Each has a compact ability-st
 
 Trajectory predictions assume **unpowered Kepler motion**. Future burns, impacts or NPC decisions can invalidate them.
 
-### Spawn a raider from FastAPI (development only)
+**Comms & Events now itemizes salvage rewards**, using the server's actual awarded amounts rather than the pickup label: for example `+18.0 kg propellant`, `+12 rounds`, `+50 ¤` or `+2.0 kg spare parts` on a capacity-limited wreck. Full tanks and full parts capacity no longer consume pickups without giving a benefit.
 
-The cockpit no longer displays a Reinforcements toggle. Spawn **one** autonomous raider per POST through FastAPI's Swagger UI at http://127.0.0.1:8000/docs, or PowerShell:
+### Spawn incoming raiders or allies from FastAPI (development only)
+
+The cockpit has no reinforcement toggle. Instead, each POST creates **exactly one** incoming ship, either hostile or friendly, through FastAPI's Swagger UI at http://127.0.0.1:8000/docs or PowerShell:
 
 ```powershell
 # Get the current pilot ID in the browser DevTools console:
 # localStorage.getItem('orbital-outlaws.pilot.v1')
 $pilot = "YOUR_32_CHARACTER_PILOT_ID"
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/dev/players/$pilot/raiders"
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/dev/players/$pilot/allies"
 ```
 
-Each successful request appends exactly one uniquely named raider to that pilot's persistent sector; it will appear in the next WebSocket snapshot. The pilot must already exist. This endpoint requires `ORBITAL_DEV_COMMANDS=1`; it has **no user authentication**, so keep the backend bound to a trusted development network and never enable these commands on a public service.
+Each successful request adds one uniquely identified ship to the pilot's persistent sector; it appears in the next WebSocket snapshot. The pilot must already exist. Both factions arrive **outside** the operational orbital region on an inbound hyperbolic approach, with an unbiased 50/50 decision between **flyby** (no capture burn) and **orbit insertion** (a propellant-consuming velocity-matching burn near periapsis). The response includes the chosen `intent`, faction and new ship ID. Orbiting ships still take NPC tactical actions after insertion; true flybys continue outward without a capture burn. This endpoint requires `ORBITAL_DEV_COMMANDS=1`; it has **no user authentication**, so keep the backend bound to a trusted development network and never enable these commands on a public service.
 
 ### Gradual Vue migration
 
-The first extracted Options API component is `frontend/src/components/CommsPanel.vue`. The legacy game dispatches a typed `orbital-comms` event through the small `services/comms.ts` interface. Vue now renders the log with reactive state and text interpolation rather than `innerHTML`. Docking and collapsing keep working, as they operate on the component's panel element.
+**Migrated:** `CommsPanel.vue`, `ShipPanel.vue` and `TechnologyMarket.vue`, all using Vue **Options API**. The legacy game emits typed `orbital-comms` and `orbital-cockpit-state` events through the interfaces in `frontend/src/services/`. Vue now renders Comms messages, ship hull/fuel/ammo/credits and technology ownership with reactive state. Market purchases flow back through `orbital-market-purchase` actions rather than raw button event listeners. The old standalone HTML retains a compatibility DOM path.
 
-The remaining ship, telemetry, navigation, marketplace and canvas are still in the legacy compatibility layer. Next steps are extracting the Ship HUD and Technology Market into Vue components, giving them reactive snapshot props, then separating the renderer/input and protocol adapters from `game.js`. Pure orbital physics and server-side simulation stay framework independent.
+**Next:** migrate the remaining Telemetry, Targeting and Navigation panels, then gradually move input, networking, and canvas rendering into dedicated TypeScript services while keeping orbital physics framework-independent.
 
 ### HUD customization
 
