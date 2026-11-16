@@ -1,6 +1,5 @@
 from __future__ import annotations
 import os
-from pathlib import Path
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from functools import lru_cache
@@ -9,11 +8,13 @@ from pydantic import BaseModel, Field
 from .physics import State
 from .store import WorldStore
 
-load_dotenv(Path(__file__).resolve().parents[1] / '.env')
+load_dotenv()
+
+DB_URL = os.getenv("DATABASE_URL")
 
 @lru_cache
 def store() -> WorldStore:
-    return WorldStore(os.environ['DATABASE_URL'])
+    return WorldStore(DB_URL)
 
 
 @asynccontextmanager
