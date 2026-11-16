@@ -138,6 +138,7 @@
     state.t=Math.max(state.t,saved.t||0);
     state.reinforcements=!!saved.reinforcements;
     state.nextEnemySpawn=saved.nextEnemySpawn||state.t+60;
+    state.serverAssistance=saved.assistance||[];
     state.playerKills=saved.playerKills||0;
     if(saved.player){
       const p=state.player,info=saved.player;
@@ -632,9 +633,14 @@
       ...(state.ally.alive?[{key:'ally',text:'AEGIS-01 · friendly escort'}]:[]),
       ...(state.allies||[]).filter(a=>a.alive).map(a=>({key:'ally:'+a.id,text:a.name+' · friendly visitor'}))];
     if(state.waypoint)entries.unshift({key:'waypoint',text:'Map waypoint (fixed location)'});
+    const selected=entries.some(item=>item.key===previous)?previous:entries[0]?.key||'';
+    if(select.dataset.vueManaged==='true'){
+      window.dispatchEvent(new CustomEvent('orbital-navigation-options',{detail:{options:entries,selected}}));
+      return;
+    }
     select.replaceChildren();
     for(const item of entries){const o=document.createElement('option');o.value=item.key;o.textContent=item.text;select.append(o);}
-    if(entries.some(item=>item.key===previous))select.value=previous;
+    select.value=selected;
   }
   function cycleNavigationTarget(){
     const select=$('nav-target');
@@ -644,6 +650,9 @@
     const key=select.value;
     if(key.startsWith('enemy:')){state.targetId=key.slice(6);state.aimMode='locked';state.lastBallistic=-999;}
     logEvent('Navigation target: '+select.selectedOptions[0].textContent);
+    if(select.dataset.vueManaged==='true')window.dispatchEvent(new CustomEvent('orbital-navigation-options',{
+      detail:{options:Array.from(select.options).map(o=>({key:o.value,text:o.textContent})),selected:key}
+    }));
     updateHud();
   }
   function purchaseUpgrade(upgrade){
@@ -708,7 +717,12 @@
     updateHud();return true;
   }
   function requestFuelHelp(){
-    if(persistentFlight){logEvent('Server fuel transfers not implemented yet.','danger');return;}
+    if(persistentFlight){
+      if(!state.player.alive){logEvent('Destroyed ships cannot request rescue.','danger');return;}
+      if(!flightOnline||!pilotLink?.requestAssistance('player'))logEvent('Fuel assistance needs a live server connection.','danger');
+      else logEvent('Fuel assistance requested. A donor must approach and match velocity.','good');
+      return;
+    }
     if(state.ended)return;
     if(!state.ally.alive){logEvent('No friendly rescue craft available.','danger');return;}
     if(state.player.fuel>=state.player.fuelMax-.1){logEvent('Your tanks are already full.');return;}
@@ -716,6 +730,16 @@
     const ally=state.ally;
     if(ally.fuel<rescueFuelFloor()+24){startRescueLeg('scavenge');return;}
     startRescueLeg('deliver');
+  }
+  function donateFuelToAlly(){
+    if(!persistentFlight||!flightOnline){logEvent('Live server is required for player donations.','danger');return;}
+    if(!state.player.alive){logEvent('Destroyed ships cannot donate fuel.','danger');return;}
+    const key=$('nav-target').value;
+    const target=navTarget(key);
+    const ally=target?.isAlly?target:state.ally;
+    if(!ally?.alive){logEvent('Select a living friendly craft in Navigation.','danger');return;}
+    if(!pilotLink?.offerFuel(ally.id,20))logEvent('Fuel transfer could not be sent.','danger');
+    else logEvent('Fuel offer sent to '+ally.name+'; transfer needs ≤18 km and <2.5 km/s relative speed.');
   }
   function rescueStep(dt){
     const a=state.rescue,ally=state.ally;
@@ -945,8 +969,8 @@
     $('period-value').textContent=Number.isFinite(e.period)?e.period.toFixed(1)+' s':'UNBOUND';
     $('path-status').textContent=state.dangerPrediction?'IMPACT':e.e>=1?'UNBOUND':'BOUND';
     $('path-status').style.color=state.dangerPrediction?palette.red:e.e>=1?palette.yellow:palette.green;
-    const shipStatus=state.ended?'Spacecraft lost':state.repairing?'Repairing hull':state.autopilot?'Autopilot '+state.autopilot.phase:p.thrustVector?'Main engine firing':p.rcsFiring?'RCS firing':e.e>=1?'Escape trajectory':'Coasting (fuel conserved)';
-    const shipStatusColor=state.ended?palette.red:p.thrustVector?palette.yellow:palette.green;
+    const shipStatus=(state.ended||!p.alive)?'Spacecraft lost':state.repairing?'Repairing hull':state.autopilot?'Autopilot '+state.autopilot.phase:p.thrustVector?'Main engine firing':p.rcsFiring?'RCS firing':e.e>=1?'Escape trajectory':'Coasting (fuel conserved)';
+    const shipStatusColor=(state.ended||!p.alive)?palette.red:p.thrustVector?palette.yellow:palette.green;
     if($('ship-panel')?.dataset.vueManaged!=='true'){
       $('status-text').textContent=shipStatus;
       $('status-text').style.color=shipStatusColor;
@@ -965,10 +989,11 @@
     $('escort-hull').textContent=state.ally.alive?Math.ceil(state.ally.hp)+' / 80':'DESTROYED';
     $('escort-ammo').textContent=state.ally.alive?String(state.ally.ammo):'—';
     $('escort-fuel').textContent=state.ally.alive?state.ally.fuel.toFixed(1)+' kg':'—';
-    $('escort-state').textContent=!state.ally.alive?'ESCORT LOST':state.rescue?'RESCUE: '+state.rescue.activity.toUpperCase()+' / '+state.rescue.phase.toUpperCase():(liveHostiles?'ENGAGING HOSTILES':'HOLDING ORBIT');
-    $('sos-btn').disabled=persistentFlight||state.ended||!state.ally.alive;
-    $('sos-btn').textContent=state.rescue?'⚑ ASSISTANCE REQUESTED':'⚑ REQUEST FUEL ASSISTANCE';
-    $('escort-help-btn').disabled=persistentFlight||state.ended||!state.ally.alive;
+    $('escort-state').textContent=!state.ally.alive?'ESCORT LOST':state.serverAssistance?.length?'FUEL SUPPORT MISSIONS: '+state.serverAssistance.length:state.rescue?'RESCUE: '+state.rescue.activity.toUpperCase()+' / '+state.rescue.phase.toUpperCase():(liveHostiles?'ENGAGING HOSTILES':'HOLDING ORBIT');
+    $('sos-btn').disabled=state.ended||!p.alive||(persistentFlight&&!flightOnline)||(!persistentFlight&&!state.ally.alive);
+    $('sos-btn').textContent=(state.rescue||state.serverAssistance?.some(o=>o.recipient==='player'))?'⚑ ASSISTANCE REQUESTED':'⚑ REQUEST FUEL ASSISTANCE';
+    $('escort-help-btn').disabled=state.ended||!p.alive||(persistentFlight&&!flightOnline)||(!persistentFlight&&!state.ally.alive);
+    $('escort-donate-btn').disabled=!persistentFlight||!flightOnline||!p.alive||state.ended;
     // Reinforcements are now created by the guarded FastAPI dev endpoint only.
     if(document.querySelector('.upgrades')?.dataset.vueManaged!=='true'){
       $('upgrade-status').textContent=state.predictive?'Installed · lead shot active':'40 ¤';
@@ -1011,6 +1036,35 @@
     $('nav-abort').disabled=!state.autopilot;
     $('nav-quick-status').textContent=state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED';
     $('nav-quick-metrics').textContent=state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${state.navPlan.safety.estimatedKg.toFixed(1)} kg ideal · ${state.navPlan.safety.reserveKg.toFixed(0)} kg reserved`: 'Pick a contact · press C to calculate';
+    window.dispatchEvent(new CustomEvent('orbital-telemetry-state',{detail:{
+      altitude:(e.r-WORLD.radius).toFixed(1)+' km',speed:e.v.toFixed(1)+' km/s',
+      periapsis:Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' km':'—',
+      apoapsis:Number.isFinite(e.ra)?Math.max(0,e.ra-WORLD.radius).toFixed(1)+' km':'ESCAPE',
+      period:Number.isFinite(e.period)?e.period.toFixed(1)+' s':'UNBOUND',
+      predicted:state.dangerPrediction?'IMPACT':e.e>=1?'UNBOUND':'BOUND',
+      reserve:SAFE.reserveKg(p.fuelMax).toFixed(0)+' kg (autopilot)',
+      flight:!p.alive?'LOST':state.autopilot?state.autopilot.phase.toUpperCase():state.serverAssistance?.some(o=>o.recipient==='player')?'ALLY ASSIST':'FREE'
+    }}));
+    window.dispatchEvent(new CustomEvent('orbital-targeting-state',{detail:{
+      status:state.aimMode==='manual'?'FREE AIM':target?'HOSTILE':'SCANNING',
+      name:state.aimMode==='manual'?'MANUAL AIM':target?target.name:'NO CONTACT',
+      range:target?magnitude(target.x-p.x,target.y-p.y).toFixed(1)+' km':'—',
+      hull:target?Math.ceil(target.hp)+' / 66':'—',
+      shotTime:fp&&fp.arrivalTime!==null?fp.arrivalTime.toFixed(2)+' s':fp&&fp.status==='planet'?'OBSTRUCTED':'OUT OF RANGE',
+      shotMiss:!state.trajectoryIntel?'Requires analyzer':fp&&fp.missKm!==null?fp.missKm.toFixed(1)+' km':'—'
+    }}));
+    window.dispatchEvent(new CustomEvent('orbital-navigation-state',{detail:{
+      locked:!state.navOwned,phase:state.autopilot?.phase||'IDLE',
+      deltaV:state.navPlan?state.navPlan.dv.toFixed(2)+' km/s':'—',
+      eta:state.navPlan?state.navPlan.eta.toFixed(0)+' s':'—',
+      fuel:state.navPlan?SAFE.requiredFuel(mass(p),state.navPlan.dv,exhaustKmS).toFixed(1)+' kg (ideal)':'—',
+      status:state.autopilot?state.autopilot.phase.toUpperCase():state.navPlan?'Route ready':state.navFailure||'No plan',
+      quick:state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED',
+      metrics:state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${state.navPlan.safety.estimatedKg.toFixed(1)} kg ideal`:state.navFailure||'Pick a contact · press C to calculate',
+      engageText:state.navOwned?'ENGAGE':'BUY NAV 60¤',
+      engageDisabled:state.ended||!p.alive||!!state.autopilot||(persistentFlight&&!flightOnline)||(!state.navOwned&&p.credits<60),
+      abortDisabled:!state.autopilot,selected:$('nav-target').value
+    }}));
     window.dispatchEvent(new CustomEvent('orbital-cockpit-state',{detail:{
       ship:{
         hp:p.hp,fuel:p.fuel,fuelMax:p.fuelMax,repairParts:p.repairParts,repairCapacity:REPAIR.capacityKg,
@@ -1177,7 +1231,7 @@
     }
     document.querySelectorAll('[data-thrust]').forEach(b=>hold(b,b.dataset.thrust));hold($('fire-btn'),'fire');hold($('repair-btn'),'repair');
     $('reset-btn').addEventListener('click',reset);
-    $('retry-btn').addEventListener('click',reset);
+    $('retry-btn')?.addEventListener('click',reset);
     $('orbit-btn').addEventListener('click',()=>{state.orbitVisible=!state.orbitVisible;$('orbit-btn').classList.toggle('selected',state.orbitVisible);$('orbit-btn').setAttribute('aria-pressed',String(state.orbitVisible));});
     $('zoom-in').addEventListener('click',()=>zoomAt(1.25));
     $('zoom-out').addEventListener('click',()=>zoomAt(1/1.25));
@@ -1217,6 +1271,7 @@
     $('telemetry-toggle').addEventListener('click',()=>toggleConsole('telemetry'));
     $('sos-btn').addEventListener('click',requestFuelHelp);
     $('escort-help-btn').addEventListener('click',requestFuelHelp);
+    $('escort-donate-btn').addEventListener('click',donateFuelToAlly);
     $('settings-btn').addEventListener('click',openSettings);
     $('settings-close').addEventListener('click',closeSettings);
     $('settings-done').addEventListener('click',closeSettings);
@@ -1234,9 +1289,9 @@
       if(state.aimMode==='manual')state.mouseTarget=state.gimbalTarget;
     });
     canvas.addEventListener('pointerdown',e=>{
-      if(state.ended)return;
       const pt=coords(e),p=fromScreen(pt.px,pt.py);
       if(e.button===1||e.button===2||e.shiftKey){e.preventDefault();drag={id:e.pointerId,px:pt.px,py:pt.py};canvas.setPointerCapture(e.pointerId);return;}
+      if(state.ended||!state.player.alive)return;
       if(e.button!==0)return;
       if(e.altKey){state.waypoint={x:p.x,y:p.y};updateTargetOptions('waypoint');state.navPlan=null;logEvent('Waypoint plotted at '+p.x.toFixed(0)+', '+p.y.toFixed(0)+' km.');updateHud();return;}
       let candidate=null,dist=Infinity;
