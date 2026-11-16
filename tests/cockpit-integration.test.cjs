@@ -153,3 +153,13 @@ test('incoming additional allies are rendered and retain server authority',()=>{
   assert.match(game,/state\.allies=mergeLiveBodies/);
   assert.match(game,/for\(const ally of state\.allies\|\|\[\]\)drawShip\(ally\)/);
 });
+
+
+test('dead pilot can be revived by dev API and cockpit pans to the new outer spawn',()=>{
+  assert.match(game,/const revived=!p\.alive&&info\.alive/);
+  assert.match(game,/if\(revived\)\{/);
+  assert.match(game,/state\.ended=false/);
+  assert.match(game,/state\.panX=-p\.x\*scale\(\)/);
+  assert.match(game,/Math\.hypot\(p\.x-s\.x,p\.y-s\.y\)>150/);
+  assert.match(game,/\/api\/dev\/players\/\{pilot_id\}\/respawn/);
+});

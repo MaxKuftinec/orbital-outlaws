@@ -87,3 +87,22 @@ Market. `frontend/src/services/cockpit.ts` defines the typed state bridge
 and purchase events; the legacy standalone HTML retains DOM compatibility.
 The next migration targets remaining telemetry/navigation and renderer
 separation.
+
+## v0.14 random launch and development respawn
+
+Incoming NPCs launch outside Kestrel with independently random velocity
+directions on [0, 2pi) and variable 20–32 km/s speeds; position angle and
+velocity angle are independent. Their flyby/orbit intention produces an
+actual fuel-consuming approach impulse after 2.5 seconds, and orbit-intent
+NPCs execute a second circularization impulse near periapsis. The initial
+angular momentum sign sets clockwise/counterclockwise arrival; both are
+supported. These are deliberately instantaneous maneuvers and are not
+the final physical finite-burn guidance system.
+
+New player accounts and explicitly respawned destroyed pilots start in
+the same outer region with random 360-degree launch velocity, but pilot
+attitude and arrival guidance are manual; the server does not burn fuel
+without control inputs. Dev-only POST /api/dev/players/{pilot_id}/respawn
+updates the player entity checkpoint, resets flight control, restores
+player-only hull/ammo/spares, and appends a respawn event, leaving the
+pilot's technology/credits and independent NPC sector intact.

@@ -1,4 +1,4 @@
-# Orbital Outlaws — v0.13 inbound spacecraft and reactive cockpit
+# Orbital Outlaws — v0.14 random arrivals and player respawn
 
 A persistent 2D Newtonian orbital combat prototype using **Vue 3 + Vuetify (Options API)**, **FastAPI**, **PostgreSQL** and a bidirectional **WebSocket**.
 
@@ -76,8 +76,39 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/dev/players/$pilo
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/dev/players/$pilot/allies"
 ```
 
-Each successful request adds one uniquely identified ship to the pilot's persistent sector; it appears in the next WebSocket snapshot. The pilot must already exist. Both factions arrive **outside** the operational orbital region on an inbound hyperbolic approach, with an unbiased 50/50 decision between **flyby** (no capture burn) and **orbit insertion** (a propellant-consuming velocity-matching burn near periapsis). The response includes the chosen `intent`, faction and new ship ID. Orbiting ships still take NPC tactical actions after insertion; true flybys continue outward without a capture burn. This endpoint requires `ORBITAL_DEV_COMMANDS=1`; it has **no user authentication**, so keep the backend bound to a trusted development network and never enable these commands on a public service.
+Each successful request adds one uniquely identified ship to the pilot's persistent sector; it appears in the next WebSocket snapshot. The pilot must already exist. Both factions spawn **outside** the operational orbital region, with independent uniformly random **360° initial velocity direction** (speed 20–32 km/s). After 2.5 seconds, their mission computer burns propellant to steer onto a targeted hyperbolic Kestrel approach. A fair 50/50 decision chooses **flyby** (approach burn only, then depart) or **orbit insertion** (an additional circularization burn near periapsis). The chosen orbital sense is based on initial angular momentum, so visitors may orbit in either direction. The response includes `intent`, faction, initial heading, orbital sense, and new ship ID. These are idealized instantaneous impulses, not finite-duration thruster maneuvers. Initial sector residents retain their existing established orbits. This endpoint requires `ORBITAL_DEV_COMMANDS=1`; it has **no user authentication**, so keep the backend bound to a trusted development network and never enable these commands on a public service.
 
+### Respawn a destroyed pilot (development only)
+
+Restarting FastAPI or refreshing the browser **does not** respawn a destroyed pilot.
+To replace only the destroyed spacecraft, keeping the same pilot ID, credits,
+technology, NPCs and world state, use Swagger at http://127.0.0.1:8000/docs or:
+
+```powershell
+$pilot = "YOUR_32_CHARACTER_PILOT_ID"
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/dev/players/$pilot/respawn"
+```
+
+Retrieve your pilot ID in browser DevTools with:
+
+```javascript
+localStorage.getItem('orbital-outlaws.pilot.v1')
+```
+
+The endpoint is dev-only (`ORBITAL_DEV_COMMANDS=1`). It returns **409** when the
+pilot is still alive and **404** for unknown pilot IDs. It restores 100% hull,
+200 kg fuel, 36 rounds and 10 kg spare parts, resets control leases, and
+preserves other progression and sector inhabitants. A replacement ship and
+**new pilot accounts** now spawn beyond 950 km with independently randomized
+velocity heading (full 360°); the pilot steers manually, unlike programmed
+NPC flyby/orbit missions. The game camera recenters on respawn; no new
+respawn button was added to the cockpit.
+
+**Friendly Escort panel:** This reports the original AEGIS-01 resident's hull,
+ammunition and propellant. Additional allied visitors appear on the map and
+in Navigation, but are not yet aggregated into this panel. Its fuel-assistance
+button remains disabled in connected authoritative mode because server-side
+rescue transfers have not been implemented.
 ### Gradual Vue migration
 
 **Migrated:** `CommsPanel.vue`, `ShipPanel.vue` and `TechnologyMarket.vue`, all using Vue **Options API**. The legacy game emits typed `orbital-comms` and `orbital-cockpit-state` events through the interfaces in `frontend/src/services/`. Vue now renders Comms messages, ship hull/fuel/ammo/credits and technology ownership with reactive state. Market purchases flow back through `orbital-market-purchase` actions rather than raw button event listeners. The old standalone HTML retains a compatibility DOM path.
