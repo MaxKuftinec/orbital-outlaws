@@ -7,8 +7,9 @@ from __future__ import annotations
 import math, time
 from sqlalchemy import create_engine, select, and_, or_
 from sqlalchemy.orm import sessionmaker
-from .models import Base, World, Entity, Event
+from .models import Base, World, Entity, Event, FlightControl
 from .physics import State, propagate, orbital_envelope, apply_impulse
+from .flight import advance, LEASE_S
 
 
 class WorldStore:
@@ -42,6 +43,64 @@ class WorldStore:
                          kind='spawn',payload={},after=state.as_dict(),idempotency_key=f'spawn:{entity_id}'))
             return entity.id
 
+
+    @staticmethod
+    def _controls(flight):
+        return {'thrust':flight.thrust,'turn':flight.turn,
+                'stabilize':flight.stabilize,'gimbal':flight.gimbal}
+
+    def connect_player(self, pilot_id: str):
+        """Single browser pilot: create once, then always resume the stored ship."""
+        entity_id = 'pilot-' + pilot_id
+        with self.sessions.begin() as db:
+            world = db.get(World, 'kestrel')
+            entity = db.get(Entity, entity_id)
+            if not entity:
+                angle = -.67
+                radius = 260
+                speed = math.sqrt(world.mu/radius)
+                state = State(radius*math.cos(angle), radius*math.sin(angle),
+                              -speed*math.sin(angle), speed*math.cos(angle),
+                              1110, 200, angle+math.pi/2, 0)
+                peri, apo = orbital_envelope(state, world.mu)
+                entity = Entity(id=entity_id, world_id='kestrel', kind='player',
+                                checkpoint_s=self.now(world), checkpoint=state.as_dict(),
+                                periapsis_km=peri, apoapsis_km=apo)
+                db.add(entity)
+                db.add(FlightControl(entity_id=entity_id))
+                db.add(Event(world_id='kestrel', entity_id=entity_id,
+                             at_s=entity.checkpoint_s, kind='spawn', payload={},
+                             after=state.as_dict(), idempotency_key='spawn:'+entity_id))
+            elif entity.kind != 'player':
+                raise ValueError('Not a player entity')
+        return self.get_entity('kestrel', entity_id)
+
+    def player_input(self, pilot_id: str, thrust: bool, turn: int, stabilize: bool, gimbal: float):
+        """Advance using the previous leased input, then atomically set the next input."""
+        entity_id = 'pilot-' + pilot_id
+        with self.sessions.begin() as db:
+            entity = db.scalars(select(Entity).where(Entity.id==entity_id).with_for_update()).one()
+            world = db.get(World,'kestrel')
+            flight = db.get(FlightControl,entity_id)
+            now = max(self.now(world),entity.checkpoint_s)
+            current = advance(State(**entity.checkpoint),entity.checkpoint_s,now,
+                              world.mu,self._controls(flight),flight.expires_s)
+            peri,apo = orbital_envelope(current,world.mu)
+            entity.checkpoint_s=now
+            entity.checkpoint=current.as_dict()
+            entity.periapsis_km=peri
+            entity.apoapsis_km=apo
+            entity.version+=1
+            flight.thrust=thrust
+            flight.turn=turn
+            flight.stabilize=stabilize
+            flight.gimbal=gimbal
+            flight.expires_s=now+LEASE_S
+            db.add(Event(world_id='kestrel', entity_id=entity_id, at_s=now,kind='control',
+                         payload={'control':self._controls(flight),'expires_s':flight.expires_s},
+                         after=current.as_dict(),idempotency_key='control:'+str(__import__('uuid').uuid4())))
+        return self.get_entity('kestrel', entity_id)
+
     def _at(self,db,world_id,entity_id,at_s: float|None=None):
         world=db.get(World,world_id)
         if not world:raise LookupError('World not found')
@@ -51,11 +110,16 @@ class WorldStore:
         if at<0:raise ValueError('Negative world time')
         if at>=entity.checkpoint_s:
             base=State(**entity.checkpoint);base_t=entity.checkpoint_s
+            flight=db.get(FlightControl,entity_id) if entity.kind=='player' else None
+            control=self._controls(flight) if flight else None
+            expires=flight.expires_s if flight else 0
         else:
             event=db.scalars(select(Event).where(and_(Event.entity_id==entity_id,Event.at_s<=at)).order_by(Event.at_s.desc(),Event.id.desc()).limit(1)).first()
             if not event:raise ValueError('Entity did not exist at this time')
             base=State(**event.after);base_t=event.at_s
-        return world,entity,at,propagate(base,at-base_t,world.mu)
+            control=event.payload.get('control')
+            expires=event.payload.get('expires_s',0)
+        return world,entity,at,advance(base,base_t,at,world.mu,control,expires)
 
     def get_entity(self,world_id: str,entity_id: str,at_s: float|None=None):
         with self.sessions() as db:

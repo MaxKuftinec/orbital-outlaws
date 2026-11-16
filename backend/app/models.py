@@ -1,6 +1,6 @@
 """Persistent authoritative orbital state and immutable event log."""
 from __future__ import annotations
-from sqlalchemy import Float, ForeignKey, Integer, String, JSON, Index, UniqueConstraint
+from sqlalchemy import Float, ForeignKey, Integer, String, JSON, Index, UniqueConstraint, Boolean
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -39,3 +39,13 @@ class Event(Base):
     after: Mapped[dict]=mapped_column(JSON,nullable=False)
     idempotency_key: Mapped[str]=mapped_column(String(128),nullable=False)
     __table_args__=(UniqueConstraint('world_id','idempotency_key',name='uq_world_command_key'),)
+
+
+class FlightControl(Base):
+    __tablename__='flight_controls'
+    entity_id: Mapped[str]=mapped_column(ForeignKey('entities.id'),primary_key=True)
+    thrust: Mapped[bool]=mapped_column(Boolean,default=False)
+    turn: Mapped[int]=mapped_column(Integer,default=0)
+    stabilize: Mapped[bool]=mapped_column(Boolean,default=False)
+    gimbal: Mapped[float]=mapped_column(Float,default=0)
+    expires_s: Mapped[float]=mapped_column(Float,default=0)

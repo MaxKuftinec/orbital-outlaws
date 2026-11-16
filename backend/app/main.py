@@ -31,9 +31,41 @@ def require_dev_commands():
         raise HTTPException(403,'Development commands disabled; enable ORBITAL_DEV_COMMANDS=1 in a trusted local environment')
 
 
+
+class PlayerInput(BaseModel):
+    thrust: bool = False
+    turn: int = Field(default=0, ge=-1, le=1)
+    stabilize: bool = False
+    gimbal: float = Field(default=0, ge=-0.4886921906, le=0.4886921906)
+
+
+@app.post('/api/players/{pilot_id}')
+def connect_player(pilot_id: str):
+    require_dev_commands()
+    if len(pilot_id)!=32 or any(c not in '0123456789abcdef' for c in pilot_id):
+        raise HTTPException(400,'Expected 32-character pilot ID')
+    return store().connect_player(pilot_id)
+
+
+@app.get('/api/players/{pilot_id}')
+def player_state(pilot_id: str):
+    require_dev_commands()
+    return store().get_entity('kestrel','pilot-'+pilot_id)
+
+
+@app.post('/api/players/{pilot_id}/input')
+def player_input(pilot_id: str, command: PlayerInput):
+    require_dev_commands()
+    try:
+        return store().player_input(pilot_id,command.thrust,command.turn,
+                                    command.stabilize,command.gimbal)
+    except LookupError as exc:
+        raise HTTPException(404,str(exc)) from exc
+
+
 @app.get('/')
 def health():
-    return {'status':'ok','architecture':'lazy-orbits','authority':'foundation-only'}
+    return {'status':'ok','architecture':'lazy-orbits','authority':'player-flight-only'}
 
 
 class SpawnBody(BaseModel):

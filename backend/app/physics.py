@@ -16,6 +16,8 @@ class State:
     vy: float
     mass_kg: float = 1110.0
     fuel_kg: float = 200.0
+    heading: float = 0.0
+    omega: float = 0.0
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -55,7 +57,8 @@ def propagate(initial: State, elapsed_s: float, mu: float) -> State:
         period = 2*pi/(sqrt_mu*alpha**1.5)
         dt = remainder(dt, period)
         if abs(dt) < 1e-13:
-            return initial
+            return State(initial.x,initial.y,initial.vx,initial.vy,initial.mass_kg,initial.fuel_kg,
+                         remainder(initial.heading+initial.omega*elapsed_s,2*pi),initial.omega)
     chi = (sqrt_mu*alpha*dt if alpha>1e-10 else sqrt_mu*dt/r0)
     # Newton iteration on universal Kepler equation.
     for _ in range(100):
@@ -84,7 +87,8 @@ def propagate(initial: State, elapsed_s: float, mu: float) -> State:
     gdot=1-(chi*chi/r)*c
     vx=fdot*initial.x+gdot*initial.vx
     vy=fdot*initial.y+gdot*initial.vy
-    return State(x,y,vx,vy,initial.mass_kg,initial.fuel_kg)
+    return State(x,y,vx,vy,initial.mass_kg,initial.fuel_kg,
+                 remainder(initial.heading+initial.omega*elapsed_s,2*pi),initial.omega)
 
 
 def orbital_envelope(state: State,mu: float) -> tuple[float, float | None]:
@@ -112,7 +116,7 @@ def apply_impulse(state: State, dvx: float, dvy: float, exhaust_km_s: float, res
     if consumed > state.fuel_kg-reserve_kg+1e-9:
         raise ValueError('Insufficient usable propellant')
     return State(state.x,state.y,state.vx+dvx,state.vy+dvy,
-                 state.mass_kg-consumed,state.fuel_kg-consumed)
+                 state.mass_kg-consumed,state.fuel_kg-consumed,state.heading,state.omega)
 
 
 def finite_burn(state: State, duration_s: float, mu: float, thrust_n: float,
@@ -149,4 +153,4 @@ def finite_burn(state: State, duration_s: float, mu: float, thrust_n: float,
         vy+=.5*(ay+a2y)*dt
         m=mnext
         fuel-=mass_flow_kg_s*dt
-    return State(x,y,vx,vy,m,max(0,fuel))
+    return State(x,y,vx,vy,m,max(0,fuel),remainder(state.heading+state.omega*duration_s,2*pi),state.omega)
