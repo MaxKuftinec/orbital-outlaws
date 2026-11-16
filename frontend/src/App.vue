@@ -1,6 +1,8 @@
 <script lang="ts">
 import { defineComponent } from 'vue'
 import CommsPanel from './components/CommsPanel.vue'
+import ShipPanel from './components/ShipPanel.vue'
+import TechnologyMarket from './components/TechnologyMarket.vue'
 
 const legacyFiles = [
   'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
@@ -9,7 +11,7 @@ const legacyFiles = [
 
 export default defineComponent({
   name: 'OrbitalCockpit',
-  components: { CommsPanel },
+  components: { CommsPanel, ShipPanel, TechnologyMarket },
   data() {
     return {
       backendOnline: false,
@@ -65,7 +67,7 @@ export default defineComponent({
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
-        <div><div class="eyebrow">PROTOTYPE 0.12</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+        <div><div class="eyebrow">PROTOTYPE 0.13</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
       <div class="top-actions"><v-chip :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Live · flight and upgrades saved' : backendOnline ? 'Backend online · connecting flight' : 'Local gameplay · backend offline' }}</v-chip>
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">ENCOUNTER TIME</span><strong id="sim-clock">00:00</strong></div></div>
@@ -105,14 +107,7 @@ export default defineComponent({
               <div><span>Flight status</span><strong id="quick-flight">—</strong></div>
             </div>
           </div>
-        <section class="panel ship-panel canvas-floating" id="ship-panel">
-          <div class="panel-heading"><span>YOUR SHIP</span><button type="button" class="panel-drag-handle" data-drag-handle title="Drag ship panel" aria-label="Drag ship panel">⠿</button><span class="ship-class">SCOUT / MK-I</span></div>
-          <div class="ship-name"><span class="ship-glyph">△</span><span>KESTREL-7<small id="status-text">Nominal orbit</small></span></div>
-          <div class="meter-title"><span>HULL INTEGRITY</span><b id="hull-value">100%</b></div><div class="meter"><div id="hull-bar" class="meter-fill green" style="width:100%"></div></div>
-          <div class="repair-controls"><span>SPARE PARTS <strong id="repair-parts">10.0 / 24 kg</strong></span><button id="repair-btn" type="button" class="small-btn repair-button" disabled>HOLD R · REPAIR</button></div>
-          <div class="meter-title"><span>PROPELLANT</span><b id="fuel-value">200 / 200 kg</b></div><div class="meter"><div id="fuel-bar" class="meter-fill cyan" style="width:100%"></div></div>
-          <div class="small-stats"><div><span>AMMO</span><strong id="ammo-value">36</strong></div><div><span>CREDITS</span><strong id="credits-value">0 <i>¤</i></strong></div><div><span>ΔV BUDGET</span><strong id="dv-value">—</strong></div></div>
-        </section>
+        <ShipPanel />
           <button type="button" id="sos-btn" class="sos-btn" title="Ask AEGIS-01 for propellant">⚑ REQUEST FUEL ASSISTANCE</button>
           <div class="canvas-overlay top-left"><span class="tiny-dot blue"></span><span id="target-indicator">TRACKING: RAIDER-01</span></div>
           <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom <span class="keyboard-tag">N/C/E/X</span> nav <span class="keyboard-tag">H</span> help</div>
@@ -165,13 +160,7 @@ export default defineComponent({
           <div class="mini-note">Cyan curve: actual predicted ballistic shot. After upgrading: purple ghost shows where your selected target will be when the shot reaches the cursor range, assuming no new burn.</div>
           <button id="next-target" class="wide-subtle-btn">Next target ↗</button>
         </section>
-        <section class="panel upgrades">
-          <div class="panel-heading"><span>UPGRADES</span><span>FIELD MARKET</span></div>
-          <div class="upgrade-entry"><span class="tech-icon tech-icon--predictive" role="img" aria-label="Predictive fire control ability icon"></span><div><strong>Predictive fire control</strong><small>Solves a lead shot using projected target motion.</small><span id="upgrade-status">40 ¤</span></div><button id="upgrade-btn" class="buy-btn">BUY</button></div>
-          <div class="upgrade-entry"><span class="tech-icon tech-icon--trajectory" role="img" aria-label="Target trajectory analyzer ability icon"></span><div><strong>Target trajectory analyzer</strong><small>Show enemy coast path and its future position at your cursor-selected bullet arrival time.</small><span id="trajectory-upgrade-status">25 ¤</span></div><button id="trajectory-upgrade-btn" class="buy-btn">BUY</button></div>
-          <div class="upgrade-entry"><span class="tech-icon tech-icon--ephemeris" role="img" aria-label="Ephemeris computer ability icon"></span><div><strong>Ephemeris computer</strong><small>Project the selected object's unpowered orbit, with +60s and +120s position markers. Requires a purchased license.</small><span id="ephemeris-upgrade-status">45 ¤</span></div><button id="ephemeris-upgrade-btn" class="buy-btn">BUY</button></div>
-          <div class="upgrade-entry"><span class="tech-icon tech-icon--rendezvous" role="img" aria-label="Rendezvous computer ability icon"></span><div><strong>Rendezvous computer</strong><small>Fuel-conscious route search, attitude control and automatic capture approach.</small><span id="nav-upgrade-status">60 ¤</span></div><button id="nav-upgrade-btn" class="buy-btn">BUY</button></div>
-        </section>
+        <TechnologyMarket />
         <section class="panel autopilot-panel">
           <div class="panel-heading"><span>RENDEZVOUS COMPUTER</span><span id="autopilot-chip" class="status-pill">LOCKED</span></div>
           <div class="mini-note">Navigation selection, route calculation and autopilot controls are always visible on the map. The computer scans short and long coast windows, favouring affordable Δv.</div>
@@ -193,7 +182,7 @@ export default defineComponent({
         <div class="settings-bottom"><button type="button" id="hotkey-reset" class="small-btn">Restore defaults</button><button type="button" id="settings-done" class="buy-btn">Done</button></div>
       </div>
     </div>
-    <footer class="footer-note">Orbital Outlaws · Vue preview 0.12 <span>Autonomous server-side sector · persistent upgrades · configurable panels</span></footer>
+    <footer class="footer-note">Orbital Outlaws · Vue preview 0.13 <span>Autonomous server-side sector · persistent upgrades · configurable panels</span></footer>
   </div>
 
   <v-alert v-if="startupError" color="error" variant="tonal" class="game-startup-error">{{ startupError }}</v-alert>

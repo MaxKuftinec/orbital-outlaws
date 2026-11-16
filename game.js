@@ -918,14 +918,16 @@
     $('quick-apo').textContent=Number.isFinite(e.ra)?Math.max(0,e.ra-WORLD.radius).toFixed(1)+' km':'ESCAPE';
     $('quick-reserve').textContent=SAFE.reserveKg(p.fuelMax).toFixed(0)+' kg (autopilot)';
     $('quick-flight').textContent=state.autopilot?state.autopilot.phase.toUpperCase():state.rescue?'ALLY ASSIST':'FREE';
-    $('hull-value').textContent=Math.round(p.hp)+'%';$('hull-bar').style.width=clamp(p.hp,0,100)+'%';
-    $('fuel-value').textContent=`${p.fuel.toFixed(1)} / ${p.fuelMax} kg`;$('fuel-bar').style.width=(100*p.fuel/p.fuelMax)+'%';
-    $('repair-parts').textContent=p.repairParts.toFixed(1)+' / '+REPAIR.capacityKg+' kg';
-    $('repair-btn').disabled=state.ended||p.hp>=100||p.repairParts<=.00001;
-    $('repair-btn').textContent=state.down.has('repair')?'REPAIRING… (R)':'HOLD R · REPAIR';
-    $('ammo-value').textContent=p.ammo;
-    $('credits-value').innerHTML=p.credits+' <i>¤</i>';
-    $('dv-value').textContent=(exhaustKmS*Math.log(mass(p)/(p.dryMass+p.repairParts))).toFixed(1)+' km/s';
+    if($('ship-panel')?.dataset.vueManaged!=='true'){
+      $('hull-value').textContent=Math.round(p.hp)+'%';$('hull-bar').style.width=clamp(p.hp,0,100)+'%';
+      $('fuel-value').textContent=`${p.fuel.toFixed(1)} / ${p.fuelMax} kg`;$('fuel-bar').style.width=(100*p.fuel/p.fuelMax)+'%';
+      $('repair-parts').textContent=p.repairParts.toFixed(1)+' / '+REPAIR.capacityKg+' kg';
+      $('repair-btn').disabled=state.ended||p.hp>=100||p.repairParts<=.00001;
+      $('repair-btn').textContent=state.down.has('repair')?'REPAIRING… (R)':'HOLD R · REPAIR';
+      $('ammo-value').textContent=p.ammo;
+      $('credits-value').innerHTML=p.credits+' <i>¤</i>';
+      $('dv-value').textContent=(exhaustKmS*Math.log(mass(p)/(p.dryMass+p.repairParts))).toFixed(1)+' km/s';
+    }
     $('alt-value').textContent=(e.r-WORLD.radius).toFixed(1)+' km';
     $('speed-value').textContent=e.v.toFixed(1)+' km/s';
     $('peri-value').textContent=Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' km':'—';
@@ -933,8 +935,12 @@
     $('period-value').textContent=Number.isFinite(e.period)?e.period.toFixed(1)+' s':'UNBOUND';
     $('path-status').textContent=state.dangerPrediction?'IMPACT':e.e>=1?'UNBOUND':'BOUND';
     $('path-status').style.color=state.dangerPrediction?palette.red:e.e>=1?palette.yellow:palette.green;
-    $('status-text').textContent=state.ended?'Spacecraft lost':state.repairing?'Repairing hull':state.autopilot?'Autopilot '+state.autopilot.phase:p.thrustVector?'Main engine firing':p.rcsFiring?'RCS firing':e.e>=1?'Escape trajectory':'Coasting (fuel conserved)';
-    $('status-text').style.color=state.ended?palette.red:p.thrustVector?palette.yellow:palette.green;
+    const shipStatus=state.ended?'Spacecraft lost':state.repairing?'Repairing hull':state.autopilot?'Autopilot '+state.autopilot.phase:p.thrustVector?'Main engine firing':p.rcsFiring?'RCS firing':e.e>=1?'Escape trajectory':'Coasting (fuel conserved)';
+    const shipStatusColor=state.ended?palette.red:p.thrustVector?palette.yellow:palette.green;
+    if($('ship-panel')?.dataset.vueManaged!=='true'){
+      $('status-text').textContent=shipStatus;
+      $('status-text').style.color=shipStatusColor;
+    }
     const target=aliveTarget();
     $('target-name').textContent=state.aimMode==='manual'?'MANUAL AIM':target?target.name:'NO CONTACT';
     $('target-state').textContent=state.aimMode==='manual'?'FREE AIM':target?'HOSTILE':'SCANNING';
@@ -954,15 +960,19 @@
     $('sos-btn').textContent=state.rescue?'⚑ ASSISTANCE REQUESTED':'⚑ REQUEST FUEL ASSISTANCE';
     $('escort-help-btn').disabled=persistentFlight||state.ended||!state.ally.alive;
     // Reinforcements are now created by the guarded FastAPI dev endpoint only.
-    $('upgrade-status').textContent=state.predictive?'Installed · lead shot active':'40 ¤';
-    $('trajectory-upgrade-status').textContent=state.trajectoryIntel?'Installed · trajectory overlay active':'25 ¤';
-    $('trajectory-upgrade-btn').textContent=state.trajectoryIntel?'OWNED':'BUY';
-    $('trajectory-upgrade-btn').disabled=state.trajectoryIntel||p.credits<25||state.ended;
+    if(document.querySelector('.upgrades')?.dataset.vueManaged!=='true'){
+      $('upgrade-status').textContent=state.predictive?'Installed · lead shot active':'40 ¤';
+      $('trajectory-upgrade-status').textContent=state.trajectoryIntel?'Installed · trajectory overlay active':'25 ¤';
+      $('trajectory-upgrade-btn').textContent=state.trajectoryIntel?'OWNED':'BUY';
+      $('trajectory-upgrade-btn').disabled=state.trajectoryIntel||p.credits<25||state.ended;
+    }
     const fp=state.ballistic;
     $('shot-time').textContent=fp&&fp.arrivalTime!==null?fp.arrivalTime.toFixed(2)+' s':fp&&fp.status==='planet'?'OBSTRUCTED':'OUT OF RANGE';
     $('shot-miss').textContent=!state.trajectoryIntel?'Requires analyzer':fp&&fp.missKm!==null?fp.missKm.toFixed(1)+' km':'—';
-    $('upgrade-btn').textContent=state.predictive?'OWNED':'BUY';
-    $('upgrade-btn').disabled=state.predictive||p.credits<40||state.ended;
+    if(document.querySelector('.upgrades')?.dataset.vueManaged!=='true'){
+      $('upgrade-btn').textContent=state.predictive?'OWNED':'BUY';
+      $('upgrade-btn').disabled=state.predictive||p.credits<40||state.ended;
+    }
     $('dry-mass').textContent=p.dryMass.toLocaleString()+' kg';
     $('total-mass').textContent=mass(p).toFixed(1)+' kg';
     $('main-thrust').textContent=(p.thrustN/1e6).toFixed(1)+' MN';
@@ -970,11 +980,13 @@
     $('exhaust-vel').textContent=exhaustKmS.toFixed(0)+' km/s';
     $('ship-heading').textContent=(p.heading*180/Math.PI).toFixed(0)+'°';
     $('spin-value').textContent=(p.omega*180/Math.PI).toFixed(1)+'°/s';
-    $('nav-upgrade-status').textContent=state.navOwned?'Installed':'60 ¤';
-    $('nav-upgrade-btn').textContent=state.navOwned?'OWNED':'BUY';
-    $('nav-upgrade-btn').disabled=state.navOwned||p.credits<60||state.ended;
+    if(document.querySelector('.upgrades')?.dataset.vueManaged!=='true'){
+      $('nav-upgrade-status').textContent=state.navOwned?'Installed':'60 ¤';
+      $('nav-upgrade-btn').textContent=state.navOwned?'OWNED':'BUY';
+      $('nav-upgrade-btn').disabled=state.navOwned||p.credits<60||state.ended;
+    }
     $('autopilot-chip').textContent=state.navOwned?'ONLINE':'LOCKED';
-    if($('ephemeris-upgrade-btn')){
+    if(document.querySelector('.upgrades')?.dataset.vueManaged!=='true'&&$('ephemeris-upgrade-btn')){
       $('ephemeris-upgrade-status').textContent=state.ephemerisOwned?'Installed · orbit projection':'45 ¤';
       $('ephemeris-upgrade-btn').textContent=state.ephemerisOwned?'OWNED':'BUY';
       $('ephemeris-upgrade-btn').disabled=state.ephemerisOwned||p.credits<45||state.ended;
@@ -989,7 +1001,20 @@
     $('nav-abort').disabled=!state.autopilot;
     $('nav-quick-status').textContent=state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED';
     $('nav-quick-metrics').textContent=state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${state.navPlan.safety.estimatedKg.toFixed(1)} kg ideal · ${state.navPlan.safety.reserveKg.toFixed(0)} kg reserved`: 'Pick a contact · press C to calculate';
-
+    window.dispatchEvent(new CustomEvent('orbital-cockpit-state',{detail:{
+      ship:{
+        hp:p.hp,fuel:p.fuel,fuelMax:p.fuelMax,repairParts:p.repairParts,repairCapacity:REPAIR.capacityKg,
+        ammo:p.ammo,credits:p.credits,deltaV:exhaustKmS*Math.log(mass(p)/(p.dryMass+p.repairParts)),
+        status:shipStatus,statusColor:shipStatusColor,
+        repairDisabled:state.ended||p.hp>=100||p.repairParts<=.00001,
+        repairing:state.down.has('repair')
+      },
+      market:{
+        credits:p.credits,ended:state.ended||!p.alive,
+        owned:{predictive:state.predictive,trajectory:state.trajectoryIntel,
+          ephemeris:state.ephemerisOwned,nav:state.navOwned}
+      }
+    }}));
   }
   function updateZoom(){$('zoom-level').textContent=state.zoom.toFixed(2)+'×';}
   function zoomAt(factor,px=W/2,py=H/2){
@@ -1281,17 +1306,31 @@
     $('zoom-out').addEventListener('click',()=>zoomAt(1/1.25));
     $('next-target').addEventListener('click',selectNextTarget);
     $('lock-btn').addEventListener('click',lockNearest);
-    $('upgrade-btn').addEventListener('click',()=>{if(state.predictive||state.ended)return;if(purchaseUpgrade('predictive'))return;if(state.player.credits<40)return;state.player.credits-=40;state.predictive=true;logEvent('Predictive fire control installed.','good');state.lastBallistic=-999;updateHud();});
-    $('trajectory-upgrade-btn').addEventListener('click',()=>{if(state.trajectoryIntel||state.ended)return;if(purchaseUpgrade('trajectory'))return;if(state.player.credits<25)return;state.player.credits-=25;state.trajectoryIntel=true;state.lastBallistic=-999;logEvent('Target trajectory analyzer installed.','good');updateHud();});
-    // No reinforcement control in the connected cockpit; use POST /api/dev/players/{pilot_id}/raiders.
-    $('nav-upgrade-btn').addEventListener('click',()=>{if(state.navOwned||state.ended)return;if(purchaseUpgrade('nav'))return;if(state.player.credits<60)return;state.player.credits-=60;state.navOwned=true;logEvent('Rendezvous intelligence installed.','good');updateHud();});
-    $('ephemeris-upgrade-btn')?.addEventListener('click',()=>{
-      if(state.ephemerisOwned||state.ended)return;
-      if(purchaseUpgrade('ephemeris'))return;
-      if(state.player.credits<45)return;
-      state.player.credits-=45;state.ephemerisOwned=true;
-      logEvent('Orbital ephemeris computer installed.','good');updateHud();
-    });
+    const technologies={
+      predictive:{flag:'predictive',price:40,name:'Predictive fire control'},
+      trajectory:{flag:'trajectoryIntel',price:25,name:'Target trajectory analyzer'},
+      ephemeris:{flag:'ephemerisOwned',price:45,name:'Ephemeris computer'},
+      nav:{flag:'navOwned',price:60,name:'Rendezvous computer'}
+    };
+    function buyTechnology(key){
+      const tech=technologies[key];
+      if(!tech||state.ended||state[tech.flag])return;
+      if(purchaseUpgrade(key))return;
+      if(state.player.credits<tech.price)return;
+      state.player.credits-=tech.price;
+      state[tech.flag]=true;
+      state.lastBallistic=-999;
+      logEvent(tech.name+' installed.','good');
+      updateHud();
+    }
+    window.addEventListener('orbital-market-purchase',e=>buyTechnology(e.detail?.upgrade));
+    if(!document.querySelector('.upgrades[data-vue-managed="true"]')){
+      for(const [key,id] of [
+        ['predictive','upgrade-btn'],['trajectory','trajectory-upgrade-btn'],
+        ['ephemeris','ephemeris-upgrade-btn'],['nav','nav-upgrade-btn']
+      ])$(id)?.addEventListener('click',()=>buyTechnology(key));
+    }
+    // NPC reinforcement spawning is available only via the FastAPI development API.
     $('nav-plan').addEventListener('click',planNav);
     $('nav-engage').addEventListener('click',purchaseOrEngage);
     $('nav-next').addEventListener('click',cycleNavigationTarget);
