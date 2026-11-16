@@ -38,7 +38,7 @@ test('client routes and Vite proxy have no /api prefix',()=>{
   assert.match(proxy,/'\/players':/);
   assert.match(proxy,/'\/worlds':/);
   assert.match(proxy,/'\/dev':/);
-  assert.match(persistence,/\+'\/players\/\+'/);
+  assert.ok(persistence.includes("+'/players/'+pilotId()+'/live'"));
   assert.doesNotMatch(persistence,/\/api\/players/);
 });
 
