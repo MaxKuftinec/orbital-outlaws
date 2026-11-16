@@ -108,6 +108,11 @@
     computePrediction();updateShotPreview();updateHud();
   }
   // Temporary dev-only encounter snapshots; browser NPC AI is not server-authoritative yet.
+  function persistEncounterNow(){
+    if(!persistentFlight||!flightOnline)return;
+    pilotLink?.encounter(captureEncounter());
+    state.lastEncounterSave=state.t;
+  }
   function captureEncounter(){
     const compact=ship=>ship?{...ship,trail:[]}:null;
     return {
@@ -494,6 +499,7 @@
     Object.assign(bot,ARRIVAL.inboundState(angle,spawnRadiusKm,rand(-29,-24),rand(10,13),Math.random()<.5?-1:1));
     bot.heading=Math.atan2(bot.vy,bot.vx);
     state.enemies.push(bot);logEvent('Inbound ship detected beyond sector boundary: '+bot.name,'danger');
+    persistEncounterNow();
   }
   function destroyAlly(reason){
     const ally=state.ally;if(!ally.alive)return;
@@ -513,6 +519,7 @@
     if(state.targetId===enemy.id)state.targetId=survivors.length?survivors[0].id:null;
     if(state.autopilot?.targetKey==='enemy:'+enemy.id)abortNav('Target destroyed.');
     updateTargetOptions();
+    persistEncounterNow();
   }
   function collect(pod) {
     pod.alive=false;
@@ -539,6 +546,7 @@
     }
     if(state.autopilot?.targetKey==='pickup:'+pod.id){state.autopilot=null;state.navPlan=null;logEvent('Rendezvous complete. Salvage secured!','good');}
     sparks(pod.x,pod.y,palette.green,12);updateTargetOptions();
+    persistEncounterNow();
   }
   function sparks(x,y,color,n) {
     for(let i=0;i<n;i++){const a=rand(0,TWO_PI),v=rand(6,45);state.particles.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,color,life:rand(.35,1),maxLife:1});}
@@ -1077,10 +1085,7 @@
       if(state.t-state.lastPrediction>.22)computePrediction();
       if(state.t-state.lastBallistic>.1)updateShotPreview();
     }
-    if(persistentFlight&&flightOnline&&state.t-(state.lastEncounterSave??-1)>1.0){
-      pilotLink?.encounter(captureEncounter());
-      state.lastEncounterSave=state.t;
-    }
+    if(persistentFlight&&flightOnline&&state.t-(state.lastEncounterSave??-1)>1.0)persistEncounterNow();
     if(now>nextHud){updateHud();nextHud=now+130;}
     draw();lastFrameId=requestAnimationFrame(frame);
   }
@@ -1198,7 +1203,7 @@
     $('lock-btn').addEventListener('click',lockNearest);
     $('upgrade-btn').addEventListener('click',()=>{if(state.predictive||state.ended)return;if(purchaseUpgrade('predictive'))return;if(state.player.credits<40)return;state.player.credits-=40;state.predictive=true;logEvent('Predictive fire control installed.','good');state.lastBallistic=-999;updateHud();});
     $('trajectory-upgrade-btn').addEventListener('click',()=>{if(state.trajectoryIntel||state.ended)return;if(purchaseUpgrade('trajectory'))return;if(state.player.credits<25)return;state.player.credits-=25;state.trajectoryIntel=true;state.lastBallistic=-999;logEvent('Target trajectory analyzer installed.','good');updateHud();});
-    $('reinforce-btn').addEventListener('click',()=>{state.reinforcements=!state.reinforcements;state.nextEnemySpawn=state.t+rand(35,55);logEvent('Hostile reinforcements '+(state.reinforcements?'enabled.':'disabled.'),state.reinforcements?'danger':'good');updateHud();});
+    $('reinforce-btn').addEventListener('click',()=>{state.reinforcements=!state.reinforcements;state.nextEnemySpawn=state.t+rand(35,55);logEvent('Hostile reinforcements '+(state.reinforcements?'enabled.':'disabled.'),state.reinforcements?'danger':'good');updateHud();persistEncounterNow();});
     $('nav-upgrade-btn').addEventListener('click',()=>{if(state.navOwned||state.ended)return;if(purchaseUpgrade('nav'))return;if(state.player.credits<60)return;state.player.credits-=60;state.navOwned=true;logEvent('Rendezvous intelligence installed.','good');updateHud();});
     $('nav-plan').addEventListener('click',planNav);
     $('nav-engage').addEventListener('click',purchaseOrEngage);
@@ -1243,11 +1248,12 @@
     canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',endPointer);canvas.addEventListener('lostpointercapture',endPointer);
     window.addEventListener('resize',fitCanvas);
     if(typeof ResizeObserver!=='undefined'){const ro=new ResizeObserver(fitCanvas);ro.observe(canvas);}
+    window.addEventListener('pagehide',persistEncounterNow);
     document.addEventListener('visibilitychange',()=>{
       lastFrame=performance.now();accumulator=0;
       if(document.hidden){state.down.clear();state.pointerThrust=false;
         if(state.autopilot)abortNav('Autopilot halted when cockpit tab became hidden.');
-        if(persistentFlight&&flightOnline)pilotLink?.encounter(captureEncounter());
+        persistEncounterNow();
       }
     });
   }
@@ -1282,8 +1288,7 @@
           $('reset-btn').textContent='⌖ Recenter view';
           $('reset-btn').title='Recenter map without resetting any persistent ships or combat.';
           state.autopilot=null;
-          pilotLink?.encounter(captureEncounter());
-          state.lastEncounterSave=state.t;
+          persistEncounterNow();
           logEvent('Live flight and technology connected. Encounter checkpoint active.','good');
         }else{
           if(state.autopilot)abortNav('Connection lost; autopilot guidance halted.');
