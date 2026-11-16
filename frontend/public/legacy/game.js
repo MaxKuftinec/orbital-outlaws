@@ -66,6 +66,11 @@
   }
   function escapeHtml(str) { return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
   function reset() {
+    if(persistentFlight&&state){
+      state.panX=0;state.panY=0;state.zoom=1;updateZoom();
+      logEvent('View recentered; live encounter and pilot remain unchanged.','good');
+      return;
+    }
     const oldPilot = persistentFlight && state ? state.player : null;
     const oldTech = persistentFlight && state ? {predictive:state.predictive,trajectoryIntel:state.trajectoryIntel,navOwned:state.navOwned} : null;
     const player = newShip('player','KESTREL-7',260,-0.67,palette.cyan,true);
@@ -101,6 +106,34 @@
     logEvent('Press H or click REQUEST FUEL ASSISTANCE to call AEGIS-01.');
     updateTargetOptions();
     computePrediction();updateShotPreview();updateHud();
+  }
+  // Temporary dev-only encounter snapshots; browser NPC AI is not server-authoritative yet.
+  function captureEncounter(){
+    const compact=ship=>ship?{...ship,trail:[]}:null;
+    return {
+      t:state.t,targetId:state.targetId,reinforcements:state.reinforcements,
+      nextEnemySpawn:state.nextEnemySpawn,playerKills:state.playerKills,
+      enemies:state.enemies.map(compact),ally:compact(state.ally),
+      pickups:state.pickups.map(p=>({...p}))
+    };
+  }
+  function restoreEncounter(checkpoint){
+    if(!checkpoint?.snapshot)return;
+    const saved=checkpoint.snapshot;
+    if(!Array.isArray(saved.enemies)||!Array.isArray(saved.pickups)||!saved.ally)return;
+    state.enemies=saved.enemies.map(e=>({...e,trail:[]}));
+    state.ally={...saved.ally,trail:[]};
+    state.pickups=saved.pickups;
+    state.t=saved.t||0;
+    state.reinforcements=!!saved.reinforcements;
+    state.nextEnemySpawn=saved.nextEnemySpawn||state.t+60;
+    state.playerKills=saved.playerKills||0;
+    state.targetId=saved.targetId;
+    state.lastEncounterSave=state.t;
+    updateTargetOptions();
+    state.lastPrediction=-999;state.lastBallistic=-999;
+    logEvent('Existing raiders and salvage resumed from PostgreSQL.','good');
+    updateHud();
   }
   function accel(x,y) {
     const r2 = Math.max(x*x+y*y, 10);
@@ -1044,6 +1077,10 @@
       if(state.t-state.lastPrediction>.22)computePrediction();
       if(state.t-state.lastBallistic>.1)updateShotPreview();
     }
+    if(persistentFlight&&flightOnline&&state.t-(state.lastEncounterSave??-1)>1.0){
+      pilotLink?.encounter(captureEncounter());
+      state.lastEncounterSave=state.t;
+    }
     if(now>nextHud){updateHud();nextHud=now+130;}
     draw();lastFrameId=requestAnimationFrame(frame);
   }
@@ -1206,12 +1243,18 @@
     canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',endPointer);canvas.addEventListener('lostpointercapture',endPointer);
     window.addEventListener('resize',fitCanvas);
     if(typeof ResizeObserver!=='undefined'){const ro=new ResizeObserver(fitCanvas);ro.observe(canvas);}
-    document.addEventListener('visibilitychange',()=>{lastFrame=performance.now();accumulator=0;if(document.hidden){state.down.clear();state.pointerThrust=false;}});
+    document.addEventListener('visibilitychange',()=>{
+      lastFrame=performance.now();accumulator=0;
+      if(document.hidden){state.down.clear();state.pointerThrust=false;
+        if(persistentFlight&&flightOnline)pilotLink?.encounter(captureEncounter());
+      }
+    });
   }
   bindControls();updateHotkeyHints();reset();fitCanvas();lastFrameId=requestAnimationFrame(frame);
   if(window.OrbitalPersistence){
     pilotLink=window.OrbitalPersistence.attach({
       controls:flightControls,
+      onEncounter:restoreEncounter,
       onState:result=>{
         const p=state.player;
         reconcileFlight(p,result.state,result.clientSampleMs||performance.now());
@@ -1235,8 +1278,8 @@
         if(online){
           persistentFlight=true;
           state.speed=1;
-          $('reset-btn').textContent='↻ Reset encounter';
-          $('reset-btn').title='Resets local combat only; persistent ship position and fuel are preserved.';
+          $('reset-btn').textContent='⌖ Recenter view';
+          $('reset-btn').title='Recenter map without resetting any persistent ships or combat.';
           state.autopilot=null;
           logEvent('Live flight and technology connected. Combat remains local.','good');
         }else{
