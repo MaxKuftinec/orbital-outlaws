@@ -65,12 +65,9 @@ def test_heavy_fast_salvage_cannot_exceed_tether_braking_distance():
     pod={'id':'wreck','alive':True,'type':'wreck','amount':50.,
          'massKg':120.,'x':17.,'y':0.,'vx':4.,'vy':0.}
     arm,reason=begin_tether(ship,pod,120.,0.,True)
-    assert arm is not None,reason  # passes speed, heat and mass contact checks
-    before=(ship['vx'],pod['vx'])
-    step=step_tether(ship,pod,arm,.25,True)
-    assert step.status=='broken'
-    assert 'braking distance' in step.reason
-    assert (ship['vx'],pod['vx'])==before  # no nonphysical impulse on failure
+    assert arm is None  # Preflight refusal prevents unnecessary hull damage.
+    assert 'braking distance' in reason
+    assert (ship['vx'],pod['vx'])==(0.,4.)  # no nonphysical impulse on refusal
 
 
 def test_tether_breaks_when_line_overextends_or_heat_capacity_would_fail():
