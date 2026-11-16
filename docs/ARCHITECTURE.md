@@ -66,8 +66,8 @@ This initial version is pilot-scoped. Player flight and propellant remain in \`e
 
 ## v0.13 incoming faction visitors, reward accounting, Vue panel migration
 
-The development-only `POST /api/dev/players/{pilot_id}/raiders` and
-`POST /api/dev/players/{pilot_id}/allies` each create one ship inside the
+The development-only `POST /dev/players/{pilot_id}/raiders` and
+`POST /dev/players/{pilot_id}/allies` each create one ship inside the
 pilot's persisted `encounter_snapshots`. Arrivals start beyond 950 km from
 Kestrel with negative radial velocity and positive two-body orbital energy.
 Each independently receives a 50/50 `flyby`/`orbit` arrival intention.
@@ -102,7 +102,13 @@ the final physical finite-burn guidance system.
 New player accounts and explicitly respawned destroyed pilots start in
 the same outer region with random 360-degree launch velocity, but pilot
 attitude and arrival guidance are manual; the server does not burn fuel
-without control inputs. Dev-only POST /api/dev/players/{pilot_id}/respawn
+without control inputs. Dev-only POST /dev/players/{pilot_id}/respawn
 updates the player entity checkpoint, resets flight control, restores
 player-only hull/ammo/spares, and appends a respawn event, leaving the
 pilot's technology/credits and independent NPC sector intact.
+
+## v0.15 Vue instrument and autonomous support boundary
+
+Telemetry, Targeting and Navigation are Vue Options API state/event consumers. The canvas drawing code has moved to `frontend/public/legacy/rendering.js`, while the legacy script still owns simulation state, animation scheduling and inputs. `WebSocket /players/{pilot_id}/live` and REST `/players`, `/worlds`, `/dev` intentionally omit `/api`; Vite proxies these root paths. Planetary motion and salvage collisions remain server-owned during persistent play. Salvage encounters now check swept proximity (19 km) but require relative velocity under 5 km/s; a high-speed flyby is reported, not captured. Friendly and hostile NPC factions can autonomously redistribute propellant with mass-conserving, low-velocity rendezvous support. Player-to-ally donations are server-authorized, guarded by close approach, and deduct real player fuel/mass. This is an incremental NPC heuristic, not optimal low-thrust guidance or shared-world causality.
+
+Respawning destroyed pilots restores starter credits and loses upgrades, without erasing their NPC sector. The dead camera is never overlaid by an opaque modal so spectators can continue observing.
