@@ -39,7 +39,7 @@ test('a server snapshot never snaps heading; correction converges across frames'
 });
 
 test('browser predicts continuous flight between network snapshots', () => {
-  assert.match(game,/if\(flightOnline\)\{\s*\/\/ Immediate local prediction[\s\S]*?applyShipStep\(player,dt\);\s*applyFlightCorrection\(player,dt\);/);
+  assert.match(game,/if\(player\.alive&&flightOnline\)\{\s*applyShipStep\(player,dt\);\s*applyFlightCorrection\(player,dt\);/);
   assert.match(game,/flightHistory\.push\(/);
   assert.match(game,/controls:flightControls/);
   assert.match(game,/if\(persistentFlight && \(a\.isPlayer\|\|b\.isPlayer\)\)continue/);
