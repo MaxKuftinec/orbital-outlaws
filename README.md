@@ -1,4 +1,4 @@
-# Orbital Outlaws — v0.14 random arrivals and player respawn
+# Orbital Outlaws — v0.15 Vue instruments, salvage flybys and fuel cooperation
 
 A persistent 2D Newtonian orbital combat prototype using **Vue 3 + Vuetify (Options API)**, **FastAPI**, **PostgreSQL** and a bidirectional **WebSocket**.
 
@@ -43,7 +43,7 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:5173. Vite proxies WebSocket `/api` to FastAPI and maps `/backend-health` to the backend root.
+Open http://localhost:5173. Vite proxies `/players` (including WebSocket), `/worlds` and `/dev` to FastAPI and maps `/backend-health` to the backend root.
 
 ## Gameplay
 
@@ -62,7 +62,7 @@ Technology purchases are persistent in PostgreSQL. Each has a compact ability-st
 
 Trajectory predictions assume **unpowered Kepler motion**. Future burns, impacts or NPC decisions can invalidate them.
 
-**Comms & Events now itemizes salvage rewards**, using the server's actual awarded amounts rather than the pickup label: for example `+18.0 kg propellant`, `+12 rounds`, `+50 ¤` or `+2.0 kg spare parts` on a capacity-limited wreck. Full tanks and full parts capacity no longer consume pickups without giving a benefit.
+**Comms & Events now itemizes salvage rewards**, using the server's actual awarded amounts rather than the pickup label: for example `+18.0 kg propellant`, `+12 rounds`, `+50 ¤` or `+2.0 kg spare parts` on a capacity-limited wreck. Full tanks and full parts capacity no longer consume pickups without giving a benefit. Salvage capture requires being within 19 km and moving slower than 5 km/s **relative to the pickup**. Swept encounters are now checked to detect high-speed fly-throughs; those are logged but **not recovered**. To collect a counter-orbiting wreck, first slow down and match its velocity.
 
 ### Spawn incoming raiders or allies from FastAPI (development only)
 
@@ -72,8 +72,8 @@ The cockpit has no reinforcement toggle. Instead, each POST creates **exactly on
 # Get the current pilot ID in the browser DevTools console:
 # localStorage.getItem('orbital-outlaws.pilot.v1')
 $pilot = "YOUR_32_CHARACTER_PILOT_ID"
-Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/dev/players/$pilot/raiders"
-Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/dev/players/$pilot/allies"
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/dev/players/$pilot/raiders"
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/dev/players/$pilot/allies"
 ```
 
 Each successful request adds one uniquely identified ship to the pilot's persistent sector; it appears in the next WebSocket snapshot. The pilot must already exist. Both factions spawn **outside** the operational orbital region, with independent uniformly random **360° initial velocity direction** (speed 20–32 km/s). After 2.5 seconds, their mission computer burns propellant to steer onto a targeted hyperbolic Kestrel approach. A fair 50/50 decision chooses **flyby** (approach burn only, then depart) or **orbit insertion** (an additional circularization burn near periapsis). The chosen orbital sense is based on initial angular momentum, so visitors may orbit in either direction. The response includes `intent`, faction, initial heading, orbital sense, and new ship ID. These are idealized instantaneous impulses, not finite-duration thruster maneuvers. Initial sector residents retain their existing established orbits. This endpoint requires `ORBITAL_DEV_COMMANDS=1`; it has **no user authentication**, so keep the backend bound to a trusted development network and never enable these commands on a public service.
@@ -81,12 +81,12 @@ Each successful request adds one uniquely identified ship to the pilot's persist
 ### Respawn a destroyed pilot (development only)
 
 Restarting FastAPI or refreshing the browser **does not** respawn a destroyed pilot.
-To replace only the destroyed spacecraft, keeping the same pilot ID, credits,
-technology, NPCs and world state, use Swagger at http://127.0.0.1:8000/docs or:
+A dead pilot can continue watching, panning and zooming the sector without a blackout overlay.
+To replace only the destroyed spacecraft, keeping the same pilot ID, NPCs and world state but **resetting credits to 65 and clearing purchased technologies**, use Swagger at http://127.0.0.1:8000/docs or:
 
 ```powershell
 $pilot = "YOUR_32_CHARACTER_PILOT_ID"
-Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/dev/players/$pilot/respawn"
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/dev/players/$pilot/respawn"
 ```
 
 Retrieve your pilot ID in browser DevTools with:
@@ -98,7 +98,7 @@ localStorage.getItem('orbital-outlaws.pilot.v1')
 The endpoint is dev-only (`ORBITAL_DEV_COMMANDS=1`). It returns **409** when the
 pilot is still alive and **404** for unknown pilot IDs. It restores 100% hull,
 200 kg fuel, 36 rounds and 10 kg spare parts, resets control leases, and
-preserves other progression and sector inhabitants. A replacement ship and
+resets purchased technology and credits, while preserving sector inhabitants. A replacement ship and
 **new pilot accounts** now spawn beyond 950 km with independently randomized
 velocity heading (full 360°); the pilot steers manually, unlike programmed
 NPC flyby/orbit missions. The game camera recenters on respawn; no new
@@ -107,13 +107,15 @@ respawn button was added to the cockpit.
 **Friendly Escort panel:** This reports the original AEGIS-01 resident's hull,
 ammunition and propellant. Additional allied visitors appear on the map and
 in Navigation, but are not yet aggregated into this panel. Its fuel-assistance
-button remains disabled in connected authoritative mode because server-side
-rescue transfers have not been implemented.
+button now queues a server-authoritative rescue mission. You can offer up to 20 kg to a selected
+ally using the escort panel; the two ships must be within 18 km with relative speed below 2.5 km/s,
+and the player keeps at least 25 kg fuel. Allied NPCs and raiders can autonomously assist their
+own low-fuel faction members with fuel-reserving rendezvous and transfers.
 ### Gradual Vue migration
 
 **Migrated:** `CommsPanel.vue`, `ShipPanel.vue` and `TechnologyMarket.vue`, all using Vue **Options API**. The legacy game emits typed `orbital-comms` and `orbital-cockpit-state` events through the interfaces in `frontend/src/services/`. Vue now renders Comms messages, ship hull/fuel/ammo/credits and technology ownership with reactive state. Market purchases flow back through `orbital-market-purchase` actions rather than raw button event listeners. The old standalone HTML retains a compatibility DOM path.
 
-**Next:** migrate the remaining Telemetry, Targeting and Navigation panels, then gradually move input, networking, and canvas rendering into dedicated TypeScript services while keeping orbital physics framework-independent.
+**v0.15:** Telemetry, Targeting and Navigation instruments are Vue Options API components bound to typed state events; `frontend/public/legacy/rendering.js` isolates the canvas draw functions from the simulation. Simulation input and WebSocket networking remain in legacy JavaScript for the next migration.
 
 ### HUD customization
 
@@ -179,3 +181,13 @@ Use a **separate** PostgreSQL test database. Without `TEST_DATABASE_URL`, databa
 ## Security and next architecture milestone
 
 The development live WebSocket uses anonymous browser pilot IDs; **never expose `ORBITAL_DEV_COMMANDS=1` publicly**. Authentication, shared world-region authority, continuous multi-sector NPC scheduling, efficient causal collision/event queues, and mature migration tooling remain future work. The offline `orbital-outlaws.html` is an older local-only build, not the v0.11 connected client.
+
+## Fuel support and collision behavior (v0.15)
+
+The UI **Request Fuel Assistance** button sends a persistent WebSocket support request. The server chooses an allied donor, guides it with limited impulse corrections, requires a genuine low-relative-speed rendezvous and transfers mass from the donor's tank. NPCs may also ask friendly NPCs (including same-faction raiders) for assistance automatically. This remains rudimentary AI, not yet a globally optimized transfer planner.
+
+To assist an ally, select a friendly target in Navigation, get within **18 km** and **2.5 km/s** relative speed, then click **Offer 20 kg to selected ally**. The server limits each transfer to 35 kg, honors a 25 kg donor reserve and never creates free fuel.
+
+Developers can alternatively use `POST /players/{pilot_id}/request-assistance` with `{\"recipient\":\"player\"}` and `POST /players/{pilot_id}/offer-fuel` with `{\"target\":\"ally-01\",\"kg\":20}`. These endpoints require `ORBITAL_DEV_COMMANDS=1`. In Swagger at `http://127.0.0.1:8000/docs` no `/api` prefix is used.
+
+**Rendezvous diagnostics:** When a sampled route fails, Comms distinguishes a transfer above the fuel budget from a transfer that the finite two-impulse search couldn't solve. Opposite-sense/counter-orbiting objects can require substantial braking; visual overlap alone is not a safe capture.
