@@ -1,10 +1,9 @@
-"""Explicit PostgreSQL development resets. This command never runs on import."""
+"""Explicit PostgreSQL development resets. This command never runs on import"""
 from __future__ import annotations
 
 import argparse
 import os
 import re
-from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy import delete
@@ -12,7 +11,7 @@ from sqlalchemy import delete
 from .models import Entity, Event, FlightControl, PlayerProgress, SalvageClaim, EncounterSnapshot, Base, World
 from .store import WorldStore
 
-load_dotenv(Path(__file__).resolve().parents[1] / '.env')
+load_dotenv()
 
 
 def reset_pilot(store: WorldStore, pilot_id: str):
@@ -47,10 +46,10 @@ def main():
         Base.metadata.drop_all(store.engine)
         Base.metadata.create_all(store.engine)
         store.ensure_world()
-        print('Entire development universe reset. All pilots and progress cleared.')
+        print('Entire development universe reset. All pilots and progress cleared')
     else:
         reset_pilot(store, args.pilot)
-        print('Pilot reset. Reload the browser to spawn a fresh spacecraft.')
+        print('Pilot reset. Reload the browser to spawn a fresh spacecraft')
 
 
 if __name__ == '__main__':
