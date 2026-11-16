@@ -66,49 +66,69 @@
     if(persist)save();
     refreshButtons(panel);
   }
-  function minimize(panel,collapsed){
+  function setCollapsed(panel,collapsed,persist=true){
     panel.classList.toggle('hud-minimized',collapsed);
+    if(panel.id==='nav-command'||panel.id==='telemetry-console')
+      panel.classList.toggle('collapsed',collapsed);
+    const title=panel.querySelector('[data-panel-collapse]');
+    title?.setAttribute('aria-expanded',String(!collapsed));
+    if(panel.id==='telemetry-console'){
+      const arrow=document.getElementById('telemetry-toggle-arrow');
+      if(arrow)arrow.textContent=collapsed?'▾':'▴';
+    }
     layout[panel.id]={...layout[panel.id],collapsed};
-    save();
-    refreshButtons(panel);
+    if(persist)save();
     restorePosition(panel);
   }
   function refreshButtons(panel){
     const inside=panel.classList.contains('hud-in-canvas');
-    panel.querySelector('[data-panel-dock]').textContent=inside?'↗':'↙';
-    panel.querySelector('[data-panel-dock]').title=inside?'Move panel to sidebar':'Move panel into canvas';
-    panel.querySelector('[data-panel-minimize]').textContent=panel.classList.contains('hud-minimized')?'▢':'−';
-    panel.querySelector('[data-panel-minimize]').title=panel.classList.contains('hud-minimized')?'Expand panel':'Minimize panel';
+    const dockButton=panel.querySelector('[data-panel-dock]');
+    dockButton.textContent=inside?'↗':'↙';
+    dockButton.title=inside?'Move panel to sidebar':'Move panel into canvas';
   }
   for(const definition of panels){
     const panel=document.getElementById(definition.id);
     if(!panel)continue;
-    const header=panel.querySelector('.panel-heading,.nav-command-head')||
-      (()=>{const row=document.createElement('div');row.className='hud-heading';row.textContent=definition.title;
-        panel.insertBefore(row,panel.firstChild);return row;})();
+    let header=panel.querySelector('.panel-heading,.nav-command-head');
+    if(!header){
+      header=document.createElement('div');
+      header.className='hud-heading';
+      panel.insertBefore(header,panel.firstChild);
+      if(panel.id==='telemetry-console'){
+        const existingToggle=panel.querySelector('#telemetry-toggle');
+        if(existingToggle)header.append(existingToggle);
+      }
+    }
     panel.classList.add('hud-panel');
     panel.dataset.panelTitle=definition.title;
-    let handle=header.querySelector('[data-drag-handle]');
+    let handle=panel.querySelector('[data-drag-handle]');
     if(!handle){
       handle=document.createElement('button');
       handle.type='button';handle.textContent='⠿';
       handle.className='panel-drag-handle';handle.dataset.dragHandle='';
       handle.title='Drag floating panel';
-      header.prepend(handle);
-    }else if(handle.parentElement!==header)header.prepend(handle);
-    for(const kind of ['minimize','dock']){
-      const button=document.createElement('button');
-      button.type='button';button.className='hud-tool';
-      button.dataset['panel'+kind[0].toUpperCase()+kind.slice(1)]='';
-      button.addEventListener('click',()=>{
-        if(kind==='dock')dock(panel,!panel.classList.contains('hud-in-canvas'));
-        else minimize(panel,!panel.classList.contains('hud-minimized'));
-      });
-      header.append(button);
     }
-    // Restore persisted inside/outside choice and collapsed state.
+    header.prepend(handle);
+    let title=header.querySelector('#nav-toggle,#telemetry-toggle');
+    if(!title){
+      const label=header.querySelector('span');
+      title=document.createElement('button');
+      title.type='button';title.className='hud-collapse-title';
+      title.textContent=label?.textContent?.trim()||definition.title;
+      if(label)label.replaceWith(title);
+      else header.append(title);
+      title.addEventListener('click',()=>setCollapsed(panel,!panel.classList.contains('hud-minimized')));
+    }
+    title.dataset.panelCollapse='';
+    const dockButton=document.createElement('button');
+    dockButton.type='button';dockButton.className='hud-tool';
+    dockButton.dataset.panelDock='';
+    dockButton.setAttribute('aria-label','Move panel between canvas and sidebar');
+    dockButton.addEventListener('click',()=>dock(panel,!panel.classList.contains('hud-in-canvas')));
+    header.append(dockButton);
+    // Existing Navigation/Telemetry title buttons keep their original click handlers.
     dock(panel,layout[panel.id]?.inside??definition.inside,false);
-    if(layout[panel.id]?.collapsed)panel.classList.add('hud-minimized');
+    setCollapsed(panel,layout[panel.id]?.collapsed??panel.classList.contains('collapsed'),false);
     refreshButtons(panel);
 
     handle.addEventListener('pointerdown',event=>{
@@ -147,11 +167,14 @@
   }
 
   // HUD picker remains visible in fullscreen even when a panel is outside the map.
+  const toolbar=document.createElement('div');
+  toolbar.className='hud-toolbar';
   const picker=document.createElement('button');
   picker.type='button';picker.className='hud-picker';picker.textContent='☷ Panels';
   const menu=document.createElement('div');
   menu.className='hud-picker-menu';menu.hidden=true;
-  workspace.append(picker,menu);
+  workspace.append(toolbar);
+  toolbar.append(picker,fullscreen,menu);
   function renderMenu(){
     menu.replaceChildren();
     for(const definition of panels){
@@ -172,8 +195,8 @@
       save();
       panels.forEach(definition=>{
         const panel=document.getElementById(definition.id);
-        panel.classList.remove('hud-minimized');
         dock(panel,definition.inside);
+        setCollapsed(panel,definition.id==='telemetry-console');
       });
       renderMenu();
     });
@@ -201,6 +224,12 @@
   window.addEventListener('resize',()=>panels.forEach(({id})=>restorePosition(document.getElementById(id))));
   rootlessExpose();
   function rootlessExpose(){
-    window.OrbitalHUD={resetLayout:()=>{localStorage.removeItem(storageKey);location.reload();}};
+    window.OrbitalHUD={
+      togglePanelById:id=>{
+        const panel=document.getElementById(id);
+        if(panel)setCollapsed(panel,!panel.classList.contains('hud-minimized'));
+      },
+      resetLayout:()=>{localStorage.removeItem(storageKey);location.reload();}
+    };
   }
 })();
