@@ -23,6 +23,12 @@ class StubStore:
     def player_progress(self, pilot_id):
         return {'credits':self.credits,'upgrades':dict(self.upgrades)}
 
+    def player_encounter(self, pilot_id):
+        return getattr(self,'encounter',None)
+
+    def save_encounter(self,pilot_id,snapshot):
+        self.encounter={'saved_at_utc':12345.,'snapshot':snapshot}
+
     def player_input(self, pilot_id, thrust, turn, stabilize, gimbal):
         self.version += 1
         return self.get_entity('kestrel','pilot-'+pilot_id)

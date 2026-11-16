@@ -4,7 +4,7 @@ Collision graph / active thrusters are not yet authoritative. The safe role of t
 first API is durable snapshots, impulsive manoeuvre events and Kepler coasts
 """
 from __future__ import annotations
-import math, time, json
+import math, time, json, copy
 from sqlalchemy import create_engine, select, and_, or_
 from sqlalchemy.orm import sessionmaker
 from .models import Base, World, Entity, Event, FlightControl, PlayerProgress, SalvageClaim, EncounterSnapshot
@@ -81,7 +81,23 @@ class WorldStore:
     def player_encounter(self,pilot_id: str):
         with self.sessions() as db:
             saved=db.get(EncounterSnapshot,'pilot-'+pilot_id)
-            return {'saved_at_utc':saved.saved_at_utc,'snapshot':saved.snapshot} if saved else None
+            if not saved:return None
+            snapshot=copy.deepcopy(saved.snapshot)
+            elapsed=max(0.,time.time()-saved.saved_at_utc)
+            world=db.get(World,'kestrel')
+            for body in [*snapshot.get('enemies',[]),snapshot.get('ally'),*snapshot.get('pickups',[])]:
+                if not isinstance(body,dict) or not body.get('alive',True):continue
+                try:
+                    state=propagate(State(body['x'],body['y'],body['vx'],body['vy'],
+                                          heading=body.get('heading',0),
+                                          omega=body.get('omega',0)),elapsed,world.mu)
+                except (ValueError,OverflowError,KeyError,TypeError):
+                    continue
+                for field in ('x','y','vx','vy','heading','omega'):
+                    if field in body:body[field]=getattr(state,field)
+                if math.hypot(state.x,state.y)<91:body['alive']=False
+            snapshot['t']=snapshot.get('t',0)+elapsed
+            return {'saved_at_utc':saved.saved_at_utc,'snapshot':snapshot}
 
     def save_encounter(self,pilot_id: str,snapshot: dict):
         """Development-only NPC checkpoint. Never considered authoritative combat."""
