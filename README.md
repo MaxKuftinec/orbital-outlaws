@@ -1,4 +1,4 @@
-# Orbital Outlaws — persistent flight preview
+# Orbital Outlaws — v0.8 persistent flight preview
 
 > **Partial migration.** Vue still runs the v0.6 local combat prototype. With PostgreSQL and `ORBITAL_DEV_COMMANDS=1`, **the player's orbital position, velocity, heading, rotation and propellant are backend-authoritative** and survive browser refresh and offline time. NPCs, combat, damage, salvage, inventory, upgrades and autopilot are still local and **do not persist**.
 
