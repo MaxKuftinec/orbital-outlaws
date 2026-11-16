@@ -141,11 +141,18 @@
     state.playerKills=saved.playerKills||0;
     if(saved.player){
       const p=state.player,info=saved.player;
+      const revived=!p.alive&&info.alive;
       p.hp=info.hp;p.ammo=info.ammo;p.repairParts=info.repairParts;p.alive=info.alive;
+      if(revived){
+        state.ended=false;state.autopilot=null;state.navPlan=null;state.down.clear();
+        state.panX=-p.x*scale();state.panY=-p.y*scale();
+        correction=null;flightHistory=[];
+        logEvent('Replacement spacecraft received from FastAPI. Manual approach controls ready.','good');
+      }
       if(!p.alive){
         if(state.autopilot)abortNav('Spacecraft destroyed; guidance terminated.');
         state.down.clear();
-        $('game-over-details').textContent='Your ship was destroyed in the persistent sector. Reset your development pilot to respawn.';
+        $('game-over-details').textContent='Ship destroyed. Use POST /api/dev/players/{pilot_id}/respawn in your local FastAPI /docs, then resume.';
         $('game-over').classList.remove('hidden');
       }else $('game-over').classList.add('hidden');
     }
@@ -243,7 +250,8 @@
   function reconcileFlight(p,s,atMs){
     const reference=flightHistory.reduce((nearest,sample)=>
       Math.abs(sample.ms-atMs)<Math.abs(nearest.ms-atMs)?sample:nearest,flightHistory[0]);
-    if(!persistentFlight||!flightOnline||!reference||Math.abs(reference.ms-atMs)>500){
+    if(!persistentFlight||!flightOnline||!reference||Math.abs(reference.ms-atMs)>500||
+       Math.hypot(p.x-s.x,p.y-s.y)>150){
       for(const key of ['x','y','vx','vy','heading','omega'])p[key]=s[key];
       p.fuel=s.fuel_kg;
       p.dryMass=s.mass_kg-s.fuel_kg-p.repairParts;
