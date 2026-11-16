@@ -28,7 +28,7 @@ uvicorn app.main:app --reload --port 8000
 # http://localhost:8000/docs
 ```
 
-By default the backend uses persistent **SQLite** `backend/orbital-outlaws.db` for an easy local demo. Set `DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/orbital_outlaws` to run on PostgreSQL. `Base.metadata.create_all` creates foundational tables in a new database; production will need Alembic migrations
+PostgreSQL is required. Copy `backend/.env.example` to `backend/.env` and set `DATABASE_URL` to an existing PostgreSQL database. The backend loads it automatically. `Base.metadata.create_all` creates tables (not the database); production will need Alembic migrations
 
 The API has `/`, `/api/worlds/kestrel`, `/api/worlds/kestrel/viewport?cx=0&cy=0&radius_km=700`, and entity state/command endpoints. Initial world is empty, so viewport returns no entities until development code seeds them
 

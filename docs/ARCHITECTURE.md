@@ -35,6 +35,6 @@ The authoritative world clock is a stored epoch; a query `at_s` is seconds since
 
 ## Schema and scale plan
 
-`worlds` stores the gravity parameter and epoch; `entities` stores last checkpoint, current orbital envelope and version; `events` stores post-event states and idempotent command IDs. SQLite enables immediate local testing, PostgreSQL is supported by the SQLAlchemy URL and should be used for production. Avoid per-frame database writes.
+`worlds` stores the gravity parameter and epoch; `entities` stores last checkpoint, current orbital envelope and version; `events` stores post-event states and idempotent command IDs. PostgreSQL is required; its URL is loaded from `backend/.env`. Avoid per-frame database writes.
 
 For interacting bodies: durable event queue; coarse radial/spatial orbit indexes; exact predicted encounter times; transactional resolution with locks in deterministic `(at_s,event_priority,entity_id)` order. Cross-sector dependencies cannot be resolved by eagerly updating only the queried entity.

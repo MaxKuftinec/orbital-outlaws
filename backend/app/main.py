@@ -1,5 +1,7 @@
 from __future__ import annotations
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from fastapi import FastAPI, HTTPException, Query
@@ -7,10 +9,11 @@ from pydantic import BaseModel, Field
 from .physics import State
 from .store import WorldStore
 
+load_dotenv(Path(__file__).resolve().parents[1] / '.env')
+
 @lru_cache
 def store() -> WorldStore:
-    url=os.getenv('DATABASE_URL','sqlite:///./orbital-outlaws.db')
-    return WorldStore(url)
+    return WorldStore(os.environ['DATABASE_URL'])
 
 
 @asynccontextmanager

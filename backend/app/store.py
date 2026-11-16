@@ -5,10 +5,7 @@ first API is durable snapshots, impulsive manoeuvre events and Kepler coasts
 """
 from __future__ import annotations
 import math, time
-from uuid import uuid4
-from dataclasses import dataclass
 from sqlalchemy import create_engine, select, and_, or_
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from .models import Base, World, Entity, Event
 from .physics import State, propagate, orbital_envelope, apply_impulse
@@ -16,8 +13,7 @@ from .physics import State, propagate, orbital_envelope, apply_impulse
 
 class WorldStore:
     def __init__(self, database_url: str):
-        kwargs={'connect_args': {'check_same_thread':False}} if database_url.startswith('sqlite') else {}
-        self.engine=create_engine(database_url,**kwargs)
+        self.engine=create_engine(database_url)
         self.sessions=sessionmaker(self.engine,expire_on_commit=False)
         Base.metadata.create_all(self.engine)
 
