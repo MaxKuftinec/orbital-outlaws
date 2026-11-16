@@ -106,3 +106,25 @@ test('capture heat and physical cargo are exposed in the cockpit without direct 
   assert.match(game,/function renderServerBodies\(dt\)/);
   assert.match(game,/burn\.remainingDv/);
 });
+
+
+test('compact navigation and telemetry consoles are mounted alongside the sidebar counterparts',()=>{
+  const app=read('frontend/src/App.vue');
+  const nav=read('frontend/src/components/NavigationPanel.vue');
+  assert.match(app,/<NavigationPanel\s+:console="true"\s*\/>/);
+  assert.match(app,/<NavigationPanel\s*\/>/);
+  assert.match(app,/<TelemetryPanel\s+:console="true"\s*\/>/);
+  assert.match(app,/<TelemetryPanel\s*\/>/);
+  assert.match(nav,/v-if="console" class="nav-command"/);
+  assert.match(nav,/v-else class="panel autopilot-panel"/);
+  assert.match(nav,/id="nav-console-fuel-reserve-kg"/);
+  assert.match(nav,/id="fuel-reserve-kg"/);
+});
+
+test('fuel reserve input is not overwritten while typing during frequent game events',()=>{
+  const nav=read('frontend/src/components/NavigationPanel.vue');
+  assert.match(nav,/if\(!this\.editingReserve\)this\.reserveDraft=String\(this\.navigation\.reserveKg\)/);
+  assert.match(nav,/@focus="beginReserveEdit"/);
+  assert.match(nav,/@blur="finishReserveEdit"/);
+  assert.match(nav,/new CustomEvent\('orbital-set-reserve',\{detail:\{kg\}\}\)/);
+});

@@ -195,3 +195,9 @@
 .capture-instruments{border-top:1px solid #2e4b62;margin-top:11px;padding-top:8px}
 .capture-instruments .metric-row{margin:5px 0}
 .capture-instruments .meter{height:5px;margin-bottom:7px}
+
+/* Editable fuel budget in the compact, dockable Navigation console. */
+.nav-console-reserve{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:11px;padding-top:10px;border-top:1px solid #2e4b62}
+.nav-console-reserve label{color:#a7c9d9;font-size:11px;font-weight:650}
+.nav-console-reserve input{width:67px}
+.nav-console-reserve + .mini-note{margin-top:6px}

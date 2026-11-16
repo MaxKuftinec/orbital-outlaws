@@ -10,7 +10,10 @@ const EMPTY:NavigationView = {
 export default defineComponent({
   name:'NavigationPanel',
   props:{console:{type:Boolean,default:false}},
-  data(){return {navigation:{...EMPTY},options:[] as NavOption[]}},
+  data(){return {
+    navigation:{...EMPTY},options:[] as NavOption[],
+    reserveDraft:String(EMPTY.reserveKg),editingReserve:false
+  }},
   mounted(){
     window.addEventListener(NAVIGATION_EVENT,this.onNav as EventListener)
     window.addEventListener(NAV_OPTIONS_EVENT,this.onOptions as EventListener)
@@ -20,7 +23,11 @@ export default defineComponent({
     window.removeEventListener(NAV_OPTIONS_EVENT,this.onOptions as EventListener)
   },
   methods:{
-    onNav(e:Event){this.navigation={...(e as CustomEvent<NavigationView>).detail}},
+    onNav(e:Event){
+      this.navigation={...(e as CustomEvent<NavigationView>).detail}
+      // Prevent high-frequency live HUD updates from resetting typed input.
+      if(!this.editingReserve)this.reserveDraft=String(this.navigation.reserveKg)
+    },
     onOptions(e:Event){
       const detail=(e as CustomEvent<{options:NavOption[];selected:string}>).detail
       this.options=[...detail.options]
@@ -31,15 +38,21 @@ export default defineComponent({
       window.dispatchEvent(new CustomEvent('orbital-target-selected',{detail:{key}}))},
     offerFuel(){window.dispatchEvent(new CustomEvent('orbital-offer-fuel'))},
     requestAllyAssistance(){window.dispatchEvent(new CustomEvent('orbital-request-ally-assistance'))},
-    setReserve(e:Event){
-      const input=e.target as HTMLInputElement
-      const kg=Number(input.value)
-      if(!input.value.trim()||!Number.isFinite(kg)||kg<0||kg>200){
-        input.value=String(this.navigation.reserveKg)
-        return
+    beginReserveEdit(){this.editingReserve=true},
+    editReserve(e:Event){this.reserveDraft=(e.target as HTMLInputElement).value},
+    finishReserveEdit(){
+      if(!this.editingReserve)return
+      const raw=this.reserveDraft.trim(),kg=Number(raw)
+      if(!raw||!Number.isFinite(kg)||kg<0||kg>200){
+        this.reserveDraft=String(this.navigation.reserveKg)
+      }else{
+        this.navigation.reserveKg=kg
+        this.reserveDraft=String(kg)
+        window.dispatchEvent(new CustomEvent('orbital-set-reserve',{detail:{kg}}))
       }
-      window.dispatchEvent(new CustomEvent('orbital-set-reserve',{detail:{kg}}))
-    }
+      this.editingReserve=false
+    },
+    finishReserveOnEnter(e:KeyboardEvent){(e.target as HTMLInputElement).blur()}
   }
 })
 </script>
@@ -65,6 +78,15 @@ export default defineComponent({
         <button type="button" id="nav-abort" class="small-btn" :disabled="navigation.abortDisabled">ABORT</button>
       </div>
       <div class="nav-command-readout" id="nav-quick-metrics" aria-live="polite">{{ navigation.metrics }}</div>
+      <div class="nav-console-reserve reserve-setting">
+        <label for="nav-console-fuel-reserve-kg">Protected fuel reserve</label>
+        <div><input id="nav-console-fuel-reserve-kg" type="number" min="0" max="200" step="1"
+                    :value="reserveDraft" @focus="beginReserveEdit" @input="editReserve"
+                    @blur="finishReserveEdit" @keydown.enter.prevent="finishReserveOnEnter"
+                    aria-label="Protected fuel reserve in kilograms" />
+          <span>kg</span></div>
+      </div>
+      <div class="mini-note">Autopilot and fuel donations keep this fuel untouched; manual thrust remains unrestricted.</div>
     </div>
   </div>
   <section v-else class="panel autopilot-panel" data-vue-managed="true">
@@ -78,7 +100,9 @@ export default defineComponent({
     <div class="metric-row reserve-setting">
       <label for="fuel-reserve-kg">Protected propellant</label>
       <div><input id="fuel-reserve-kg" type="number" min="0" max="200" step="1"
-                  :value="navigation.reserveKg" @change="setReserve" aria-label="Protected fuel reserve in kilograms" />
+                  :value="reserveDraft" @focus="beginReserveEdit" @input="editReserve"
+                  @blur="finishReserveEdit" @keydown.enter.prevent="finishReserveOnEnter"
+                  aria-label="Protected fuel reserve in kilograms" />
         <span>kg</span></div>
     </div>
     <div class="mini-note">Autopilot and fuel donations protect this much fuel. Manual thrust can still consume it. Set 0 kg to disable the reserve.</div>
