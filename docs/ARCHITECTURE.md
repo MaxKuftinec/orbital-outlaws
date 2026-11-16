@@ -46,3 +46,11 @@ The browser uses an anonymous local pilot ID to resume a PostgreSQL entity. A `f
 ## v0.9 live connection and progression
 
 A FastAPI WebSocket streams player orbital snapshots (~10 Hz) and receives pilot control edges, finite-thrust lease renewals, technology purchases and idempotent local-development salvage claims. Rendering/prediction stays on the browser frame loop. PostgreSQL `player_progress` persists credit balance and purchased upgrades; `salvage_claims` deduplicates pickup rewards. Pending salvage claims are retained in the browser until the server acknowledges them. The game intentionally retains GET `/` as its health endpoint and HTTP for read/debug only. **The entire live socket is development-only** (`ORBITAL_DEV_COMMANDS=1`) because there is no authentication and salvage rewards are not server-verified. Production must validate pickups from authoritative world events before allowing currency changes.
+
+## v0.10 navigation and pilot encounters
+
+The existing rendezvous planner now converts guidance to the same RCS/thrust WebSocket inputs as the manual pilot. The backend remains authoritative for movement and fuel, but navigation itself is currently client-side and stops if the cockpit tab loses visibility or connection.
+
+The development-only `encounter_snapshots` table stores each pilot's local NPCs, pickups, killed enemies and reinforcement settings. The WebSocket resumes that checkpoint on reconnect, using lazy Kepler coasting during the elapsed wall time. It does not execute NPC AI, projectiles, collisions or combat while offline, nor share NPC authority between different pilots. This is a transitional continuity mechanism, not the final multiplayer world state.
+
+Fullscreen Navigation, Telemetry and Ship panels are floating canvas HUD windows whose positions remain a browser-side UI preference, outside the server's simulation state.
