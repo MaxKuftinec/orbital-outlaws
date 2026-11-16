@@ -56,11 +56,11 @@ def test_capture_server_moves_ship_and_increases_cargo_mass():
     sector['enemies']=[]
     sector['ally']['alive']=False
     sector['pickups']=[{'id':'credits-physical','type':'credits','amount':24.,'alive':True,
-                        'phase':0.,'x':radius,'y':0.,'vx':3.,'vy':v}]
+                        'phase':0.,'x':radius,'y':0.,'vx':.3,'vy':v}]
     result,effects=advance_sector(sector,.25,player)
     assert effects['credits']==24
     assert effects['capture_cargo_mass']==2.
-    assert effects['player_dvx']==pytest.approx(2.*3./1002.,abs=.005)
+    assert effects['player_dvx']==pytest.approx(2.*.3/1002.,abs=.0002)
     assert result['player']['cargoKg']==2.
     assert result['player']['captureHeatMJ']>0.
     assert result['player']['captureHeatProducedMJ']>=result['player']['captureHeatMJ']
@@ -117,7 +117,7 @@ def test_captured_cargo_persists_as_mass_in_authoritative_player_checkpoint(post
         sector['ally']['alive']=False
         sector['pickups']=[{
             'id':'cargo-token','type':'credits','amount':24.,
-            'alive':True,'phase':0.,'x':300.,'y':0.,'vx':3.,'vy':velocity}]
+            'alive':True,'phase':0.,'x':300.,'y':0.,'vx':0.,'vy':velocity}]
         saved.snapshot=sector
         saved.saved_at_utc=time.time()-.25
     result=store.player_encounter(pilot)

@@ -25,8 +25,10 @@ def test_capture_starter_limit_is_five_kilometres_per_second():
 
 def test_capture_rig_extends_speed_limit_to_eight_not_infinity():
     sector,effects=trial(6.,True)
-    assert effects['credits']==24
-    assert not sector['pickups']
+    assert effects['credits']==0
+    assert sector['captureTether'] is not None
+    assert sector['captureTether']['pickupId']=='test-credit-1'
+    assert len(sector['pickups'])==1  # Finite braking must complete before payout.
     fast,effects_fast=trial(9.,True)
     assert effects_fast['credits']==0
     assert len(fast['pickups'])==1

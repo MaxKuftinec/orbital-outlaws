@@ -11,6 +11,7 @@ from .physics import State, propagate, apply_impulse, orbital_envelope
 from .npc_guidance import plan_transfer, queue_burn, move_with_burn
 from .arrival_guidance import desired_approach, resolve_arrival as advance_arrival, ACTIVE_ARRIVAL
 from .capture_physics import assess_capture, payload_mass, cool_capture_system
+from .tether import begin_tether, step_tether
 from .npc_intelligence import risk_report, evasive_burn, coordinate_allies, choose_raider_target
 
 MU = 310000.0
@@ -101,9 +102,10 @@ def new_sector(world_time: float, mu: float = MU) -> dict:
             'shots': [], 'shotCounter': 0, 'nextRaiderId': 3, 'nextAllyId': 2,
             'allies': [], 'player': {'hp': 100., 'ammo': 36, 'repairParts': 10.,
                                     'alive': True, 'gunReady': world_time,
-            'cargoKg':0., 'captureHeatMJ':0., 'captureRadiatedMJ':0., 'captureHeatProducedMJ':0.},
+            'cargoKg':0., 'captureHeatMJ':0., 'captureRadiatedMJ':0.,
+            'captureHeatProducedMJ':0.,'captureMotorMJ':0., 'captureFailures':0.},
             'events': [], 'reinforcements': False, 'nextEnemySpawn': world_time+75,
-            'playerKills': 0, 'collisionCooldown': {}, 'assistance': []}
+            'playerKills': 0, 'collisionCooldown': {}, 'assistance': [], 'captureTether':None}
 
 
 def event(sector: dict, when: float, message: str, category='neutral'):
@@ -454,7 +456,7 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
     elapsed = 0.
     time_step = max(.25, min(12., seconds / 15000))
     while elapsed < seconds-1e-8:
-        dt = min(time_step, seconds-elapsed)
+        dt = min(time_step, seconds-elapsed, .25 if sector.get('captureTether') else time_step)
         cool_capture_system(player,dt)
         when = sector['t']+dt
         allies = [sector['ally'], *sector.get('allies', [])]
@@ -596,36 +598,79 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
                     if body['hp']<=0:
                         destroy(sector,body,when,'collision')
 
-        # Server-validated physical salvage, never client-reported currency.
+        # Salvage begins as a finite-force grapple, not an instantaneous merge.
+        # Only one payload can be tethered at once. A broken line leaves debris
+        # in its own gravitational orbit and incurs a reattachment cooldown.
+        tether=sector.get('captureTether')
+        if tether and not any(p.get('alive',True) and p['id']==tether['pickupId']
+                              for p in sector['pickups']):
+            sector['captureTether']=None
+            tether=None
         if player.get('alive',True):
             for pickup in sector['pickups']:
                 if not pickup.get('alive',True):
                     continue
-                start_player_pos = previous.get('player')
-                start_pickup_pos = previous.get(pickup['id'])
-                encountered = (start_player_pos and start_pickup_pos and
-                               hit_swept(start_player_pos, player, start_pickup_pos, pickup, 19.))
-                if not encountered and distance(player, pickup) > 19.:
+                active=sector.get('captureTether')
+                if active and active['pickupId']!=pickup['id']:
                     continue
                 kind=pickup['type']
                 amount=pickup['amount']
-                # Materialize only what fits in storage. A partly emptied fuel
-                # or parts container remains available for another attempt.
                 fuel_need=min(amount,max(0.,200.-player['fuel'])) if kind=='fuel' else 0.
                 spare_need=min(amount,max(0.,24.-player['repairParts'])) if kind=='parts' else 0.
-                if kind=='fuel' and fuel_need < .00001:
+                if kind=='fuel' and fuel_need<.00001:
                     continue
-                if kind=='parts' and spare_need < .00001:
+                if kind=='parts' and spare_need<.00001:
                     continue
-                recovered = fuel_need if kind=='fuel' else spare_need if kind=='parts' else amount
-                mass = payload_mass(pickup,recovered)
-                decision = assess_capture(player,pickup,mass,bool((upgrades or {}).get('capture')))
+                recovered=fuel_need if kind=='fuel' else spare_need if kind=='parts' else amount
+                payload=payload_mass(pickup,recovered)
+                fresh=False
+                if not active:
+                    start_player_pos=previous.get('player')
+                    start_pickup_pos=previous.get(pickup['id'])
+                    encountered=(start_player_pos and start_pickup_pos and
+                                 hit_swept(start_player_pos,player,start_pickup_pos,pickup,19.))
+                    if not encountered and distance(player,pickup)>19.:
+                        continue
+                    if when-pickup.get('lastTetherFailedAt',-1e9)<20.:
+                        continue
+                    active,reason=begin_tether(player,pickup,payload,when,
+                                                bool((upgrades or {}).get('capture')))
+                    if not active:
+                        if when-pickup.get('lastCaptureDeniedAt',-1e9)>12.:
+                            pickup['lastCaptureDeniedAt']=when
+                            relative_speed=math.hypot(pickup['vx']-player['vx'],
+                                                      pickup['vy']-player['vy'])
+                            event(sector,when,f"Salvage {pickup['id']} flyby at "
+                                  f"{relative_speed:.1f} km/s; {reason}.",'neutral')
+                        continue
+                    sector['captureTether']=active
+                    fresh=True
+                    event(sector,when,f"KESTREL-7 grapple attached to {pickup['id']} "
+                          f"({payload:.1f} kg); reeling under finite line tension.",'neutral')
+                # Initial contact can capture an already stationary/co-moving
+                # parcel; moving salvage must actually be reeled over time.
+                outcome=step_tether(player,pickup,active,0. if fresh else dt,
+                                    bool((upgrades or {}).get('capture')))
+                effects['player_dvx']+=outcome.player_dvx
+                effects['player_dvy']+=outcome.player_dvy
+                effects['capture_heat_mj']+=outcome.heat_mj
+                if outcome.status=='broken':
+                    sector['captureTether']=None
+                    pickup['lastTetherFailedAt']=when
+                    player['captureFailures']=player.get('captureFailures',0)+1
+                    player['hp']=max(0.,player['hp']-2.)
+                    event(sector,when,f"KESTREL-7 grapple failed: {outcome.reason}. "
+                          f"Payload released; 2% structural damage.",'danger')
+                    continue
+                if outcome.status!='captured':
+                    continue
+                sector['captureTether']=None
+                decision=assess_capture(player,pickup,payload,
+                                        bool((upgrades or {}).get('capture')))
                 if not decision.ok:
-                    if when-pickup.get('lastCaptureDeniedAt',-1e9) > 12.:
-                        pickup['lastCaptureDeniedAt']=when
-                        event(sector,when,f"Salvage {pickup['id']} flyby at "
-                              f"{decision.relative_km_s:.1f} km/s; "
-                              f"{decision.reason}.",'neutral')
+                    pickup['lastTetherFailedAt']=when
+                    event(sector,when,f"Final grapple lock refused: {decision.reason}.",
+                          'danger')
                     continue
                 gains=[]
                 if kind=='credits':
@@ -650,8 +695,9 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
                     gains.append(f'+{fuel_need:.1f} kg propellant')
                 if not gains:
                     continue
-                # Inelastic coupling: momentum is conserved across incoming mass
-                # and KESTREL-7; lost relative kinetic energy is stored as heat.
+                # Remaining residual relative momentum is transferred in the
+                # final low-speed mechanical lock; the larger change happened
+                # progressively during tether tension impulses above.
                 player['vx']+=decision.dvx
                 player['vy']+=decision.dvy
                 player['mass_kg']+=decision.mass_kg
@@ -664,20 +710,22 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
                 player['captureHeatMJ']+=decision.heat_mj
                 player['captureHeatProducedMJ']+=decision.heat_mj
                 effects['capture_heat_mj']+=decision.heat_mj
-                if kind in ('fuel','parts') and recovered < amount-.00001:
+                if kind in ('fuel','parts') and recovered<amount-.00001:
                     pickup['amount']=amount-recovered
-                    # The remaining debris stays on its previous orbit.
                 else:
                     pickup['alive']=False
                 event(sector,when,f"KESTREL-7 captured {kind}: "
-                      +', '.join(gains)+f". Absorbed {decision.heat_mj:.1f} MJ; "
-                      f"momentum correction {math.hypot(decision.dvx,decision.dvy):.3f} km/s.",'good')
+                      +', '.join(gains)+f". Finite grapple duration "
+                      f"{active['durationS']:.1f} s; peak tension "
+                      f"{active['peakTensionN']:.0f} N; residual heat "
+                      f"{decision.heat_mj:.2f} MJ.",'good')
         sector['shots']=[shot for shot in sector['shots'] if shot.get('alive',True)]
         sector['pickups']=[p for p in sector['pickups'] if p.get('alive',True)]
         elapsed+=dt
         sector['t']=when
     for field in ('hp','ammo','repairParts','alive','gunReady','cargoKg',
-                  'captureHeatMJ','captureRadiatedMJ','captureHeatProducedMJ','transferHeatMJ'):
+                  'captureHeatMJ','captureRadiatedMJ','captureHeatProducedMJ',
+                  'captureMotorMJ','captureFailures','transferHeatMJ'):
         sector['player'][field]=player.get(field,0.)
     return sector,effects
 

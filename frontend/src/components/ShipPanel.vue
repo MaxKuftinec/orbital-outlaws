@@ -4,7 +4,7 @@ import { COCKPIT_STATE_EVENT, type CockpitState, type ShipView } from '../servic
 
 const DEFAULT_SHIP: ShipView = {
   hp: 100, fuel: 200, fuelMax: 200, repairParts: 10, repairCapacity: 24,
-  ammo: 36, credits: 65, captureHeatMJ: 0, captureCapacityMJ: 520, cargoKg: 0,
+  ammo: 36, credits: 65, captureHeatMJ: 0, captureCapacityMJ: 520, cargoKg: 0, captureTensionN: 0, captureStatus: 'STANDBY',
   deltaV: 0, status: 'Nominal orbit',
   statusColor: '#67e0aa', repairDisabled: true, repairing: false
 }
@@ -64,6 +64,8 @@ export default defineComponent({
     <div class="capture-instruments" aria-label="Physical salvage capture monitoring">
       <div class="metric-row"><span>Grapple heat</span><strong>{{ ship.captureHeatMJ.toFixed(1) }} / {{ ship.captureCapacityMJ }} MJ</strong></div>
       <div class="meter"><div class="meter-fill cyan" :style="{ width: (100 * ship.captureHeatMJ / Math.max(1,ship.captureCapacityMJ)) + '%' }"></div></div>
+      <div class="metric-row"><span>Grapple state</span><strong>{{ ship.captureStatus }}</strong></div>
+      <div class="metric-row"><span>Tether tension</span><strong>{{ ship.captureTensionN.toFixed(0) }} N</strong></div>
       <div class="metric-row"><span>Recovered cargo</span><strong>{{ ship.cargoKg.toFixed(1) }} kg</strong></div>
     </div>
     <div class="small-stats">

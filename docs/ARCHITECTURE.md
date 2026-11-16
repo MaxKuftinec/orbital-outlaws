@@ -128,3 +128,21 @@ The `capture` upgrade is persistent pilot progress. Backend pickup collision res
 Incoming visitors keep their independent 360-degree launch velocities, but `arrival_guidance.py` now selects bounded finite-thrust approach/correction/insertion maneuvers by numerical previews of actual rocket burns. Existing flight and support bodies share `npc_guidance.move_with_burn`: there is no free arrival-course impulse. The control loop waits for completed burns before planning the next correction. This improves physical consistency but cannot guarantee every arbitrary launch has enough fuel or time to insert. `npc_intelligence.py` implements short-horizon collision/periapsis risk screening, finite evasions, threat-biased interceptor allocation and raider target priorities. Rescue phase updates can perform bounded pre-arrival trajectory corrections, with one donor assigned per rescue.
 
 Salvage capture uses a reduced-mass inelastic coupling: `dv_ship = m_payload/(m_ship+m_payload) * (v_payload-v_ship)`, with `E_thermal = 0.5*m_ship*m_payload/(m_ship+m_payload)*|v_rel|²` (MJ when masses are kg and speeds km/s). The server applies the incoming material mass and velocity impulse to the pilot's authoritative checkpoint; it records heat in the sector snapshot and radiates 8 MJ/s. A full heat sink or heavy wreck rejects capture even when the 5/8 km/s contact limit passes. Fuel and nonfuel mass are accounted separately to avoid double-counting; the physical pickup remainder persists after partial collection. The client-only mode mirrors this model and the connected cockpit extrapolates NPC finite burns cosmetically. Remaining approximations include finite-force tether dynamics, impulse timing within offline catch-up windows, weapon mass exhaust, and independent energy dissipation during ship-to-ship impact.
+
+
+## v0.19 — grappling with bounded tension
+
+The previous instant inelastic salvage coupling is now only the **final
+low-relative-speed lock**. The encounter's persistent `captureTether` state
+stores the payload ID, initial mass, time, tension history, thermal dissipation,
+powered reel work, fatigue and duration. `tether.step_tether` applies an axial
+internal tension (never a push), capped to 2,200 N / 12,000 N for basic/upgraded
+hardware. Force produces equal and opposite instantaneous differential velocity
+increments `dv = F dt / mass` to KESTREL-7 and the debris, conserving total
+linear momentum. The rocket's authoritative pilot checkpoint receives the sum
+of finite tension-induced velocity changes; the still-approximate end-of-tick
+checkpoint method does not reconstruct the exact intervening burn history. The
+sector stores the grapple, heat, motor work, and failure events. The cockpit
+and local fallback show the reel progressing in time, instead of granting
+instant salvage. Rope length, braking distance, thermal capacity, accumulated
+fatigue and a final low-speed capture condition determine success and failure.

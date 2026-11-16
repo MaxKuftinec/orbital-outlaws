@@ -99,7 +99,7 @@
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
     orbitVisible:true, ephemerisVisible:true, selectedNavKey:'', predictive:false, trajectoryIntel:false, ephemerisOwned:false, captureOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
     collisionCooldown:new Map(), playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false,
-    playerReserveKg:storedReserve()};
+    playerReserveKg:storedReserve(),captureTether:null};
     if(oldTech){Object.assign(state,oldTech);player.credits=oldPilot.credits;}
     // Seeded salvage keeps one stable claim ID across encounter resets.
     state.pickups.filter(p=>p.type==='credits').forEach((pod,i)=>pod.id='starter-credits-'+i);
@@ -148,6 +148,7 @@
     state.reinforcements=!!saved.reinforcements;
     state.nextEnemySpawn=saved.nextEnemySpawn||state.t+60;
     state.serverAssistance=saved.assistance||[];
+    state.captureTether=saved.captureTether||null;
     state.playerKills=saved.playerKills||0;
     if(saved.player){
       const p=state.player,info=saved.player;
@@ -157,6 +158,8 @@
       p.captureHeatMJ=info.captureHeatMJ||0;
       p.captureRadiatedMJ=info.captureRadiatedMJ||0;
       p.captureHeatProducedMJ=info.captureHeatProducedMJ||0;
+      p.captureMotorMJ=info.captureMotorMJ||0;
+      p.captureFailures=info.captureFailures||0;
       if(revived){
         state.ended=false;state.autopilot=null;state.navPlan=null;state.down.clear();
         state.panX=-p.x*scale();state.panY=-p.y*scale();
@@ -535,8 +538,8 @@
     for(const p of state.pickups) {
       if(!p.alive) continue;
       stepBody(p,dt);
-      if(magnitude(p.x-player.x,p.y-player.y)<19 && magnitude(p.vx-player.vx,p.vy-player.vy)<(state.captureOwned?8:5)) collect(p);
-      if(p.alive&&state.rescue?.activity==='scavenge'&&state.rescue.targetKey==='pickup:'+p.id&&state.ally.alive&&
+      handleLocalTether(p,dt);
+      if(p.alive&&!state.captureTether&&state.rescue?.activity==='scavenge'&&state.rescue.targetKey==='pickup:'+p.id&&state.ally.alive&&
          magnitude(p.x-state.ally.x,p.y-state.ally.y)<19&&magnitude(p.vx-state.ally.vx,p.vy-state.ally.vy)<5){
         p.alive=false;
         const received=Math.min(state.ally.fuelMax-state.ally.fuel,p.amount);
@@ -609,6 +612,69 @@
     if(state.autopilot?.targetKey==='enemy:'+enemy.id)abortNav('Target destroyed.');
     updateTargetOptions();
     
+  }
+  function handleLocalTether(pod,dt){
+    const p=state.player;
+    const range=magnitude(pod.x-p.x,pod.y-p.y);
+    const rvx=pod.vx-p.vx,rvy=pod.vy-p.vy,relative=magnitude(rvx,rvy);
+    let tether=state.captureTether;
+    if(tether&&tether.pickupId!==pod.id)return;
+    if(!tether){
+      if(range>19||state.t-(pod.lastTetherFailedAt||-1e9)<20)return;
+      const amount=pod.amount||0;
+      const fuelGain=pod.type==='fuel'?Math.max(0,Math.min(amount,p.fuelMax-p.fuel)):0;
+      const partsGain=pod.type==='parts'?Math.max(0,Math.min(amount,REPAIR.capacityKg-p.repairParts)):0;
+      if((pod.type==='fuel'&&fuelGain===0)||(pod.type==='parts'&&partsGain===0))return;
+      const payload=pod.type==='fuel'?fuelGain:pod.type==='parts'?partsGain:
+        pod.type==='credits'?2:pod.type==='ammo'?amount*.12:pod.type==='wreck'?(pod.massKg||120):0;
+      const reduced=mass(p)*payload/(mass(p)+payload);
+      const energy=.5*reduced*relative*relative;
+      const limit=state.captureOwned?8:5;
+      if(!payload||payload>(state.captureOwned?240:150)||relative>=limit||
+         (p.captureHeatMJ||0)+energy>(state.captureOwned?1300:520))return;
+      tether={pickupId:pod.id,massKg:payload,startedAt:state.t,durationS:0,tensionN:0,
+        peakTensionN:0,fatigueS:0,heatMJ:0,motorMJ:0,status:'reeling'};
+      state.captureTether=tether;
+      logEvent('Finite grapple latched onto '+pod.id+'; reeling in '+payload.toFixed(1)+' kg.','good');
+    }
+    const fail=reason=>{
+      state.captureTether=null;pod.lastTetherFailedAt=state.t;
+      p.hp=Math.max(0,p.hp-2);p.captureFailures=(p.captureFailures||0)+1;
+      logEvent('Capture tether failed: '+reason+'. 2% hull damage.','danger');
+      if(p.hp<=0)endGame('Capture tether destroyed KESTREL-7.');
+    };
+    if(range<.7&&relative<.65){state.captureTether=null;collect(pod);return;}
+    if(state.t-tether.startedAt>110||range>19){fail('line overextended or timeout');return;}
+    const [nx,ny]=range>1e-7?[ (pod.x-p.x)/range,(pod.y-p.y)/range ]:
+      relative>1e-7?[rvx/relative,rvy/relative]:[1,0];
+    const radial=rvx*nx+rvy*ny;
+    const reduced=mass(p)*tether.massKg/(mass(p)+tether.massKg);
+    const maxTension=state.captureOwned?12000:2200;
+    const breaking=state.captureOwned?30000:6000;
+    const desired=-Math.min(.36,Math.max(0,range-.7)*.20);
+    const wanted=Math.max(0,reduced*1000*(radial-desired)/Math.max(.025,dt));
+    const stopping=reduced*1000*Math.max(0,radial)**2/(2*maxTension);
+    if(radial>0&&range+stopping>19.05||wanted>breaking&&range>19*.85){
+      fail('overload / insufficient braking distance');return;
+    }
+    const tension=Math.min(maxTension,wanted);
+    const heat=Math.max(0,tension*radial*dt/1000);
+    const motor=Math.max(0,-tension*radial*dt/1000);
+    if((p.captureHeatMJ||0)+heat>(state.captureOwned?1300:520)){
+      fail('heat sink exceeded');return;
+    }
+    tether.fatigueS+=(tension/maxTension)**2*dt;
+    if(tether.fatigueS>55){fail('structural fatigue');return;}
+    const impulse=tension*dt/1000;
+    p.vx+=impulse/mass(p)*nx;
+    p.vy+=impulse/mass(p)*ny;
+    pod.vx-=impulse/tether.massKg*nx;
+    pod.vy-=impulse/tether.massKg*ny;
+    tether.tensionN=tension;tether.peakTensionN=Math.max(tension,tether.peakTensionN);
+    tether.durationS+=dt;tether.heatMJ+=heat;tether.motorMJ+=motor;
+    p.captureHeatMJ=(p.captureHeatMJ||0)+heat;
+    p.captureHeatProducedMJ=(p.captureHeatProducedMJ||0)+heat;
+    p.captureMotorMJ=(p.captureMotorMJ||0)+motor;
   }
   function collect(pod) {
     const p=state.player;
@@ -1227,7 +1293,10 @@
         hp:p.hp,fuel:p.fuel,fuelMax:p.fuelMax,repairParts:p.repairParts,repairCapacity:REPAIR.capacityKg,
         ammo:p.ammo,credits:p.credits,
         captureHeatMJ:p.captureHeatMJ||0,captureCapacityMJ:state.captureOwned?1300:520,
-        cargoKg:p.cargoKg||0,deltaV:exhaustKmS*Math.log(mass(p)/(p.dryMass+p.repairParts)),
+        cargoKg:p.cargoKg||0,
+        captureTensionN:state.captureTether?.tensionN||0,
+        captureStatus:state.captureTether?'REELING · '+state.captureTether.durationS.toFixed(1)+' s':'STANDBY',
+        deltaV:exhaustKmS*Math.log(mass(p)/(p.dryMass+p.repairParts)),
         status:shipStatus,statusColor:shipStatusColor,
         repairDisabled:state.ended||p.hp>=100||p.repairParts<=.00001,
         repairing:state.down.has('repair')
