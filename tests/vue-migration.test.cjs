@@ -78,3 +78,19 @@ test('capture rig is exposed in the reactive marketplace with persistent ownersh
   assert.match(store,/'capture':55/);
   assert.match(physics,/capture_limit = 8\./);
 });
+
+test('Vue-owned instrument DOM is never mutated directly by the legacy HUD',()=>{
+  const ids=['alt-value','speed-value','peri-value','apo-value','period-value','path-status',
+    'target-name','target-state','range-value','target-hull','shot-time','shot-miss',
+    'nav-status','nav-dv','nav-eta','nav-fuel','nav-engage','nav-abort',
+    'nav-quick-status','nav-quick-metrics','quick-alt','quick-speed','quick-peri',
+    'quick-apo','quick-reserve','quick-flight'];
+  const hud=game.slice(game.indexOf('function updateHud()'),game.indexOf('function updateZoom()'));
+  for(const id of ids){
+    assert.ok(!hud.includes("$('"+id+"').textContent"),id+' direct text mutation');
+    assert.ok(!hud.includes("$('"+id+"').disabled"),id+' direct disabled mutation');
+    assert.ok(!hud.includes("$('"+id+"').style"),id+' direct style mutation');
+  }
+  assert.ok(game.includes('function legacyNode(id)'));
+  assert.ok(game.includes("node.closest('[data-vue-managed="+'"'+'true'+'"' + "]')"));
+});

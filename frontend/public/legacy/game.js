@@ -986,16 +986,25 @@
     state.predicted=out;state.dangerPrediction=dangerous;state.lastPrediction=state.t;
   }
   function formatTime(t){const sec=Math.floor(t);return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;}
+  // During the Options API migration, Vue owns instrument text/state.
+  // Direct DOM mutation is allowed only in the original standalone cockpit.
+  function legacyNode(id){
+    const node=$(id);
+    return node && !node.closest('[data-vue-managed="true"]') ? node : null;
+  }
+  function setLegacyText(id,value){const node=legacyNode(id);if(node)node.textContent=value;}
+  function setLegacyColor(id,value){const node=legacyNode(id);if(node)node.style.color=value;}
+  function setLegacyDisabled(id,value){const node=legacyNode(id);if(node)node.disabled=value;}
   function updateHud() {
     const p=state.player;const e=orbitalElements(p);
     $('sim-clock').textContent=formatTime(state.t);
-    $('quick-alt').textContent=(e.r-WORLD.radius).toFixed(1)+' km';
-    $('quick-speed').textContent=e.v.toFixed(1)+' km/s';
-    $('quick-peri').textContent=Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' km':'—';
-    $('quick-apo').textContent=Number.isFinite(e.ra)?Math.max(0,e.ra-WORLD.radius).toFixed(1)+' km':'ESCAPE';
-    $('quick-reserve').textContent=state.playerReserveKg.toFixed(1)+' kg (autopilot & donations)';
-    $('quick-flight').textContent=state.autopilot?state.autopilot.phase.toUpperCase():state.rescue?'ALLY ASSIST':'FREE';
-    if($('ship-panel')?.dataset.vueManaged!=='true'){
+    setLegacyText('quick-alt',(e.r-WORLD.radius).toFixed(1)+' km');
+    setLegacyText('quick-speed',e.v.toFixed(1)+' km/s');
+    setLegacyText('quick-peri',Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' km':'—');
+    setLegacyText('quick-apo',Number.isFinite(e.ra)?Math.max(0,e.ra-WORLD.radius).toFixed(1)+' km':'ESCAPE');
+    setLegacyText('quick-reserve',state.playerReserveKg.toFixed(1)+' kg (autopilot & donations)');
+    setLegacyText('quick-flight',state.autopilot?state.autopilot.phase.toUpperCase():state.rescue?'ALLY ASSIST':'FREE');
+    if($('ship-panel') && $('ship-panel').dataset.vueManaged!=='true'){
       $('hull-value').textContent=Math.round(p.hp)+'%';$('hull-bar').style.width=clamp(p.hp,0,100)+'%';
       $('fuel-value').textContent=`${p.fuel.toFixed(1)} / ${p.fuelMax} kg`;$('fuel-bar').style.width=(100*p.fuel/p.fuelMax)+'%';
       $('repair-parts').textContent=p.repairParts.toFixed(1)+' / '+REPAIR.capacityKg+' kg';
@@ -1005,24 +1014,24 @@
       $('credits-value').innerHTML=p.credits+' <i>¤</i>';
       $('dv-value').textContent=(exhaustKmS*Math.log(mass(p)/(p.dryMass+p.repairParts))).toFixed(1)+' km/s';
     }
-    $('alt-value').textContent=(e.r-WORLD.radius).toFixed(1)+' km';
-    $('speed-value').textContent=e.v.toFixed(1)+' km/s';
-    $('peri-value').textContent=Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' km':'—';
-    $('apo-value').textContent=Number.isFinite(e.ra)?Math.max(0,e.ra-WORLD.radius).toFixed(1)+' km':'ESCAPE';
-    $('period-value').textContent=Number.isFinite(e.period)?e.period.toFixed(1)+' s':'UNBOUND';
-    $('path-status').textContent=state.dangerPrediction?'IMPACT':e.e>=1?'UNBOUND':'BOUND';
-    $('path-status').style.color=state.dangerPrediction?palette.red:e.e>=1?palette.yellow:palette.green;
+    setLegacyText('alt-value',(e.r-WORLD.radius).toFixed(1)+' km');
+    setLegacyText('speed-value',e.v.toFixed(1)+' km/s');
+    setLegacyText('peri-value',Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' km':'—');
+    setLegacyText('apo-value',Number.isFinite(e.ra)?Math.max(0,e.ra-WORLD.radius).toFixed(1)+' km':'ESCAPE');
+    setLegacyText('period-value',Number.isFinite(e.period)?e.period.toFixed(1)+' s':'UNBOUND');
+    setLegacyText('path-status',state.dangerPrediction?'IMPACT':e.e>=1?'UNBOUND':'BOUND');
+    setLegacyColor('path-status',state.dangerPrediction?palette.red:e.e>=1?palette.yellow:palette.green);
     const shipStatus=(state.ended||!p.alive)?'Spacecraft lost':state.repairing?'Repairing hull':state.autopilot?'Autopilot '+state.autopilot.phase:p.thrustVector?'Main engine firing':p.rcsFiring?'RCS firing':e.e>=1?'Escape trajectory':'Coasting (fuel conserved)';
     const shipStatusColor=(state.ended||!p.alive)?palette.red:p.thrustVector?palette.yellow:palette.green;
-    if($('ship-panel')?.dataset.vueManaged!=='true'){
+    if($('ship-panel') && $('ship-panel').dataset.vueManaged!=='true'){
       $('status-text').textContent=shipStatus;
       $('status-text').style.color=shipStatusColor;
     }
     const target=aliveTarget();
-    $('target-name').textContent=state.aimMode==='manual'?'MANUAL AIM':target?target.name:'NO CONTACT';
-    $('target-state').textContent=state.aimMode==='manual'?'FREE AIM':target?'HOSTILE':'SCANNING';
-    $('range-value').textContent=target?magnitude(target.x-p.x,target.y-p.y).toFixed(1)+' km':'—';
-    $('target-hull').textContent=target?Math.ceil(target.hp)+' / 66':'—';
+    setLegacyText('target-name',state.aimMode==='manual'?'MANUAL AIM':target?target.name:'NO CONTACT');
+    setLegacyText('target-state',state.aimMode==='manual'?'FREE AIM':target?'HOSTILE':'SCANNING');
+    setLegacyText('range-value',target?magnitude(target.x-p.x,target.y-p.y).toFixed(1)+' km':'—');
+    setLegacyText('target-hull',target?Math.ceil(target.hp)+' / 66':'—');
     $('target-indicator').textContent=state.aimMode==='manual'?'AIM MODE: MANUAL':target?'TRACKING: '+target.name:'NO TARGET';
     const liveHostiles=state.enemies.filter(ship=>ship.alive).length;
     const activeAllies=(state.ally.alive?1:0)+(state.allies||[]).filter(ally=>ally.alive).length;
@@ -1031,16 +1040,16 @@
     $('sos-btn').textContent=(state.rescue||state.serverAssistance?.some(o=>o.recipient==='player'))?'⚑ ASSISTANCE REQUESTED':'⚑ REQUEST FUEL ASSISTANCE';
     // Donation button is Vue-owned; its enabled state arrives via navigation events.
     // Reinforcements are now created by the guarded FastAPI dev endpoint only.
-    if(document.querySelector('.upgrades')?.dataset.vueManaged!=='true'){
+    if(document.querySelector('.upgrades') && document.querySelector('.upgrades').dataset.vueManaged!=='true'){
       $('upgrade-status').textContent=state.predictive?'Installed · lead shot active':'40 ¤';
       $('trajectory-upgrade-status').textContent=state.trajectoryIntel?'Installed · trajectory overlay active':'25 ¤';
       $('trajectory-upgrade-btn').textContent=state.trajectoryIntel?'OWNED':'BUY';
       $('trajectory-upgrade-btn').disabled=state.trajectoryIntel||p.credits<25||state.ended;
     }
     const fp=state.ballistic;
-    $('shot-time').textContent=fp&&fp.arrivalTime!==null?fp.arrivalTime.toFixed(2)+' s':fp&&fp.status==='planet'?'OBSTRUCTED':'OUT OF RANGE';
-    $('shot-miss').textContent=!state.trajectoryIntel?'Requires analyzer':fp&&fp.missKm!==null?fp.missKm.toFixed(1)+' km':'—';
-    if(document.querySelector('.upgrades')?.dataset.vueManaged!=='true'){
+    setLegacyText('shot-time',fp&&fp.arrivalTime!==null?fp.arrivalTime.toFixed(2)+' s':fp&&fp.status==='planet'?'OBSTRUCTED':'OUT OF RANGE');
+    setLegacyText('shot-miss',!state.trajectoryIntel?'Requires analyzer':fp&&fp.missKm!==null?fp.missKm.toFixed(1)+' km':'—');
+    if(document.querySelector('.upgrades') && document.querySelector('.upgrades').dataset.vueManaged!=='true'){
       $('upgrade-btn').textContent=state.predictive?'OWNED':'BUY';
       $('upgrade-btn').disabled=state.predictive||p.credits<40||state.ended;
     }
@@ -1051,27 +1060,27 @@
     $('exhaust-vel').textContent=exhaustKmS.toFixed(0)+' km/s';
     $('ship-heading').textContent=(p.heading*180/Math.PI).toFixed(0)+'°';
     $('spin-value').textContent=(p.omega*180/Math.PI).toFixed(1)+'°/s';
-    if(document.querySelector('.upgrades')?.dataset.vueManaged!=='true'){
+    if(document.querySelector('.upgrades') && document.querySelector('.upgrades').dataset.vueManaged!=='true'){
       $('nav-upgrade-status').textContent=state.navOwned?'Installed':'60 ¤';
       $('nav-upgrade-btn').textContent=state.navOwned?'OWNED':'BUY';
       $('nav-upgrade-btn').disabled=state.navOwned||p.credits<60||state.ended;
     }
-    $('autopilot-chip').textContent=state.navOwned?'ONLINE':'LOCKED';
-    if(document.querySelector('.upgrades')?.dataset.vueManaged!=='true'&&$('ephemeris-upgrade-btn')){
+    setLegacyText('autopilot-chip',state.navOwned?'ONLINE':'LOCKED');
+    if(document.querySelector('.upgrades') && document.querySelector('.upgrades').dataset.vueManaged!=='true'&&$('ephemeris-upgrade-btn')){
       $('ephemeris-upgrade-status').textContent=state.ephemerisOwned?'Installed · orbit projection':'45 ¤';
       $('ephemeris-upgrade-btn').textContent=state.ephemerisOwned?'OWNED':'BUY';
       $('ephemeris-upgrade-btn').disabled=state.ephemerisOwned||p.credits<45||state.ended;
     }
-    $('nav-status').textContent=state.autopilot?state.autopilot.phase.toUpperCase():state.navPlan?'Route ready':'No plan';
-    $('nav-dv').textContent=state.navPlan?state.navPlan.dv.toFixed(2)+' km/s':'—';
-    $('nav-eta').textContent=state.navPlan?state.navPlan.eta.toFixed(0)+' s':'—';
-    $('nav-fuel').textContent=state.navPlan?SAFE.requiredFuel(mass(p),state.navPlan.dv,exhaustKmS).toFixed(1)+' kg (ideal)':'—';
-    $('nav-engage').textContent=state.navOwned?'ENGAGE':'BUY NAV 60¤';
-    $('nav-engage').disabled=state.ended||!!state.autopilot||
-      (persistentFlight&&!flightOnline)||(!state.navOwned&&p.credits<60);
-    $('nav-abort').disabled=!state.autopilot;
-    $('nav-quick-status').textContent=state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED';
-    $('nav-quick-metrics').textContent=state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${state.navPlan.safety.estimatedKg.toFixed(1)} kg ideal · ${state.navPlan.safety.reserveKg.toFixed(0)} kg reserved`: 'Pick a contact · press C to calculate';
+    setLegacyText('nav-status',state.autopilot?state.autopilot.phase.toUpperCase():state.navPlan?'Route ready':'No plan');
+    setLegacyText('nav-dv',state.navPlan?state.navPlan.dv.toFixed(2)+' km/s':'—');
+    setLegacyText('nav-eta',state.navPlan?state.navPlan.eta.toFixed(0)+' s':'—');
+    setLegacyText('nav-fuel',state.navPlan?SAFE.requiredFuel(mass(p),state.navPlan.dv,exhaustKmS).toFixed(1)+' kg (ideal)':'—');
+    setLegacyText('nav-engage',state.navOwned?'ENGAGE':'BUY NAV 60¤');
+    setLegacyDisabled('nav-engage',state.ended||!!state.autopilot||
+      (persistentFlight&&!flightOnline)||(!state.navOwned&&p.credits<60));
+    setLegacyDisabled('nav-abort',!state.autopilot);
+    setLegacyText('nav-quick-status',state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED');
+    setLegacyText('nav-quick-metrics',state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${state.navPlan.safety.estimatedKg.toFixed(1)} kg ideal · ${state.navPlan.safety.reserveKg.toFixed(0)} kg reserved`: 'Pick a contact · press C to calculate');
     window.dispatchEvent(new CustomEvent('orbital-telemetry-state',{detail:{
       altitude:(e.r-WORLD.radius).toFixed(1)+' km',speed:e.v.toFixed(1)+' km/s',
       periapsis:Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' km':'—',
