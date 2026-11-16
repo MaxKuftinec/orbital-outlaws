@@ -786,12 +786,27 @@
     if(!target){state.navPlan=null;logEvent('Select a valid target before planning.');return null;}
     const reserve=SAFE.reserveKg(state.player.fuelMax);
     const usableFuel=Math.max(0,state.player.fuel-reserve);
+    let diagnostics=null;
     const plan=usableFuel>0?NAV.plan(state.player,target,{mu:WORLD.mu,inner:WORLD.crashRadius+7,outer:WORLD.outerRadius-10,
-      massKg:mass(state.player),propellantKg:usableFuel,exhaustKmS,extended:true}):null;
+      massKg:mass(state.player),propellantKg:usableFuel,exhaustKmS,extended:true,
+      onDiagnostics:report=>{diagnostics=report;}}):null;
     const safety=plan?SAFE.authorize({fuelKg:state.player.fuel,capacityKg:state.player.fuelMax,massKg:mass(state.player),dvKmS:plan.dv,exhaustKmS}):null;
     state.navPlan=plan&&safety.ok?{...plan,targetKey:key,calculatedAt:state.t,safety}:null;
+    state.navFailure='';
     if(state.navPlan)logEvent('Conservative route: '+plan.dv.toFixed(2)+' km/s, '+plan.eta.toFixed(0)+' s; '+safety.reserveKg.toFixed(0)+' kg fuel protected.','good');
-    else logEvent('No route within safety budget. Manual flight or later replan required.','danger');
+    else{
+      const sense=state.player.x*state.player.vy-state.player.y*state.player.vx;
+      const targetSense=target.x*target.vy-target.y*target.vx;
+      const opposite=sense*targetSense<0;
+      const prefix=opposite?'Counter-rotating encounter. ':'';
+      if(diagnostics?.minimumDv!==null && diagnostics?.minimumDv!==undefined)
+        state.navFailure=prefix+'Best sampled transfer '+diagnostics.minimumDv.toFixed(1)+' km/s; budget '+diagnostics.maxDv.toFixed(1)+' km/s.';
+      else if(!usableFuel)
+        state.navFailure='Fuel reserve leaves no propellant for autopilot.';
+      else
+        state.navFailure=prefix+'No safe two-burn solution in sampled windows. Try a different orbital phase.';
+      logEvent(state.navFailure,'danger');
+    }
     updateHud();return state.navPlan;
   }
   function abortNav(message='Autopilot disengaged.'){
