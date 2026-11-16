@@ -58,6 +58,13 @@ class PlayerProgress(Base):
     upgrades: Mapped[dict]=mapped_column(JSON,nullable=False,default=dict)
 
 
+class PlayerSettings(Base):
+    """Pilot preferences survive ship destruction and technology resets."""
+    __tablename__ = 'player_settings'
+    entity_id: Mapped[str] = mapped_column(ForeignKey('entities.id'), primary_key=True)
+    reserve_kg: Mapped[float] = mapped_column(Float, nullable=False, default=36.0)
+
+
 class SalvageClaim(Base):
     __tablename__='salvage_claims'
     entity_id: Mapped[str]=mapped_column(ForeignKey('entities.id'),primary_key=True)
