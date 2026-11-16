@@ -158,7 +158,7 @@ def spawn_dev_ally(pilot_id: str):
 
 @app.post('/dev/players/{pilot_id}/respawn')
 def respawn_dev_pilot(pilot_id: str):
-    """Replace a destroyed pilot ship; existing credits, upgrades and NPCs survive."""
+    """Replace destroyed ship, reset credits/upgrades, retain NPC sector."""
     require_dev_commands()
     if len(pilot_id) != 32 or any(ch not in '0123456789abcdef' for ch in pilot_id):
         raise HTTPException(400, 'Expected 32-character pilot ID')
@@ -172,7 +172,7 @@ def respawn_dev_pilot(pilot_id: str):
 
 @app.get('/')
 def health():
-    return {'status':'ok','architecture':'lazy-orbits','authority':'player-flight-only'}
+    return {'status':'ok','architecture':'lazy-orbits','authority':'sector-authoritative'}
 
 
 class FuelRequest(BaseModel):
