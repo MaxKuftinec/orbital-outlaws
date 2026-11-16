@@ -1,4 +1,4 @@
-# Orbital Outlaws — v0.18 finite arrival AI, coordinated tactics and momentum-conserving capture
+# Orbital Outlaws — v0.19 finite-force salvage tether and allied fleet coordination
 
 A persistent 2D Newtonian orbital combat prototype using **Vue 3 + Vuetify (Options API)**, **FastAPI**, **PostgreSQL** and a bidirectional **WebSocket**.
 
@@ -277,3 +277,35 @@ To assist an ally, select a friendly target in Navigation, get within **18 km** 
 Developers can alternatively use `POST /players/{pilot_id}/request-assistance` with `{\"recipient\":\"player\"}` and `POST /players/{pilot_id}/offer-fuel` with `{\"target\":\"ally-01\",\"kg\":20}`. These endpoints require `ORBITAL_DEV_COMMANDS=1`. In Swagger at `http://127.0.0.1:8000/docs` no `/api` prefix is used.
 
 **Rendezvous diagnostics:** When a sampled route fails, Comms distinguishes a transfer above the fuel budget from a transfer that the finite two-impulse search couldn't solve. Opposite-sense/counter-orbiting objects can require substantial braking; visual overlap alone is not a safe capture.
+
+
+## v0.19 — limited-force grapple, structural loads and finite recovery
+
+A contact below 5 km/s (8 km/s with the rig) does **not** grant salvage automatically.
+The server first evaluates the payload mass, initial velocity and thermal budget,
+then attaches one reeling line to one pickup. `backend/app/tether.py` applies
+**equal and opposite tension impulses to ship and payload** every simulation
+step, preserving total linear momentum for this internal force. A reel controller
+tries to reduce separation at a bounded 0.36 km/s, but tension cannot push the
+payload away; it is capped at **2,200 N basic / 12,000 N upgraded**. A fast,
+light pod can take several seconds to catch. Strongly mismatched or massive
+objects can overload the line, require more braking distance than the 19 km
+maximum, exhaust heat capacity, or accumulate structural fatigue. A failed
+capture releases the pod onto its actual remaining orbit and costs 2 hull HP;
+it cannot be retried for 20 seconds. Payload and credits are added only after
+separation is below **0.7 km** and relative speed below **0.65 km/s**, at which
+point a final low-energy mechanical latch merges the remaining momentum.
+
+The cockpit displays live tether tension and grapple status and the canvas
+renders the tether. The local-only mode approximates the same reel. The server
+stores the active grapple in the encounter checkpoint, so a disconnected pilot
+cannot bypass the time-dependent physics. Dissipated work heats the existing
+radiative heat sink; positive mechanical work used for powered reeling is
+separately accounted as `captureMotorMJ` (energy accounting, not yet a battery).
+
+**Gameplay-scale approximations:** The 19 km grapple envelope is not a realistic
+physical arm length, and the force controller applies impulses at the sector
+simulation tick rather than integrating full elastic cable elements/attitude
+dynamics. Realistic metre-scale grapple reach, multi-body tethers, rotational
+torque, finite cable mass, retraction power supply and spool failure are future
+physical-model improvements.

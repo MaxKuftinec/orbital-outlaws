@@ -15,6 +15,8 @@ export interface ShipView {
   captureHeatMJ: number
   captureCapacityMJ: number
   cargoKg: number
+  captureTensionN: number
+  captureStatus: string
   deltaV: number
   status: string
   statusColor: string

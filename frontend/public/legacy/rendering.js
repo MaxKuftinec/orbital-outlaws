@@ -73,6 +73,19 @@
     ctx.save();ctx.strokeStyle=color;ctx.globalAlpha=.24+.13*Math.sin(state.t*2+pod.phase);ctx.beginPath();ctx.arc(p.x,p.y,size+6,0,TWO_PI);ctx.stroke();ctx.restore();
     ctx.fillStyle=color;ctx.font='9px monospace';ctx.fillText(pod.type==='wreck'?'WRECK':pod.type.toUpperCase(),p.x+10,p.y+14);
   }
+  function drawTether(){
+    const line=state.captureTether;
+    if(!line||!state.player.alive)return;
+    const pod=state.pickups.find(p=>p.id===line.pickupId&&p.alive);
+    if(!pod)return;
+    const a=toScreen(state.player.x,state.player.y),b=toScreen(pod.x,pod.y);
+    ctx.save();ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
+    ctx.strokeStyle=line.fatigueS>35?'#ff7184':'#edbe6b';ctx.lineWidth=2.1;
+    ctx.setLineDash([5,3]);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#edbe6b';ctx.font='bold 10px ui-monospace,monospace';
+    ctx.fillText(Math.round(line.tensionN||0)+' N TETHER',(a.x+b.x)/2+7,(a.y+b.y)/2-9);
+    ctx.restore();
+  }
   function drawShots(){for(const s of state.shots){const p=toScreen(s.x,s.y);if(p.x<-90||p.x>W+90||p.y<-90||p.y>H+90)continue;const tail=toScreen(s.x-s.vx*.035,s.y-s.vy*.035);ctx.strokeStyle=s.faction==='ally'?palette.green:s.faction==='player'?palette.cyan:palette.red;ctx.lineWidth=2.6;ctx.beginPath();ctx.moveTo(tail.x,tail.y);ctx.lineTo(p.x,p.y);ctx.stroke();}}
   function drawParticles(){for(const p of state.particles){const q=toScreen(p.x,p.y);ctx.globalAlpha=clamp(p.life/p.maxLife,0,1);ctx.fillStyle=p.color;ctx.fillRect(q.x,q.y,2.2,2.2);}ctx.globalAlpha=1;}
   function drawAim(){
@@ -136,7 +149,7 @@
       ctx.fillText('RESTORING PERSISTENT SECTOR…',W/2,H/2);ctx.textAlign='left';
       return;
     }
-    drawTrails();
+    drawTrails();drawTether();
     for(const pod of state.pickups)drawPickup(pod);
     drawShots();for(const e of state.enemies)drawShip(e);drawShip(state.ally);
     for(const ally of state.allies||[])drawShip(ally);
