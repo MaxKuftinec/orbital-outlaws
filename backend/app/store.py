@@ -4,13 +4,13 @@ Collision graph / active thrusters are not yet authoritative. The safe role of t
 first API is durable snapshots, impulsive manoeuvre events and Kepler coasts
 """
 from __future__ import annotations
-import math, time, json, copy
+import math, time, json, copy, secrets
 from sqlalchemy import create_engine, select, and_, or_
 from sqlalchemy.orm import sessionmaker
 from .models import Base, World, Entity, Event, FlightControl, PlayerProgress, SalvageClaim, EncounterSnapshot
 from .physics import State, propagate, orbital_envelope, apply_impulse
 from .flight import advance, LEASE_S
-from .universe import new_sector, advance_sector, player_fire as fire_projectile, ship as spawn_npc, event as sector_event
+from .universe import new_sector, advance_sector, player_fire as fire_projectile, incoming_ship, event as sector_event
 
 
 class WorldStore:
@@ -140,34 +140,54 @@ class WorldStore:
                     'snapshot':copy.deepcopy(saved.snapshot)}
 
 
-    def spawn_raider(self, pilot_id: str) -> dict:
-        """One server-created, persisted raider per explicit local dev request."""
+    def spawn_ship(self, pilot_id: str, faction: str) -> dict:
+        """Server-authoritative inbound visitor; one call creates one spacecraft."""
+        if faction not in ('raider', 'ally'):
+            raise ValueError('Unknown spacecraft faction')
         entity_id = 'pilot-' + pilot_id
         with self.sessions() as db:
             if db.get(Entity, entity_id) is None:
                 raise LookupError('Unknown pilot')
-        # Catch up before editing; this prevents overwriting offline combat progress.
         self.player_encounter(pilot_id)
         with self.sessions.begin() as db:
             saved = db.scalars(select(EncounterSnapshot).where(
                 EncounterSnapshot.entity_id == entity_id).with_for_update()).one()
             sector = copy.deepcopy(saved.snapshot)
-            existing = {body['id'] for body in sector['enemies']}
-            number = int(sector.get('nextRaiderId', 3))
-            while f'raider-{number:02d}' in existing:
+            is_ally = faction == 'ally'
+            collection = sector.setdefault('allies', []) if is_ally else sector['enemies']
+            counter = 'nextAllyId' if is_ally else 'nextRaiderId'
+            number = int(sector.get(counter, 2 if is_ally else 3))
+            prefix = 'ally' if is_ally else 'raider'
+            existing = {body['id'] for body in collection}
+            if is_ally:
+                existing.add(sector['ally']['id'])
+            while f'{prefix}-{number:02d}' in existing:
                 number += 1
-            sector['nextRaiderId'] = number + 1
+            sector[counter] = number + 1
             angle = (number * 2.399963229728653) % (2 * math.pi) - math.pi
-            radius = 330 + (number % 5) * 28
-            enemy = spawn_npc(f'raider-{number:02d}', radius, angle)
-            enemy['nextDecision'] = sector['t'] + 3
-            sector['enemies'].append(enemy)
-            sector_event(sector, sector['t'], f"{enemy['name']} entered the sector.", 'danger')
+            intent = ('flyby', 'orbit')[secrets.randbelow(2)]
+            world = db.get(World, 'kestrel')
+            vessel = incoming_ship(f'{prefix}-{number:02d}', angle, intent,
+                                   is_ally, world.mu)
+            vessel['nextDecision'] = sector['t'] + 4
+            collection.append(vessel)
+            sector_event(sector, sector['t'], f"{vessel['name']} approaching Kestrel "
+                         f"on a {intent} mission.", 'good' if is_ally else 'danger')
             saved.snapshot = sector
             saved.saved_at_utc = time.time()
-            return {'enemy': {'id': enemy['id'], 'name': enemy['name'],
-                              'x': enemy['x'], 'y': enemy['y']},
-                    'enemy_count': len(sector['enemies'])}
+            return {
+                'ship': {'id': vessel['id'], 'name': vessel['name'],
+                         'x': vessel['x'], 'y': vessel['y']},
+                'intent': intent,
+                'faction': faction,
+                'ship_count': len(collection)
+            }
+
+    def spawn_raider(self, pilot_id: str) -> dict:
+        return self.spawn_ship(pilot_id, 'raider')
+
+    def spawn_ally(self, pilot_id: str) -> dict:
+        return self.spawn_ship(pilot_id, 'ally')
 
     def player_fire(self, pilot_id: str, dx: float, dy: float):
         self.player_encounter(pilot_id)

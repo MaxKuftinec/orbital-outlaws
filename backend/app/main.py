@@ -134,6 +134,19 @@ def spawn_dev_raider(pilot_id: str):
         raise HTTPException(404, str(exc)) from exc
 
 
+
+@app.post('/api/dev/players/{pilot_id}/allies', status_code=201)
+def spawn_dev_ally(pilot_id: str):
+    """Create one incoming allied spacecraft; no player-facing spawn control."""
+    require_dev_commands()
+    if len(pilot_id) != 32 or any(ch not in '0123456789abcdef' for ch in pilot_id):
+        raise HTTPException(400, 'Expected 32-character pilot ID')
+    try:
+        return store().spawn_ally(pilot_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
 @app.get('/')
 def health():
     return {'status':'ok','architecture':'lazy-orbits','authority':'player-flight-only'}

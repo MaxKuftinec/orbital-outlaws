@@ -23,7 +23,10 @@ class StubStore:
             'x':260,'heading':0,'fuel_kg':200}}
 
     def spawn_raider(self, pilot_id):
-        return {'enemy': {'id': 'raider-03', 'name': 'RAIDER-03'}, 'enemy_count': 3}
+        return {'ship': {'id': 'raider-03', 'name': 'RAIDER-03'}, 'intent': 'orbit', 'faction': 'raider', 'ship_count': 3}
+
+    def spawn_ally(self, pilot_id):
+        return {'ship': {'id': 'ally-02', 'name': 'ALLY-02'}, 'intent': 'flyby', 'faction': 'ally', 'ship_count': 1}
 
     def player_progress(self, pilot_id):
         return {'credits':self.credits,'upgrades':dict(self.upgrades)}
@@ -113,5 +116,20 @@ def test_dev_spawn_raider_is_explicitly_guarded(monkeypatch):
         monkeypatch.setenv('ORBITAL_DEV_COMMANDS', '1')
         spawned = client.post(url)
         assert spawned.status_code == 201, spawned.text
-        assert spawned.json()['enemy']['id'] == 'raider-03'
+        assert spawned.json()['ship']['id'] == 'raider-03'
         assert client.post('/api/dev/players/not-a-pilot/raiders').status_code == 400
+
+
+def test_dev_ally_spawn_is_also_guarded(monkeypatch):
+    import app.main as main
+    monkeypatch.setattr(main, 'store', lambda: StubStore())
+    url = '/api/dev/players/' + 'd' * 32 + '/allies'
+    with TestClient(app) as client:
+        monkeypatch.delenv('ORBITAL_DEV_COMMANDS', raising=False)
+        assert client.post(url).status_code == 403
+        monkeypatch.setenv('ORBITAL_DEV_COMMANDS', '1')
+        response = client.post(url)
+        assert response.status_code == 201
+        assert response.json()['ship']['id'] == 'ally-02'
+        assert response.json()['faction'] == 'ally'
+        assert client.post('/api/dev/players/bad/allies').status_code == 400
