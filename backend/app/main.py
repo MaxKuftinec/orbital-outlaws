@@ -24,7 +24,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app=FastAPI(title='Orbital Outlaws',version='0.13.0',lifespan=lifespan)
+app=FastAPI(title='Orbital Outlaws',version='0.14.0',lifespan=lifespan)
 
 
 def require_dev_commands():
@@ -145,6 +145,20 @@ def spawn_dev_ally(pilot_id: str):
         return store().spawn_ally(pilot_id)
     except LookupError as exc:
         raise HTTPException(404, str(exc)) from exc
+
+
+@app.post('/api/dev/players/{pilot_id}/respawn')
+def respawn_dev_pilot(pilot_id: str):
+    """Replace a destroyed pilot ship; existing credits, upgrades and NPCs survive."""
+    require_dev_commands()
+    if len(pilot_id) != 32 or any(ch not in '0123456789abcdef' for ch in pilot_id):
+        raise HTTPException(400, 'Expected 32-character pilot ID')
+    try:
+        return store().respawn_player(pilot_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @app.get('/')
