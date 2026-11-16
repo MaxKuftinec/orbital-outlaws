@@ -3,133 +3,95 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
-
 const source=fs.readFileSync(path.join(__dirname,'../frontend/public/legacy/persistence.js'),'utf8');
 
 function harness(){
-  const sockets=[],sent=[],events=new Map(),docEvents=new Map(),store=new Map();
-  let now=1000,control={thrust:false,turn:0,stabilize:false,gimbal:0},interval;
-  class FakeWebSocket {
+  const sockets=[],sent=[],listeners=new Map(),docListeners=new Map(),store=new Map();
+  let now=1000,control={thrust:false,turn:0,stabilize:false,gimbal:0,
+                         fire:false,repair:false,aim_x:0,aim_y:0},interval;
+  class MockWebSocket {
     static OPEN=1;
     constructor(url){this.url=url;this.readyState=1;sockets.push(this);}
-    send(raw){sent.push(JSON.parse(raw));}
+    send(data){sent.push(JSON.parse(data));}
     emit(packet){this.onmessage({data:JSON.stringify(packet)});}
     close(){this.readyState=3;this.onclose?.({code:1000});}
   }
-  const window={
-    ORBITAL_API_BASE_URL:'',
-    addEventListener:(name,listener)=>events.set(name,listener),
-    removeEventListener:name=>events.delete(name)
-  };
-  const document={hidden:false,addEventListener:(name,listener)=>docEvents.set(name,listener),
-    removeEventListener:name=>docEvents.delete(name)};
-  const context={
-    window,document,URL,location:{href:'http://localhost:5173/'},WebSocket:FakeWebSocket,
+  const window={ORBITAL_API_BASE_URL:'',
+    addEventListener:(name,callback)=>listeners.set(name,callback),
+    removeEventListener:name=>listeners.delete(name)};
+  const document={hidden:false,
+    addEventListener:(name,callback)=>docListeners.set(name,callback),
+    removeEventListener:name=>docListeners.delete(name)};
+  const context={window,document,URL,location:{href:'http://localhost:5173/'},WebSocket:MockWebSocket,
     crypto:{randomUUID:()=> '12345678-1234-1234-1234-123456789abc'},
     localStorage:{getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v)},
-    performance:{now:()=>now},setInterval:fn=>{interval=fn;return 10},clearInterval:()=>{},
-    setTimeout:()=>11,clearTimeout:()=>{}
-  };
+    performance:{now:()=>now},setInterval:fn=>{interval=fn;return 1},clearInterval:()=>{},
+    setTimeout:()=>1,clearTimeout:()=>{}};
   vm.runInNewContext(source,context);
-  const snapshots=[],progress=[],encounters=[],statuses=[],errors=[];
+  const states=[],progress=[],encounters=[],statuses=[],errors=[];
   const handle=window.OrbitalPersistence.attach({
-    controls:()=>control,
-    onState:packet=>snapshots.push(packet),
-    onProgress:state=>progress.push(state),
-    onEncounter:checkpoint=>encounters.push(checkpoint),
-    onConnected:state=>statuses.push(state),
-    onError:reason=>errors.push(reason)
+    controls:()=>control,onState:state=>states.push(state),
+    onProgress:value=>progress.push(value),onEncounter:value=>encounters.push(value),
+    onConnected:value=>statuses.push(value),onError:reason=>errors.push(reason)
   });
-  return {
-    sockets,sent,events,docEvents,document,store,handle,snapshots,progress,encounters,statuses,errors,
-    setControl:value=>{control=value;},setTime:value=>{now=value;},tick:()=>interval()
-  };
+  return {sockets,sent,handle,states,progress,encounters,statuses,errors,document,
+    listeners,docListeners,control,
+    setTime:v=>{now=v},setControl:value=>{control=value},tick:()=>interval()};
 }
+const sector={saved_at_utc:100,snapshot:{version:3,t:40,player:{hp:85,ammo:27,alive:true},
+  enemies:[{id:'raider-01',alive:false}],ally:{id:'ally-01'},pickups:[],shots:[]}};
+const welcome={type:'welcome',flight:{state:{x:123,heading:.3}},
+  progress:{credits:65,upgrades:{}},encounter:sector};
 
-test('WebSocket welcome resumes persistent flight and progress without an HTTP request',()=>{
+test('WebSocket receives server-authoritative flight, sector, credits and technologies',()=>{
   const h=harness();
   assert.match(h.sockets[0].url,/^ws:\/\/localhost:5173\/api\/players\/12345678123412341234123456789abc\/live$/);
-  const flight={state:{x:123,y:42,heading:.3}};
-  const economy={credits:65,upgrades:{predictive:true}};
-  h.sockets[0].emit({type:'welcome',flight,progress:economy});
-  assert.equal(h.snapshots[0].state.x,123);
-  assert.equal(h.snapshots[0].clientSampleMs,1000);
+  h.sockets[0].emit(welcome);
+  assert.equal(h.states[0].state.x,123);
+  assert.equal(h.states[0].clientSampleMs,1000);
+  assert.equal(h.encounters[0].snapshot.player.hp,85);
   assert.equal(h.progress[0].credits,65);
   assert.deepEqual(h.statuses,[true]);
-  assert.equal(h.sent[0].type,'input');
-  assert.equal(h.sent[0].thrust,false);
+  h.sockets[0].emit({type:'snapshot',flight:{state:{x:125}},encounter:sector,
+    progress:{credits:69,upgrades:{ephemeris:true}}});
+  assert.equal(h.states.at(-1).state.x,125);
+  assert.equal(h.progress.at(-1).upgrades.ephemeris,true);
 });
 
-test('short key press and release transmit immediate control edges',()=>{
-  const h=harness();
-  h.sockets[0].emit({type:'welcome',flight:{state:{}},progress:{credits:65,upgrades:{}}});
-  h.setControl({thrust:false,turn:1,stabilize:false,gimbal:0});
-  h.setTime(1010);h.events.get('keydown')();
-  h.setControl({thrust:false,turn:0,stabilize:false,gimbal:0});
-  h.setTime(1020);h.events.get('keyup')();
-  const inputs=h.sent.filter(x=>x.type==='input');
-  assert.deepEqual(inputs.map(i=>i.turn),[0,1,0]);
-  assert.ok(inputs.every(i=>!('x' in i)&&!('fuel' in i)));
+test('short pilot input edges transmit immediately and never send client-derived positions',()=>{
+  const h=harness();h.sockets[0].emit(welcome);
+  h.setControl({...h.control,turn:1,fire:true,aim_x:0,aim_y:1});
+  h.setTime(1010);h.listeners.get('keydown')();
+  h.setControl({...h.control,turn:0,fire:false,aim_x:0,aim_y:0});
+  h.setTime(1020);h.listeners.get('keyup')();
+  const inputs=h.sent.filter(m=>m.type==='input');
+  assert.deepEqual(inputs.map(m=>m.turn),[0,1,0]);
+  assert.equal(inputs[1].fire,true);
+  assert.equal(inputs[1].aim_y,1);
+  assert.ok(inputs.every(m=>!('x' in m)&&!('y' in m)&&!('fuel' in m)));
 });
 
-test('continuous active thrust renews lease without writing on every render tick',()=>{
-  const h=harness();
-  h.sockets[0].emit({type:'welcome',flight:{state:{}},progress:{credits:65,upgrades:{}}});
-  h.setControl({thrust:true,turn:0,stabilize:false,gimbal:0});
+test('active controls renew their lease; hidden tabs send neutral intents',()=>{
+  const h=harness();h.sockets[0].emit(welcome);
+  h.setControl({...h.control,thrust:true,repair:true});
   h.setTime(1100);h.tick();
-  for(let t=1110;t<1250;t+=10){h.setTime(t);h.tick();}
+  for(let t=1110;t<1260;t+=10){h.setTime(t);h.tick();}
   h.setTime(1300);h.tick();
-  assert.equal(h.sent.filter(x=>x.type==='input').length,3);
-});
-
-test('purchases and salvage use the same WebSocket and accept server progress',()=>{
-  const h=harness();
-  h.sockets[0].emit({type:'welcome',flight:{state:{}},progress:{credits:65,upgrades:{}}});
-  assert.equal(h.handle.purchase('predictive'),true);
-  assert.equal(h.handle.salvage('starter-credits-0',24),true);
-  assert.deepEqual(h.sent.slice(-2).map(x=>x.type),['purchase','salvage']);
-  assert.equal(h.sent.at(-1).credits,24);
-  h.sockets[0].emit({type:'progress',progress:{credits:49,upgrades:{predictive:true}}});
-  assert.equal(h.progress.at(-1).credits,49);
-  h.sockets[0].emit({type:'error',message:'Insufficient credits'});
-  assert.equal(h.errors.at(-1),'Insufficient credits');
-});
-
-test('hidden tab sends neutral controls; disconnects clear connected state',()=>{
-  const h=harness();
-  h.sockets[0].emit({type:'welcome',flight:{state:{}},progress:{credits:65,upgrades:{}}});
-  h.setControl({thrust:true,turn:1,stabilize:false,gimbal:0});
-  h.setTime(1100);h.tick();
-  h.document.hidden=true;h.docEvents.get('visibilitychange')();
+  assert.equal(h.sent.filter(m=>m.type==='input').length,3);
+  h.document.hidden=true;h.docListeners.get('visibilitychange')();
   assert.equal(h.sent.at(-1).thrust,false);
-  assert.equal(h.sent.at(-1).turn,0);
+  assert.equal(h.sent.at(-1).repair,false);
+});
+
+test('client can buy technology, but cannot claim kills, enemy positions or credits',()=>{
+  const h=harness();h.sockets[0].emit(welcome);
+  assert.equal(h.handle.purchase('ephemeris'),true);
+  assert.deepEqual(h.sent.at(-1),{type:'purchase',upgrade:'ephemeris'});
+  assert.equal(h.handle.salvage,undefined);
+  assert.equal(h.handle.encounter,undefined);
+  h.sockets[0].emit({type:'error',message:'Only flight inputs and purchases are accepted'});
+  assert.equal(h.errors.at(-1),'Only flight inputs and purchases are accepted');
   h.sockets[0].close();
   assert.deepEqual(h.statuses,[true,false]);
   assert.equal(h.handle.purchase('nav'),false);
-});
-
-
-test('unacknowledged salvage is queued and cleared only after server acknowledgement',()=>{
-  const h=harness();
-  assert.equal(h.handle.salvage('starter-credits-1',30),true);
-  assert.equal(h.sent.length,0,'claim must not be sent before welcome');
-  h.sockets[0].emit({type:'welcome',flight:{state:{}},progress:{credits:65,upgrades:{}}});
-  assert.equal(h.sent.at(-1).type,'salvage');
-  assert.equal(h.sent.at(-1).id,'starter-credits-1');
-  const key='orbital-outlaws.pending-salvage.v1';
-  assert.equal(JSON.parse(h.store.get(key)).length,1);
-  h.sockets[0].emit({type:'progress',progress:{credits:95,upgrades:{}},claim_id:'starter-credits-1'});
-  assert.equal(JSON.parse(h.store.get(key)).length,0,'acknowledged credit claim must leave retry queue');
-});
-
-
-test('websocket welcome restores encounter and permits NPC checkpoints',()=>{
-  const h=harness();
-  const checkpoint={saved_at_utc:123,snapshot:{t:20,enemies:[{id:'raider-01',alive:false}],pickups:[],ally:{id:'ally-01'}}};
-  h.sockets[0].emit({type:'welcome',flight:{state:{}},progress:{credits:65,upgrades:{}},encounter:checkpoint});
-  assert.equal(h.encounters[0].snapshot.enemies[0].alive,false);
-  const snapshot={t:21,enemies:[{id:'raider-01',alive:false}],pickups:[],ally:{id:'ally-01'}};
-  assert.equal(h.handle.encounter(snapshot),true);
-  assert.equal(h.sent.at(-1).type,'encounter');
-  assert.equal(h.sent.at(-1).snapshot.enemies[0].id,'raider-01');
 });

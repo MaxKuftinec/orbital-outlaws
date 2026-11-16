@@ -8,57 +8,58 @@ class StubStore:
     def __init__(self):
         self.credits = 65
         self.upgrades = {}
-        self.claims = set()
         self.version = 0
+        self.ammo = 36
+        self.hp = 85
 
     def ensure_world(self):
         return {'id': 'kestrel'}
 
     def connect_player(self, pilot_id):
-        return self.get_entity('kestrel','pilot-'+pilot_id)
+        return self.get_entity('kestrel', 'pilot-'+pilot_id)
 
     def get_entity(self, world, entity):
-        return {'id':entity,'version':self.version,'state':{'x':260,'heading':0,'fuel_kg':200}}
+        return {'id':entity,'version':self.version,'state':{
+            'x':260,'heading':0,'fuel_kg':200}}
 
     def player_progress(self, pilot_id):
         return {'credits':self.credits,'upgrades':dict(self.upgrades)}
 
     def player_encounter(self, pilot_id):
-        return getattr(self,'encounter',None)
-
-    def save_encounter(self,pilot_id,snapshot):
-        self.encounter={'saved_at_utc':12345.,'snapshot':snapshot}
+        return {'saved_at_utc':1234, 'snapshot':{
+            'version':3,'player':{'hp':self.hp,'ammo':self.ammo,'alive':True},
+            'enemies':[{'id':'raider-01','alive':False}],
+            'ally':{'id':'ally-01','alive':True},'shots':[],'pickups':[]}}
 
     def player_input(self, pilot_id, thrust, turn, stabilize, gimbal):
         self.version += 1
-        return self.get_entity('kestrel','pilot-'+pilot_id)
+
+    def player_fire(self, pilot_id, dx, dy):
+        self.ammo -= 1
+        return True
+
+    def player_repair(self, pilot_id):
+        self.hp = min(100,self.hp+1)
+        return True
 
     def player_purchase(self, pilot_id, upgrade):
-        prices={'predictive':40,'trajectory':25,'nav':60}
-        if upgrade not in prices:
-            raise ValueError('Unknown upgrade')
+        prices={'predictive':40,'trajectory':25,'nav':60,'ephemeris':45}
+        if upgrade not in prices:raise ValueError('Unknown upgrade')
         if upgrade not in self.upgrades:
-            if self.credits<prices[upgrade]:
-                raise ValueError('Insufficient credits')
+            if self.credits<prices[upgrade]:raise ValueError('Insufficient credits')
             self.credits-=prices[upgrade]
             self.upgrades[upgrade]=True
         return self.player_progress(pilot_id)
 
-    def player_salvage(self, pilot_id, claim_id, amount):
-        if claim_id not in self.claims:
-            self.credits+=amount
-            self.claims.add(claim_id)
-        return self.player_progress(pilot_id)
-
 
 def receive_type(ws,kind):
-    for _ in range(8):
+    for _ in range(12):
         packet=ws.receive_json()
         if packet['type']==kind:return packet
-    raise AssertionError('Missing WebSocket packet type '+kind)
+    raise AssertionError('Missing WebSocket packet '+kind)
 
 
-def test_websocket_stream_and_economy(monkeypatch):
+def test_websocket_sector_combat_and_ephemeris(monkeypatch):
     import app.main as main
     db=StubStore()
     monkeypatch.setattr(main,'store',lambda:db)
@@ -69,26 +70,27 @@ def test_websocket_stream_and_economy(monkeypatch):
         with client.websocket_connect(f'/api/players/{pilot}/live') as ws:
             welcome=receive_type(ws,'welcome')
             assert welcome['progress']['credits']==65
-            ws.send_json({'type':'encounter','snapshot':{'t':21,'enemies':[{'id':'raider-01','alive':False}],
-                'ally':{'id':'ally-01'},'pickups':[]}})
-            ws.send_json({'type':'input','thrust':True,'turn':1,'stabilize':False,'gimbal':0})
-            assert receive_type(ws,'snapshot')['flight']['version']>=1
-            ws.send_json({'type':'purchase','upgrade':'predictive'})
-            assert receive_type(ws,'progress')['progress']['credits']==25
-            ws.send_json({'type':'purchase','upgrade':'predictive'})
-            assert receive_type(ws,'progress')['progress']['credits']==25
-            ws.send_json({'type':'salvage','id':'starter-credits-0','credits':24})
-            assert receive_type(ws,'progress')['progress']['credits']==49
-            ws.send_json({'type':'salvage','id':'starter-credits-0','credits':24})
-            assert receive_type(ws,'progress')['progress']['credits']==49
+            assert welcome['encounter']['snapshot']['enemies'][0]['alive'] is False
+            ws.send_json({'type':'input','thrust':True,'turn':1,
+                          'stabilize':False,'gimbal':0,
+                          'fire':True,'repair':True,'aim_x':1,'aim_y':0})
+            update=receive_type(ws,'snapshot')
+            assert update['flight']['version']>=1
+            assert update['encounter']['snapshot']['player']['ammo']==35
+            assert update['encounter']['snapshot']['player']['hp']==86
+            ws.send_json({'type':'purchase','upgrade':'ephemeris'})
+            assert receive_type(ws,'progress')['progress']['credits']==20
+            ws.send_json({'type':'purchase','upgrade':'ephemeris'})
+            assert receive_type(ws,'progress')['progress']['credits']==20
+            ws.send_json({'type':'salvage','id':'forged-credit','credits':50})
+            assert 'server-owned' in receive_type(ws,'error')['message']
         with client.websocket_connect(f'/api/players/{pilot}/live') as ws:
-            restored=receive_type(ws,'welcome')
-            assert restored['progress']['credits']==49
-            assert restored['progress']['upgrades']['predictive']
-            assert restored['encounter']['snapshot']['enemies'][0]['alive'] is False
+            resumed=receive_type(ws,'welcome')
+            assert resumed['progress']['upgrades']['ephemeris']
+            assert resumed['encounter']['snapshot']['player']['ammo']==35
 
 
-def test_websocket_requires_local_dev_mode(monkeypatch):
+def test_websocket_denies_public_development_access(monkeypatch):
     import app.main as main
     monkeypatch.setattr(main,'store',lambda:StubStore())
     monkeypatch.delenv('ORBITAL_DEV_COMMANDS',raising=False)
