@@ -37,7 +37,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The Vite server proxies `/api` to FastAPI and `/backend-health` to **FastAPI's `/` endpoint**. On initial connection, a browser-local pilot ID is generated and its ship is inserted in PostgreSQL; subsequent visits reuse it. Press W to thrust, A/D to rotate, S to stabilize, and move the mouse to gimbal the engine. Position, orientation and fuel are reconciled from the server. The browser predicts inputs every 15 ms and eases server corrections over rendering frames rather than snapping to each 250 ms response. The backend owns a 1× real-time clock, even when the browser is paused.
+Open http://localhost:5173. The Vite server proxies `/api` to FastAPI and `/backend-health` to **FastAPI's `/` endpoint**. On initial connection, a browser-local pilot ID is generated and its ship is inserted in PostgreSQL; subsequent visits reuse it. Press W to thrust, A/D to rotate, S to stabilize, and move the mouse to gimbal the engine. Position, orientation and fuel are reconciled from the server. The browser predicts inputs every 15 ms and eases server corrections over rendering frames instead of snapping to server responses. Control changes are sent immediately; held controls receive periodic lease-renewal messages (roughly 4 Hz). The backend owns a 1× real-time clock, even when the browser is paused.
 
 **Persistence test:** thrust for a few seconds, note the fuel and orbit, refresh the browser. The same ship should resume with the reduced fuel, advanced along its orbit.
 

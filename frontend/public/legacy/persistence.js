@@ -13,7 +13,7 @@
   }
   function attach({controls, onState, onConnected, onError}){
     const url = base + '/api/players/' + pilotId();
-    let connected = false, busy = false, pending = false, previous = '', lastSent = 0, lastPoll = 0, lastError = '';
+    let connected = false, busy = false, pending = false, previous = '', lastSent = 0, lastPoll = 0, nextRetry = 0, lastError = '';
     async function request(path, init){
       const sentAt=performance.now();
       const response = await fetch(url + path, {cache:'no-store',...init});
@@ -25,7 +25,7 @@
     }
     async function tick(){
       if(busy){pending=true;return;}
-      if(document.hidden) return;
+      if(document.hidden || (!connected && performance.now()<nextRetry)) return;
       busy = true;
       try{
         if(!connected){
@@ -41,13 +41,14 @@
             lastSent=now;
             onState(await request('/input',{method:'POST',headers:{'Content-Type':'application/json'},body:fingerprint}));
             previous = fingerprint;
-          }else if(now-lastPoll>550){
+          }else if(!active && now-lastPoll>550){
             onState(await request(''));
             lastPoll = now;
           }
         }
         lastError = '';
       }catch(error){
+        nextRetry=performance.now()+2000;
         if(String(error)!==lastError){console.warn('Persistent flight unavailable:',error);lastError=String(error);if(onError)onError(lastError);}
         if(connected){connected=false;onConnected(false);}
       }finally{
