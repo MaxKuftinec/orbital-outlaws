@@ -94,3 +94,15 @@ test('Vue-owned instrument DOM is never mutated directly by the legacy HUD',()=>
   assert.ok(game.includes('function legacyNode(id)'));
   assert.ok(game.includes("node.closest('[data-vue-managed="+'"'+'true'+'"' + "]')"));
 });
+
+
+test('capture heat and physical cargo are exposed in the cockpit without direct DOM writes',()=>{
+  const component=read('frontend/src/components/ShipPanel.vue');
+  const types=read('frontend/src/services/cockpit.ts');
+  assert.match(component,/Grapple heat/);
+  assert.match(component,/Recovered cargo/);
+  assert.match(types,/captureHeatMJ: number/);
+  assert.ok(game.includes('captureHeatMJ:p.captureHeatMJ||0'));
+  assert.match(game,/function renderServerBodies\(dt\)/);
+  assert.match(game,/burn\.remainingDv/);
+});

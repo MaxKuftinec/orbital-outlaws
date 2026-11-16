@@ -1,4 +1,5 @@
 import math
+import pytest
 from app.physics import State
 from app.universe import (new_sector, advance_sector, player_fire, hit_swept, fire)
 
@@ -68,28 +69,18 @@ def test_random_launch_velocity_is_independent_of_position_and_can_be_retrograde
     assert cw['orbitDirection']==-1
     assert ccw['orbitDirection']==1
     sector={'events':[]}
+    from app.npc_guidance import move_with_burn
     for vessel in (cw,ccw):
+        start_v=(vessel['vx'],vessel['vy'])
         initial_fuel=vessel['fuel']
         resolve_arrival(sector,vessel,mu,3.)
-        assert vessel['arrivalPhase']=='approach'
-        assert vessel['fuel']<initial_fuel
-        assert vessel['x']*vessel['vx']+vessel['y']*vessel['vy']<0
-        assert math.copysign(1,vessel['x']*vessel['vy']-vessel['y']*vessel['vx'])==vessel['orbitDirection']
-        # Fast-forward to insertion radius; capture must match the chosen sense.
-        radius=vessel['insertionRadius']
-        vessel['x'],vessel['y']=radius,0.
-        vessel['vx']=-1.
-        vessel['vy']=vessel['orbitDirection']*math.sqrt(14**2+2*mu/radius)
-        remaining=vessel['fuel']
-        resolve_arrival(sector,vessel,mu,33.)
-        assert vessel['arrivalPhase']=='orbiting'
-        assert vessel['fuel']<remaining
-        assert math.isclose(vessel['vx'],0.,abs_tol=1e-9)
-        assert math.isclose(vessel['vy'],vessel['orbitDirection']*math.sqrt(mu/radius),
-                            abs_tol=1e-9)
-        peri,apo=orbital_envelope(State(vessel['x'],vessel['y'],vessel['vx'],vessel['vy']),
-                                  mu)
-        assert math.isclose(peri,apo,abs_tol=1e-3)  # orbital_envelope near-circular round-off
+        assert vessel['arrivalPhase'] in ('course_burn','failed')
+        assert vessel['fuel']==initial_fuel  # planning is not a free impulse
+        assert (vessel['vx'],vessel['vy'])==start_v
+        if vessel['arrivalPhase']=='course_burn':
+            result=move_with_burn(vessel, .25, mu)
+            assert result.fuel_kg < initial_fuel
+            assert result.mass_kg-result.fuel_kg==pytest.approx(vessel['dryMass'])
 
 
 def test_flyby_does_not_capture_after_its_course_adjustment():
@@ -98,13 +89,15 @@ def test_flyby_does_not_capture_after_its_course_adjustment():
                         velocity_angle=2.7,velocity_speed=25.)
     sector={'events':[]}
     resolve_arrival(sector,flyby,310000,3.)
-    assert flyby['arrivalPhase']=='approach'
-    after_course_fuel=flyby['fuel']
+    assert flyby['arrivalPhase'] in ('course_burn','failed')
+    assert flyby['fuel']==420.  # queued burn has no immediate effect
+    flyby.pop('burn',None)
+    flyby['arrivalPhase']='approach'
     flyby['x'],flyby['y']=720.,0.
     flyby['vx'],flyby['vy']=25.,3.
     resolve_arrival(sector,flyby,310000,33.)
     assert flyby['arrivalPhase']=='departed'
-    assert flyby['fuel']==after_course_fuel
+    assert flyby['fuel']==420.
 
 
 def test_salvage_events_report_exact_amounts_and_capacity_limited_gains():
@@ -134,27 +127,47 @@ def test_salvage_events_report_exact_amounts_and_capacity_limited_gains():
 
 
 
-def test_incoming_ship_reaches_real_orbit_insertion_during_offline_simulation():
+def test_incoming_ship_arrival_is_finite_and_does_not_grant_free_capture():
     from app.universe import incoming_ship
     sector=new_sector(0)
     sector['enemies']=[]
     sector['ally']['alive']=False
     sector['pickups']=[]
-    # Fixed launch velocities keep this arrival-window regression deterministic.
-    # Independent random 360-degree launches are covered by the dedicated launch test.
     orbiter=incoming_ship('ally-02', 1.0, 'orbit', True,
                           velocity_angle=1.0+2.4, velocity_speed=26.)
     visitor=incoming_ship('ally-03', -1.1, 'flyby', True,
                           velocity_angle=-1.1+2.4, velocity_speed=26.)
     sector['allies']=[orbiter,visitor]
     updated,_=advance_sector(sector,110,pilot())
-    arrived=updated['allies'][0]
-    passing=updated['allies'][1]
-    assert arrived['arrivalPhase']=='orbiting', (arrived['arrivalPhase'], arrived['x'],arrived['y'])
-    assert 0 < arrived['fuel'] < 420
-    r=math.hypot(arrived['x'],arrived['y'])
-    v=math.hypot(arrived['vx'],arrived['vy'])
-    assert v*v/2-310000/r<0
+    arrived,passing=updated['allies']
+    assert arrived['arrivalIntent']=='orbit'
     assert passing['arrivalIntent']=='flyby'
-    assert 0 < passing['fuel'] < 420
-    assert passing['arrivalPhase']=='departed'
+    for vessel in (arrived,passing):
+        assert vessel['fuel']<420.
+        assert vessel['fuel']>=0.
+        assert math.hypot(vessel['x'],vessel['y'])>91. or not vessel['alive']
+    assert arrived['arrivalPhase']!='launch'
+    assert passing['arrivalPhase']!='launch'
+
+
+def test_existing_orbit_insertions_require_a_real_finite_burn():
+    from app.universe import incoming_ship
+    start=incoming_ship('ally-02',0.,'orbit',True,
+                        velocity_angle=math.pi/2,velocity_speed=30.)
+    radius=start['insertionRadius']
+    speed=math.sqrt(310000./radius)
+    start.update(x=radius+15.,y=0.,vx=-8.,vy=speed,
+                 arrivalPhase='approach',nextArrivalDecision=0.,fuel=220.)
+    sector=new_sector(0.)
+    sector['allies']=[start]
+    sector['enemies']=[]
+    sector['ally']['alive']=False
+    sector['pickups']=[]
+    result,_=advance_sector(sector,25.,pilot())
+    inserted=result['allies'][0]
+    assert inserted['fuel']<220.  # insertions consume mass over simulated time
+    assert inserted['arrivalPhase'] in ('orbiting','approach','insertion_burn','insertion_trim')
+    if inserted['arrivalPhase']=='orbiting':
+        peri,apo=__import__('app.physics',fromlist=['orbital_envelope']).orbital_envelope(
+            State(inserted['x'],inserted['y'],inserted['vx'],inserted['vy']),310000.)
+        assert apo is not None and peri>103.

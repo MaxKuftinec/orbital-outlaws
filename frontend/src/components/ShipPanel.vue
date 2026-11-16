@@ -4,7 +4,8 @@ import { COCKPIT_STATE_EVENT, type CockpitState, type ShipView } from '../servic
 
 const DEFAULT_SHIP: ShipView = {
   hp: 100, fuel: 200, fuelMax: 200, repairParts: 10, repairCapacity: 24,
-  ammo: 36, credits: 65, deltaV: 0, status: 'Nominal orbit',
+  ammo: 36, credits: 65, captureHeatMJ: 0, captureCapacityMJ: 520, cargoKg: 0,
+  deltaV: 0, status: 'Nominal orbit',
   statusColor: '#67e0aa', repairDisabled: true, repairing: false
 }
 
@@ -60,6 +61,11 @@ export default defineComponent({
     </div>
     <div class="meter"><div id="fuel-bar" class="meter-fill cyan"
                             :style="{ width: (100 * ship.fuel / Math.max(ship.fuelMax, 1)) + '%' }"></div></div>
+    <div class="capture-instruments" aria-label="Physical salvage capture monitoring">
+      <div class="metric-row"><span>Grapple heat</span><strong>{{ ship.captureHeatMJ.toFixed(1) }} / {{ ship.captureCapacityMJ }} MJ</strong></div>
+      <div class="meter"><div class="meter-fill cyan" :style="{ width: (100 * ship.captureHeatMJ / Math.max(1,ship.captureCapacityMJ)) + '%' }"></div></div>
+      <div class="metric-row"><span>Recovered cargo</span><strong>{{ ship.cargoKg.toFixed(1) }} kg</strong></div>
+    </div>
     <div class="small-stats">
       <div><span>AMMO</span><strong id="ammo-value">{{ ship.ammo }}</strong></div>
       <div><span>CREDITS</span><strong id="credits-value">{{ ship.credits }} <i>¤</i></strong></div>

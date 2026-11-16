@@ -119,14 +119,15 @@ class WorldStore:
                     progress = db.scalars(select(PlayerProgress).where(
                         PlayerProgress.entity_id == entity_id).with_for_update()).one()
                     progress.credits += effects['credits']
-                if effects['fuel'] or effects['player_dvx'] or effects['player_dvy']:
+                if (effects['fuel'] or effects.get('capture_cargo_mass') or
+                        effects['player_dvx'] or effects['player_dvy']):
                     _, _, _, end_player = self._at(db, 'kestrel', entity_id, current_world_s)
                     added_fuel = effects['fuel']
                     new_state = State(
                         end_player.x, end_player.y,
                         end_player.vx + effects['player_dvx'],
                         end_player.vy + effects['player_dvy'],
-                        end_player.mass_kg + added_fuel,
+                        end_player.mass_kg + added_fuel + effects.get('capture_cargo_mass',0.),
                         end_player.fuel_kg + added_fuel,
                         end_player.heading, end_player.omega)
                     peri, apo = orbital_envelope(new_state, world.mu)
@@ -262,13 +263,24 @@ class WorldStore:
             entity.checkpoint = state.as_dict()
             entity.periapsis_km, entity.apoapsis_km = peri, apo
             entity.version += 1
+            receiver_mass=ally.get('dryMass',1050.)+ally['fuel']
+            ratio=moved/(receiver_mass+moved)
+            dvx=ratio*(current.vx-ally['vx'])
+            dvy=ratio*(current.vy-ally['vy'])
+            thermal_mj=.5*receiver_mass*moved/(receiver_mass+moved)*relative**2
+            ally['vx']+=dvx
+            ally['vy']+=dvy
             ally['fuel'] += moved
+            ally['transferHeatMJ']=ally.get('transferHeatMJ',0.)+thermal_mj
             sector_event(sector, sector['t'],
-                         f"KESTREL-7 delivered {moved:.1f} kg propellant to {ally['name']}.", 'good')
+                         f"KESTREL-7 delivered {moved:.1f} kg propellant to {ally['name']} "
+                         f"(momentum-adjusted, {thermal_mj:.1f} MJ damped).", 'good')
             saved.snapshot = sector
             saved.saved_at_utc = time.time()
             db.add(Event(world_id='kestrel', entity_id=entity_id, at_s=now,
-                         kind='fuel_transfer', payload={'target': target_id, 'kg': moved},
+                         kind='fuel_transfer', payload={'target': target_id, 'kg': moved,
+                                 'recipient_dvx':dvx,'recipient_dvy':dvy,
+                                 'thermal_mj':thermal_mj},
                          after=state.as_dict(),
                          idempotency_key='fuel:'+str(__import__('uuid').uuid4())))
             return {'target': target_id, 'transferred_kg': moved,
@@ -315,6 +327,8 @@ class WorldStore:
             previous = snapshot['player']
             snapshot['player'] = {
                 'hp':100., 'ammo':36, 'repairParts':10.,
+                'cargoKg':0.,'captureHeatMJ':0.,'captureRadiatedMJ':0.,
+                'captureHeatProducedMJ':0.,'transferHeatMJ':0.,
                 'alive':True, 'gunReady':now,
                 'respawnCount':previous.get('respawnCount',0)+1
             }

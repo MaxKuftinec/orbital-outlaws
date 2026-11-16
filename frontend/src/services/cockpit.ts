@@ -12,6 +12,9 @@ export interface ShipView {
   repairCapacity: number
   ammo: number
   credits: number
+  captureHeatMJ: number
+  captureCapacityMJ: number
+  cargoKg: number
   deltaV: number
   status: string
   statusColor: string
