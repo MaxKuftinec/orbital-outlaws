@@ -10,7 +10,7 @@
     }
     return id;
   }
-  function attach({controls,onState,onProgress,onConnected,onError}){
+  function attach({controls,onState,onProgress,onEncounter,onConnected,onError}){
     const base=root.ORBITAL_API_BASE_URL||'';
     const origin=new URL(base||'/',location.href);
     const address=(origin.protocol==='https:'?'wss:':'ws:')+'//'+origin.host+
@@ -41,6 +41,7 @@
         if(data.type==='welcome'){
           onState({...data.flight,clientSampleMs:performance.now()});
           onProgress(data.progress);
+          if(onEncounter)onEncounter(data.encounter);
           connected=true;last='';onConnected(true);tick();
           for(const reward of pending.values())send('salvage',reward);
         }else if(data.type==='snapshot'){
@@ -65,6 +66,7 @@
     const interval=setInterval(tick,50);
     connect();
     return {
+      encounter:snapshot=>send('encounter',{snapshot}),
       purchase:upgrade=>send('purchase',{upgrade}),
       salvage:(id,credits)=>{
         pending.set(id,{id,credits});savePending();
