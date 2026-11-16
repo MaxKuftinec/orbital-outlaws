@@ -69,6 +69,8 @@ def test_websocket_stream_and_economy(monkeypatch):
         with client.websocket_connect(f'/api/players/{pilot}/live') as ws:
             welcome=receive_type(ws,'welcome')
             assert welcome['progress']['credits']==65
+            ws.send_json({'type':'encounter','snapshot':{'t':21,'enemies':[{'id':'raider-01','alive':False}],
+                'ally':{'id':'ally-01'},'pickups':[]}})
             ws.send_json({'type':'input','thrust':True,'turn':1,'stabilize':False,'gimbal':0})
             assert receive_type(ws,'snapshot')['flight']['version']>=1
             ws.send_json({'type':'purchase','upgrade':'predictive'})
@@ -83,6 +85,7 @@ def test_websocket_stream_and_economy(monkeypatch):
             restored=receive_type(ws,'welcome')
             assert restored['progress']['credits']==49
             assert restored['progress']['upgrades']['predictive']
+            assert restored['encounter']['snapshot']['enemies'][0]['alive'] is False
 
 
 def test_websocket_requires_local_dev_mode(monkeypatch):
