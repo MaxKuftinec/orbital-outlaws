@@ -6,6 +6,7 @@ import TechnologyMarket from './components/TechnologyMarket.vue'
 import TelemetryPanel from './components/TelemetryPanel.vue'
 import TargetingPanel from './components/TargetingPanel.vue'
 import NavigationPanel from './components/NavigationPanel.vue'
+import SystemAtlas from './components/SystemAtlas.vue'
 
 const legacyFiles = [
   'map-tools.js', 'map-visuals.js', 'star-system.js', 'reference-frames.js', 'autopilot-attitude.js', 'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
@@ -14,24 +15,51 @@ const legacyFiles = [
 
 export default defineComponent({
   name: 'OrbitalCockpit',
-  components: { CommsPanel, ShipPanel, TechnologyMarket, TelemetryPanel, TargetingPanel, NavigationPanel },
+  components: { CommsPanel, ShipPanel, TechnologyMarket, TelemetryPanel, TargetingPanel, NavigationPanel, SystemAtlas },
   data() {
     return {
       backendOnline: false,
       persistentOnline: false,
-      startupError: ''
+      startupError: '',
+      view: window.location.hash === '#/atlas' ? 'atlas' : 'cockpit'
     }
   },
   mounted() {
     window.addEventListener('orbital-persistence', this.updatePersistence as EventListener)
+    window.addEventListener('hashchange', this.onHashChange as EventListener)
     ;(window as typeof window & { ORBITAL_API_BASE_URL?: string }).ORBITAL_API_BASE_URL =
       import.meta.env.VITE_API_BASE_URL ?? ''
     this.startCockpit()
   },
   beforeUnmount() {
     window.removeEventListener('orbital-persistence', this.updatePersistence as EventListener)
+    window.removeEventListener('hashchange', this.onHashChange as EventListener)
   },
   methods: {
+    onHashChange() {
+      this.view = window.location.hash === '#/atlas' ? 'atlas' : 'cockpit'
+      this.$nextTick(() => window.dispatchEvent(new Event('resize')))
+    },
+    openAtlas() {
+      window.location.hash = '#/atlas'
+      this.onHashChange()
+      window.scrollTo({top:0,behavior:'smooth'})
+    },
+    openCockpit() {
+      window.location.hash = '#/cockpit'
+      this.onHashChange()
+      window.scrollTo({top:0,behavior:'smooth'})
+    },
+    inspectBody(id: string) {
+      if(id!=='veyra' && id!=='kestrel')return
+      this.openCockpit()
+      this.$nextTick(() => {
+        window.dispatchEvent(new CustomEvent('orbital-target-selected',{
+          detail:{key:id==='veyra'?'star':'planet'}
+        }))
+        window.dispatchEvent(new CustomEvent('orbital-focus-target'))
+      })
+    },
     updatePersistence(event: Event) {
       this.persistentOnline = Boolean((event as CustomEvent).detail?.online)
     },
@@ -66,15 +94,17 @@ export default defineComponent({
 <v-app class="orbital-vuetify">
   <v-main>
 
-  <div class="app-shell">
+  <SystemAtlas v-show="view==='atlas'" @back="openCockpit" @inspect="inspectBody" />
+  <div v-show="view==='cockpit'" class="app-shell">
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
-        <div><div class="eyebrow">VERSION 1.0</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
+        <div><div class="eyebrow">VERSION 1.1</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
       <div class="top-actions"><v-chip :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Live · flight and upgrades saved' : backendOnline ? 'Backend online · connecting flight' : 'Local gameplay · backend offline' }}</v-chip>
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">ENCOUNTER TIME</span><strong id="sim-clock">00:00</strong></div></div>
         
+        <v-btn density="compact" variant="outlined" id="open-atlas-btn" class="action-btn atlas-app-nav" title="Open the Veyra System Atlas: lore, star system and flight guides" @click="openAtlas">◈ System Atlas</v-btn>
         <v-btn density="compact" variant="tonal"  id="settings-btn" type="button" class="action-btn" title="Flight control and map settings">⚙ Settings</v-btn>
         
         <v-btn density="compact" variant="tonal"  id="reset-btn" class="action-btn muted">↻ Reset</v-btn>
@@ -170,7 +200,7 @@ export default defineComponent({
         <div class="settings-bottom"><span class="mini-note">Display choices are saved locally.</span><button type="button" id="settings-done" class="buy-btn">Done</button></div>
       </div>
     </div>
-    <footer class="footer-note">Orbital Outlaws · v1.0 <span>Autonomous server-side sector · persistent upgrades · configurable panels</span></footer>
+    <footer class="footer-note">Orbital Outlaws · v1.1 <span>Autonomous server-side sector · persistent upgrades · configurable panels</span></footer>
   </div>
 
   <v-alert v-if="startupError" color="error" variant="tonal" class="game-startup-error">{{ startupError }}</v-alert>

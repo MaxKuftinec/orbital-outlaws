@@ -36,7 +36,7 @@ function cameraHarness(){
                followTarget:false,aimMode:'locked',targetId:'raider-01'};
   const MAP={niceScale:()=>({km:100,pixels:100,label:'100 km'}),
     distance:()=>null,distanceLabel:()=>''};
-  const ctx={state,MAP,
+  const ctx={state,MAP,MIN_ZOOM:1e-10,
     navTarget:key=>key==='pickup:wreck-r-26'?target:null,
     scale:()=>Math.min(800/700,600/660)*state.zoom,
     clamp:(x,a,b)=>Math.max(a,Math.min(b,x)),

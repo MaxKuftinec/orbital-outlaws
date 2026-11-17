@@ -15,10 +15,24 @@ import math
 from dataclasses import replace
 from .physics import State, propagate
 
+# K2V Veyra: approximate but internally consistent main-sequence star.
+# Solar conversion values from JPL/IAU; parameters are design assumptions.
+SOLAR_MU = 132_712_440_018.
+AU_KM = 149_597_870.7
+SOLAR_RADIUS_KM = 695_700.
+STAR_MASS_SOLAR = .82
+STAR_RADIUS_SOLAR = .78
+STAR_LUMINOSITY_SOLAR = .40
+STAR_MU = STAR_MASS_SOLAR * SOLAR_MU
+STAR_RADIUS_KM = STAR_RADIUS_SOLAR * SOLAR_RADIUS_KM
+STAR_EFFECTIVE_TEMPERATURE_K = 5772 * (STAR_LUMINOSITY_SOLAR / STAR_RADIUS_SOLAR**2)**.25
+ORBIT_RADIUS_KM = .40 * AU_KM
+NERIS_ORBIT_KM = .65 * AU_KM  # Proposed only, no gravity or encounter object yet
+NERIS_PERIOD_S = 2 * math.pi * math.sqrt(NERIS_ORBIT_KM**3 / STAR_MU)
 PLANET_MU = 310_000.
-STAR_MU = 2_000_000_000.
-STAR_RADIUS_KM = 4_500.
-ORBIT_RADIUS_KM = 160_000.
+# Kestrel's current 85-km rendered/collision radius is a LEGACY gameplay
+# value, physically incompatible with its ~0.78 Earth mass. Planetary radius
+# and saved orbital coordinates require a separately versioned migration.
 START_PHASE = 0.4  # deterministic orientation for existing sector saves
 ANGULAR_RATE = math.sqrt(STAR_MU / ORBIT_RADIUS_KM**3)
 PERIOD_S = 2*math.pi / ANGULAR_RATE
@@ -96,8 +110,15 @@ def system_info(at_s: float) -> dict:
     return {'frame':'star-centered', 'time_s':at_s, 'star':{
               'id':'kestrel-primary','name':'VEYRA',
               'mu_km3_s2':STAR_MU,'radius_km':STAR_RADIUS_KM,
+              'mass_solar':STAR_MASS_SOLAR,'radius_solar':STAR_RADIUS_SOLAR,
+              'luminosity_solar':STAR_LUMINOSITY_SOLAR,
+              'effective_temperature_k':STAR_EFFECTIVE_TEMPERATURE_K,
+              'spectral_class':'K2V',
               'x':0.,'y':0.,'vx':0.,'vy':0.},
             'planet':{'id':'kestrel','name':'KESTREL',
               'mu_km3_s2':PLANET_MU,'radius_km':85., **planet},
             'orbit_radius_km':ORBIT_RADIUS_KM,
-            'orbit_period_s':PERIOD_S,'hill_radius_km':HILL_RADIUS_KM}
+            'orbit_period_s':PERIOD_S,'hill_radius_km':HILL_RADIUS_KM,
+            'physical_model':'K2V star with planet-relative legacy encounter geometry',
+            'neris_design_orbit_km':NERIS_ORBIT_KM,
+            'neris_design_period_s':NERIS_PERIOD_S}

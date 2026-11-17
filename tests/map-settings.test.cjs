@@ -14,8 +14,8 @@ vm.runInNewContext(read('frontend/public/legacy/map-tools.js'),sandbox);
 const MAP=sandbox.module.exports;
 
 test('version 1.0 and named Veyra star appear in the user-facing interface',()=>{
-  assert.match(app,/VERSION 1\.0/);
-  assert.match(app,/Orbital Outlaws · v1\.0/);
+  assert.match(app,/VERSION 1\.1/);
+  assert.match(app,/Orbital Outlaws · v1\.1/);
   assert.match(app,/id="settings-btn"[^>]*>⚙ Settings/);
   assert.ok(!app.includes('id="system-map-btn"'));
   assert.ok(!app.includes('id="planet-map-btn"'));

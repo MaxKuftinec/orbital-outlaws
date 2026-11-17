@@ -28,6 +28,7 @@
   const exhaustKmS=ENGINE.thrustN/ENGINE.flowKgS/1000;
   const REPAIR=Object.freeze({starterKg:10,capacityKg:24,hpPerKg:5,rateHpS:5});
   const RESERVE_KEY='orbital-outlaws.fuel-reserve-kg.v1';
+  const MIN_ZOOM=1e-10; // The physical stellar orbit is ~60 million km.
   const FRAME_KEY='orbital-outlaws.map-frame.v1';
   const AXES_KEY='orbital-outlaws.show-axes.v1';
   function storedFrame(){try{return localStorage.getItem(FRAME_KEY)==='star'?'star':'planet';}catch{return 'planet';}}
@@ -1438,7 +1439,7 @@
     state.systemView=true;
     try{localStorage.setItem(FRAME_KEY,'star');}catch{}
     const baseScale=Math.min(W/700,H/660);
-    state.zoom=clamp(.65*Math.min(W,H)/(STAR.ORBIT_RADIUS_KM*baseScale),.0001,6);
+    state.zoom=clamp(.65*Math.min(W,H)/(STAR.ORBIT_RADIUS_KM*baseScale),MIN_ZOOM,6);
     const planet=STAR.planet(state.t),s=scale();
     // Center the initial system view between its star and planet.
     state.panX=-planet.x*s/2;state.panY=-planet.y*s/2;
@@ -1459,12 +1460,12 @@
     if(target.kind==='star'){
       state.systemView=true;
       try{localStorage.setItem(FRAME_KEY,'star');}catch{}
-      state.zoom=clamp(.65*Math.min(W,H)/(STAR.ORBIT_RADIUS_KM*Math.min(W/700,H/660)),.0001,6);
+      state.zoom=clamp(.65*Math.min(W,H)/(STAR.ORBIT_RADIUS_KM*Math.min(W/700,H/660)),MIN_ZOOM,6);
     }else if(target.kind==='planet'){
       state.systemView=false;state.zoom=1.8;
       try{localStorage.setItem(FRAME_KEY,'planet');}catch{}
     }else{
-      state.zoom=clamp(Math.max(state.zoom,2.8),.0001,6);
+      state.zoom=clamp(Math.max(state.zoom,2.8),MIN_ZOOM,6);
     }
     state.followTarget=follow;state.followPlayer=false;
     centerCameraOn(target);updateZoom();
@@ -1528,7 +1529,7 @@
   }
   function zoomAt(factor,px=W/2,py=H/2){
     const world=fromScreen(px,py);
-    state.zoom=clamp(state.zoom*factor,.0001,6);
+    state.zoom=clamp(state.zoom*factor,MIN_ZOOM,6);
     const offset=cameraOffset();
     state.panX=px-W/2-(world.x+offset.x)*scale();
     state.panY=py-H/2-(world.y+offset.y)*scale();

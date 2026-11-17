@@ -201,3 +201,23 @@ An alive ship's checkpoint is archived in the event `previous_ship`
 payload; previous ship state is replaced for that pilot rather than
 spawning an independent NPC. The encounter's other ships and salvage are
 preserved, progression and active flight leases reset.
+
+
+## v1.1 model / Atlas
+
+See `docs/STAR_SYSTEM_CANON.md` for updated physically motivated K2V
+Veyra parameters, Kestrel's 0.40 AU orbit, and the 0.65 AU Neris
+design proposal. The authoritative `backend/app/star_system.py` and
+browser `frontend/public/legacy/star-system.js` share the same
+analytical circular orbit, restricted three-body stellar tide and
+realistic star values. The Atlas is a Vue Options API component at
+`frontend/src/components/SystemAtlas.vue`, accessible through the
+hash route `#/atlas`. The cockpit uses `v-show` rather than being
+unmounted; rendering/physics/writes continue in the background.
+
+**Do not infer a physically consistent Kestrel surface from the
+current 85 km encounter collision radius.** Its μ is almost Earth's,
+but the surface collision geometry is a legacy game-scale placeholder
+requiring a versioned migration before landings or settlements.
+
+First implementation of planetary civilization or ecology is v2.0.

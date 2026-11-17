@@ -8,8 +8,19 @@
   if(root)root.OrbitalStarSystem=api;
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
-  const PLANET_MU=310000, STAR_MU=2000000000;
-  const ORBIT_RADIUS_KM=160000,STAR_RADIUS_KM=4500,START_PHASE=.4;
+  // Veyra: representative K2V orange dwarf; coherent mass/radius/luminosity.
+  // Kestrel's legacy 85-km collision radius is NOT a plausible physical
+  // radius for its current gravitational parameter; planet migration is pending.
+  const SOLAR_MU=132712440018,AU_KM=149597870.7,SOLAR_RADIUS_KM=695700;
+  const STAR_MASS_SOLAR=.82,STAR_LUMINOSITY_SOLAR=.4,STAR_RADIUS_SOLAR=.78;
+  const STAR_MU=STAR_MASS_SOLAR*SOLAR_MU;
+  const PLANET_MU=310000,ORBIT_RADIUS_KM=.4*AU_KM;
+  const STAR_RADIUS_KM=STAR_RADIUS_SOLAR*SOLAR_RADIUS_KM,START_PHASE=.4;
+  const STAR_EFFECTIVE_TEMPERATURE_K=5772*Math.pow(
+    STAR_LUMINOSITY_SOLAR/(STAR_RADIUS_SOLAR**2),.25);
+  // Proposed Neris: orbit / climate design only, not a simulated gravity source.
+  const NERIS_ORBIT_KM=.65*AU_KM;
+  const NERIS_PERIOD_S=2*Math.PI*Math.sqrt(NERIS_ORBIT_KM**3/STAR_MU);
   const ANGULAR_RATE=Math.sqrt(STAR_MU/Math.pow(ORBIT_RADIUS_KM,3));
   const PERIOD_S=2*Math.PI/ANGULAR_RATE;
   const HILL_RADIUS_KM=ORBIT_RADIUS_KM*Math.cbrt(PLANET_MU/(3*STAR_MU));
@@ -38,5 +49,7 @@
             y:-PLANET_MU*y/Math.pow(r,3)+tide.y};
   }
   return {planet,star,tidalAcceleration,acceleration,
-    PLANET_MU,STAR_MU,ORBIT_RADIUS_KM,STAR_RADIUS_KM,ANGULAR_RATE,PERIOD_S,HILL_RADIUS_KM};
+    PLANET_MU,STAR_MU,ORBIT_RADIUS_KM,STAR_RADIUS_KM,ANGULAR_RATE,PERIOD_S,HILL_RADIUS_KM,
+    SOLAR_MU,AU_KM,SOLAR_RADIUS_KM,STAR_MASS_SOLAR,STAR_RADIUS_SOLAR,
+    STAR_LUMINOSITY_SOLAR,STAR_EFFECTIVE_TEMPERATURE_K,NERIS_ORBIT_KM,NERIS_PERIOD_S};
 });

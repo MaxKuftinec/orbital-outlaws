@@ -1,6 +1,6 @@
-# Orbital Outlaws — v1.0 Veyra system and persistent orbital combat
+# Orbital Outlaws — v1.1 System Atlas and K-dwarf Veyra
 
-A persistent 2D Newtonian orbital combat prototype using **Vue 3 + Vuetify (Options API)**, **FastAPI**, **PostgreSQL** and a bidirectional **WebSocket**.
+A persistent 2D Newtonian orbital combat simulation using **Vue 3 + Vuetify (Options API)**, **FastAPI**, **PostgreSQL** and a bidirectional **WebSocket**.
 
 ## Current architecture
 
@@ -517,3 +517,57 @@ and remains live while zooming in either reference frame.
 See [Second Planet Design Candidate](docs/SECOND_PLANET_DESIGN.md) for
 an Earth-mass, Earth-radius potential civilization world and the two
 possible Veyra stellar models. It is a proposal, not a shipped planet.
+
+
+## v1.1 — System Atlas / lore & hard-science architecture
+
+The separate, bookmarkable **`#/atlas`** page (or **◈ System Atlas** in
+the cockpit header) presents an editorial system overview, interactive
+orbit-preview chart, **individual Veyra, Kestrel and Neris dossiers**, mass,
+radius, gravity, orbital period and luminosity data, gameplay lore, a
+pilot field handbook, and a civilization/future-economy roadmap. Click
+**Return to cockpit** to preserve the active flight session. The live
+simulation continues to run in the background; this is not a pause menu.
+The **Locate in cockpit** action switches back and selects/focuses
+simulated Veyra or Kestrel. Neris is labeled **Concept**, never a live
+gravitational destination.
+
+### Veyra physical calibration
+
+Veyra now has a plausible **K2V orange-dwarf model** replacing its
+brown-dwarf-scale demonstration parameters: **0.82 M☉**, **0.78 R☉**,
+**0.40 L☉**, roughly **5,197 K**, μ ≈ **1.08824 × 10¹¹ km³/s²**.
+Kestrel's Keplerian orbital radius has changed to **0.40 AU**
+(59.84 million km), orbital period to **102.04 days**, and local
+star-tide calculation updates in both backend and browser. The system
+view can now zoom out to actual astronomical-unit distances. This
+changes only the planet's stellar orbit and differential force, not
+persisted Kestrel-relative ship positions.
+
+The second planet, **Neris**, has a reserved **design orbit at 0.65 AU**,
+an estimated 211.38-day period and about 0.947 times Earth's stellar
+irradiance. It is **not yet instantiated** as a moving or gravitating
+entity; the Atlas chart shows the planned phase only. The design
+describes an Earth-radius and Earth-mass world with candidate oceans,
+habitable climate, industrial ports and future ecological simulation.
+
+**Outstanding geometry debt:** the current Kestrel local encounter still
+uses μ = 310,000 km³/s² (~0.78 Earth mass) with an 85 km collision
+radius. This cannot be a normal rocky planet. Before surface landing,
+we must choose a plausible physical radius, version and migrate local
+positions/velocities safely, and revisit encounter scale, flight times,
+spawn points and game time acceleration. The Atlas transparently marks
+this as a legacy approximation; it does not claim physical completeness.
+
+### Planned semantic versioning
+
+**v1.x** continues orbital gameplay, solar-system physics and flight
+navigation, ship/port infrastructure and UX. The FIRST implementation
+of an actual persistent **planetary ecology or civilization** (its
+resources, inhabitants, settlements, or interacting economy) is the
+explicit **v2.0 major milestone**. Lore and static concepts alone
+do not trigger v2.0.
+
+Reference: [Veyra stellar canon](docs/STAR_SYSTEM_CANON.md),
+[Neris design](docs/SECOND_PLANET_DESIGN.md),
+[Versioning milestones](docs/VERSIONING.md).

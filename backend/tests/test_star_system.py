@@ -36,10 +36,10 @@ def test_stellar_gravity_subtracts_planet_common_acceleration():
 
 def test_restricted_three_body_propagation_is_reversible_and_perturbed():
     initial=State(260.,0.,0.,math.sqrt(PLANET_MU/260))
-    future=propagate_local(initial,12,PLANET_MU,120)
-    pure=propagate(initial,12,PLANET_MU)
+    future=propagate_local(initial,120,PLANET_MU,120)
+    pure=propagate(initial,120,PLANET_MU)
     assert abs(future.x-pure.x)+abs(future.y-pure.y)>1.e-7
-    recovered=propagate_local(future,-12,PLANET_MU,132)
+    recovered=propagate_local(future,-120,PLANET_MU,240)
     assert math.hypot(recovered.x-initial.x,recovered.y-initial.y)<.03
     assert math.hypot(recovered.vx-initial.vx,recovered.vy-initial.vy)<.01
 
@@ -72,3 +72,20 @@ def test_system_ephemeris_has_no_migration_of_legacy_player_coordinates(postgres
     assert info['frame']=='star-centered'
     assert math.hypot(info['planet']['x'],info['planet']['y'])==pytest.approx(ORBIT_RADIUS_KM)
     assert info['orbit_period_s']==pytest.approx(PERIOD_S)
+
+
+def test_veyra_is_a_plausible_k_dwarf_with_an_au_scale_planetary_orbit():
+    from app.star_system import (
+        STAR_MASS_SOLAR, STAR_RADIUS_SOLAR, STAR_LUMINOSITY_SOLAR,
+        STAR_EFFECTIVE_TEMPERATURE_K, AU_KM, NERIS_ORBIT_KM, NERIS_PERIOD_S,
+    )
+    assert STAR_MASS_SOLAR == pytest.approx(.82)
+    assert STAR_RADIUS_SOLAR == pytest.approx(.78)
+    assert STAR_LUMINOSITY_SOLAR == pytest.approx(.40)
+    assert 4800 < STAR_EFFECTIVE_TEMPERATURE_K < 5400
+    assert ORBIT_RADIUS_KM == pytest.approx(.4 * AU_KM)
+    assert PERIOD_S / 86400 == pytest.approx(102.04, abs=.05)
+    assert NERIS_ORBIT_KM == pytest.approx(.65 * AU_KM)
+    assert NERIS_PERIOD_S / 86400 == pytest.approx(211.38, abs=.05)
+    assert STAR_RADIUS_KM > 500000
+    assert HILL_RADIUS_KM > 500000

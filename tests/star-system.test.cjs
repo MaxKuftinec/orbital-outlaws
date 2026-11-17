@@ -41,7 +41,7 @@ function makeCamera(){
   const state={systemView:false,t:0,zoom:1,panX:0,panY:0,
                followPlayer:false,followTarget:false,player:{x:100,y:0}};
   const MAP={niceScale:()=>({km:100,pixels:50,label:'100 km'})};
-  const ctx={state,STAR,MAP,FRAME_KEY:'test-frame',localStorage:{setItem(){}},
+  const ctx={state,STAR,MAP,MIN_ZOOM:1e-10,FRAME_KEY:'test-frame',localStorage:{setItem(){}},
     W:1000,H:600,clamp:(x,min,max)=>Math.max(min,Math.min(max,x)),
     logEvent:()=>{},updateHud:()=>{},$:()=>obj,Math};
   vm.createContext(ctx);
