@@ -51,6 +51,20 @@ class FlightControl(Base):
     expires_s: Mapped[float]=mapped_column(Float,default=0)
 
 
+class AutoBurn(Base):
+    """One authoritative guidance plan per spacecraft.
+
+    JSON progress and Entity checkpoint are committed in the same transaction
+    so disconnects/restarts cannot repeat engine burns or RCS expenditure.
+    """
+    __tablename__ = 'auto_burns'
+    entity_id: Mapped[str] = mapped_column(ForeignKey('entities.id'), primary_key=True)
+    plan: Mapped[dict] = mapped_column(JSON, nullable=False)
+    progress: Mapped[dict] = mapped_column(JSON, nullable=False)
+    started_s: Mapped[float] = mapped_column(Float, nullable=False)
+    updated_s: Mapped[float] = mapped_column(Float, nullable=False)
+
+
 class PlayerProgress(Base):
     __tablename__='player_progress'
     entity_id: Mapped[str]=mapped_column(ForeignKey('entities.id'),primary_key=True)
