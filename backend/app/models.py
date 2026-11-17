@@ -77,3 +77,42 @@ class EncounterSnapshot(Base):
     entity_id: Mapped[str]=mapped_column(ForeignKey('entities.id'),primary_key=True)
     saved_at_utc: Mapped[float]=mapped_column(Float,nullable=False)
     snapshot: Mapped[dict]=mapped_column(JSON,nullable=False)
+
+
+class Account(Base):
+    """Player identity is separate from legacy per-pilot game entities."""
+    __tablename__ = 'accounts'
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    username: Mapped[str] = mapped_column(String(24), nullable=False, unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    avatar_id: Mapped[str] = mapped_column(String(30), nullable=False, default='navigator')
+    created_at: Mapped[float] = mapped_column(Float, nullable=False)
+
+
+class EmailChallenge(Base):
+    """One-time code hash; never persist or log the delivered six digits."""
+    __tablename__ = 'email_challenges'
+    account_id: Mapped[str] = mapped_column(ForeignKey('accounts.id'), primary_key=True)
+    challenge_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[float] = mapped_column(Float, nullable=False)
+    sent_at: Mapped[float] = mapped_column(Float, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class AccountSession(Base):
+    """Only a SHA-256 digest of the opaque bearer token is persisted."""
+    __tablename__ = 'account_sessions'
+    token_digest: Mapped[str] = mapped_column(String(64), primary_key=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey('accounts.id'), index=True)
+    created_at: Mapped[float] = mapped_column(Float, nullable=False)
+    expires_at: Mapped[float] = mapped_column(Float, nullable=False)
+
+
+class AuthThrottle(Base):
+    __tablename__ = 'auth_throttles'
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    resets_at: Mapped[float] = mapped_column(Float, nullable=False)

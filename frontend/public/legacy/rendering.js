@@ -2,7 +2,7 @@
 (function(root){
   'use strict';
   root.OrbitalRenderer={
-    create({ctx,WORLD,ENGINE,palette,NAV,getState,getViewport,toScreen,scale,clamp,getEphemerisTarget,getSelectedContact,getSystem,getVisuals,getFrameSample}){
+    create({ctx,WORLD,ENGINE,palette,NAV,getState,getViewport,toScreen,scale,clamp,getEphemerisTarget,getSelectedContact,getSystem,getVisuals,getFrameSample,getMeasurementPoint}){
       const TWO_PI=Math.PI*2;
       let state,W,H,dpr,starfield,encounterReady;
   function pathWorld(points,stroke,lineWidth=1,dash=[],sampled=false) {
@@ -169,26 +169,72 @@
   function drawShots(){for(const s of state.shots){const p=toScreen(s.x,s.y);if(p.x<-90||p.x>W+90||p.y<-90||p.y>H+90)continue;const tail=toScreen(s.x-s.vx*.035,s.y-s.vy*.035);ctx.strokeStyle=s.faction==='ally'?palette.green:s.faction==='player'?palette.cyan:palette.red;ctx.lineWidth=2.6;ctx.beginPath();ctx.moveTo(tail.x,tail.y);ctx.lineTo(p.x,p.y);ctx.stroke();}}
   function drawParticles(){for(const p of state.particles){const q=toScreen(p.x,p.y);ctx.globalAlpha=clamp(p.life/p.maxLife,0,1);ctx.fillStyle=p.color;ctx.fillRect(q.x,q.y,2.2,2.2);}ctx.globalAlpha=1;}
   function drawMeasurement(){
-    const m=state.measurement;
-    if(!m?.enabled||!m.start)return;
-    const a=toScreen(m.start.x,m.start.y);
-    const b=m.end||m.hover;
+    const m=state.measurement,tools=window.OrbitalMapTools;
+    if(!m?.enabled||!m.start||!tools)return;
+    const planet=getSystem().planet(state.t);
+    // Every stored measurement position is stellar-inertial. Convert to the
+    // *current* planet-relative screen frame for either map mode.
+    const project=anchor=>{
+      const absolute=getMeasurementPoint(anchor);
+      return absolute?toScreen(absolute.x-planet.x,absolute.y-planet.y):null;
+    };
+    const a=project(m.start),b=project(m.end||m.hover);
+    if(!a)return;
+    const inside=p=>p&&p.x>=-10&&p.x<=W+10&&p.y>=-10&&p.y<=H+10;
     ctx.save();
-    ctx.strokeStyle='#c9a6f8';ctx.fillStyle='#dbc1ff';
-    ctx.lineWidth=2;ctx.setLineDash([6,4]);
+    ctx.strokeStyle='#c9a6f8';ctx.fillStyle='#e8d2ff';ctx.lineWidth=2;
+    const mode=m.tool||'ruler';
     if(b){
-      const end=toScreen(b.x,b.y);
-      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(end.x,end.y);ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.beginPath();ctx.arc(end.x,end.y,4,0,TWO_PI);ctx.fill();
-      const km=Math.hypot(b.x-m.start.x,b.y-m.start.y);
-      const label=km>=1?km.toLocaleString('en-US',{maximumFractionDigits:2})+' km':
-        (km*1000).toFixed(1)+' m';
-      ctx.fillStyle='#0c1b2fe8';ctx.fillRect((a.x+end.x)/2-42,(a.y+end.y)/2-22,Math.max(83,label.length*7+10),19);
-      ctx.fillStyle='#dbc1ff';ctx.font='bold 11px monospace';
-      ctx.fillText(label,(a.x+end.x)/2-37,(a.y+end.y)/2-8);
+      const clipped=tools.clipSegment(a,b,W,H,8);
+      if(clipped){
+        const [start,end]=clipped;
+        ctx.beginPath();ctx.setLineDash(mode==='compass'?[3,4]:[6,4]);
+        ctx.moveTo(start.x,start.y);ctx.lineTo(end.x,end.y);ctx.stroke();
+        ctx.setLineDash([]);
+        const midX=(start.x+end.x)/2,midY=(start.y+end.y)/2;
+        const da=getMeasurementPoint(m.start),db=getMeasurementPoint(m.end||m.hover);
+        const label=mode==='compass'?tools.bearingLabel(tools.bearing(da,db)):
+          tools.distanceLabel(tools.distance(da,db));
+        const width=Math.min(245,Math.max(85,ctx.measureText(label).width+18));
+        const lx=clamp(midX-width/2,9,Math.max(9,W-width-9));
+        const ly=clamp(midY-34,9,Math.max(9,H-25));
+        ctx.fillStyle='#0c1b2fee';ctx.fillRect(lx,ly,width,23);
+        ctx.strokeStyle='#75579d';ctx.strokeRect(lx,ly,width,23);
+        ctx.fillStyle='#eddcff';ctx.font='bold 11px ui-monospace,monospace';
+        ctx.fillText(label,lx+8,ly+15,width-15);
+        if(mode==='compass'){
+          const dx=end.x-start.x,dy=end.y-start.y,n=Math.hypot(dx,dy);
+          if(n>24){
+            const ux=dx/n,uy=dy/n;
+            ctx.strokeStyle='#e4c5ff';ctx.beginPath();
+            ctx.moveTo(midX+ux*11,midY+uy*11);
+            ctx.lineTo(midX-ux*7-uy*5,midY-uy*7+ux*5);
+            ctx.moveTo(midX+ux*11,midY+uy*11);
+            ctx.lineTo(midX-ux*7+uy*5,midY-uy*7-ux*5);
+            ctx.stroke();
+          }
+        }
+      }
+      if(inside(b)){
+        ctx.fillStyle='#dbc1ff';ctx.beginPath();ctx.arc(b.x,b.y,4.5,0,TWO_PI);ctx.fill();
+      }
     }
-    ctx.setLineDash([]);ctx.beginPath();ctx.arc(a.x,a.y,4,0,TWO_PI);ctx.fill();
+    if(inside(a)){
+      ctx.fillStyle='#dbc1ff';ctx.beginPath();ctx.arc(a.x,a.y,5,0,TWO_PI);ctx.fill();
+      if(mode==='compass'){
+        // North is the fixed inertial -Y direction, not orbital heading.
+        ctx.strokeStyle='#b7d8e8';ctx.lineWidth=1.2;
+        ctx.beginPath();ctx.arc(a.x,a.y,22,0,TWO_PI);ctx.stroke();
+        ctx.fillStyle='#9ee3f4';ctx.font='bold 10px ui-monospace,monospace';
+        ctx.fillText('N',a.x-3,a.y-29);
+        ctx.fillText('E',a.x+27,a.y+4);
+      }
+    }
+    // Explicit marker makes snapped body endpoints visually distinguishable.
+    for(const [anchor,point] of [[m.start,a],[m.end,b]]){
+      if(!anchor?.object||!inside(point))continue;
+      ctx.strokeStyle='#f0c775';ctx.beginPath();ctx.arc(point.x,point.y,10,0,TWO_PI);ctx.stroke();
+    }
     ctx.restore();
   }
   function drawAim(){

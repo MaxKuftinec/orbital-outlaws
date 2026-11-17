@@ -20,6 +20,30 @@ as a local, **not-saved** sandbox. A VM alone does not create multiplayer;
 the current server still has isolated pilot sectors, so production
 gameplay routes remain blocked until identity and shared-world work is done.
 
+## Pilot profile and inertial map instruments
+
+**Pilot Registry:** The cockpit now has a **Pilot Profile** action with
+a six-portrait fictional character selector, registration with email/callsign
+and password, six-digit email verification, sign-in via email or callsign,
+a verified profile dossier, avatar changes and logout.
+
+Accounts are disabled on deployments until `AUTH_ENABLED=1`, strong
+`AUTH_SECRET`, SMTP mail submission and frontend `AUTH_ORIGINS` are
+configured. The current anonymous game-pilot WebSocket is **not** granted
+access by account sessions; persistent ship ownership and shared multiplayer
+are separate next steps. See [Account design](docs/PILOT_ACCOUNTS.md).
+
+**Map Tools:** The Ruler stores free points in Veyra-centered inertial
+coordinates, independent of the selected map frame. The new **Compass**
+measures bearing clockwise from inertial north. Clicking near Veyra, Kestrel
+or a ship snaps the measuring endpoint to the moving object's centre.
+Very long lines are clipped to visible canvas bounds to avoid costly
+astronomical-scale draw calls.
+
+**Automated engine burn:** A proposed basic guidance console is documented in
+[Automated thrust UI concept](docs/AUTO_THRUST_UI_CONCEPT.md). It has **not**
+been implemented in game physics, server commands or cockpit controls.
+
 ## Current architecture
 
 - **Backend authority:** Flight state, RCS/thrust fuel, projectile creation, ammunition, hull damage, NPC target decisions, physically integrated NPC support/tactical thrust (all incoming arrival and insertion burns now use finite thrust), swept projectile/ship collisions, salvage and credits.

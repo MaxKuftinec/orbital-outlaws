@@ -7,6 +7,7 @@ import TelemetryPanel from './components/TelemetryPanel.vue'
 import TargetingPanel from './components/TargetingPanel.vue'
 import NavigationPanel from './components/NavigationPanel.vue'
 import SystemAtlas from './components/SystemAtlas.vue'
+import PilotProfile from './components/PilotProfile.vue'
 
 const publicPreview = import.meta.env.VITE_PUBLIC_PREVIEW === '1'
 
@@ -17,7 +18,7 @@ const legacyFiles = [
 
 export default defineComponent({
   name: 'OrbitalCockpit',
-  components: { CommsPanel, ShipPanel, TechnologyMarket, TelemetryPanel, TargetingPanel, NavigationPanel, SystemAtlas },
+  components: { CommsPanel, ShipPanel, TechnologyMarket, TelemetryPanel, TargetingPanel, NavigationPanel, SystemAtlas, PilotProfile },
   data() {
     return {
       publicPreview,
@@ -39,6 +40,9 @@ export default defineComponent({
     window.removeEventListener('hashchange', this.onHashChange as EventListener)
   },
   methods: {
+    openProfile() {
+      (this.$refs.pilotProfile as { show: () => void } | undefined)?.show()
+    },
     onHashChange() {
       this.view = window.location.hash === '#/atlas' ? 'atlas' : 'cockpit'
       this.$nextTick(() => window.dispatchEvent(new Event('resize')))
@@ -102,6 +106,7 @@ export default defineComponent({
 <v-app class="orbital-vuetify">
   <v-main>
 
+  <PilotProfile ref="pilotProfile" />
   <SystemAtlas v-show="view==='atlas'" @back="openCockpit" @inspect="inspectBody" />
   <div v-show="view==='cockpit'" class="app-shell">
     <header class="topbar">
@@ -112,6 +117,7 @@ export default defineComponent({
       <div class="top-actions"><v-chip v-if="publicPreview" color="info" size="x-small" variant="outlined">PUBLIC ALPHA · LOCAL SANDBOX · NOT SAVED</v-chip><v-chip v-else :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Live · flight and upgrades saved' : backendOnline ? 'Backend online · connecting flight' : 'Local gameplay · backend offline' }}</v-chip>
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">ENCOUNTER TIME</span><strong id="sim-clock">00:00</strong></div></div>
         
+        <v-btn density="compact" variant="tonal" class="pilot-registry-nav" title="Register, verify or sign in to your pilot profile" @click="openProfile">✧ Pilot Profile</v-btn>
         <v-btn density="compact" variant="outlined" id="open-atlas-btn" class="action-btn atlas-app-nav" title="Open the Veyra System Atlas: lore, star system and flight guides" @click="openAtlas">◈ System Atlas</v-btn>
         <v-btn density="compact" variant="tonal"  id="settings-btn" type="button" class="action-btn" title="Flight control and map settings">⚙ Settings</v-btn>
         
@@ -137,9 +143,11 @@ export default defineComponent({
           <div id="map-measure-tools" class="map-measure-tools" aria-label="Map measuring tools">
             <div class="map-ruler-controls">
               <button type="button" id="ruler-toggle" aria-pressed="false" title="Click two points on the map to measure distance">↔ Ruler</button>
-              <button type="button" id="ruler-clear" title="Clear ruler endpoints">Clear</button>
+              <button type="button" id="compass-toggle" aria-pressed="false" title="Choose a bearing between two points; snaps to body centers">◈ Compass</button>
+              <button type="button" id="ruler-clear" title="Clear measurement endpoints">Clear</button>
             </div>
-            <div id="ruler-distance" class="map-ruler-distance" aria-live="polite">Ruler off</div>
+            <div id="ruler-distance" class="map-ruler-distance" aria-live="polite">Tools off</div>
+            <p class="map-tools-tip">Click two locations, or tap near a ship, Kestrel or Veyra to anchor its centre. Anchors follow their objects in either reference frame.</p>
           </div>
           <!-- Independent overlay: the scale bar never sits inside a panel. -->
           <div id="map-scale-overlay" class="map-scale-readout" aria-label="Map distance scale">
@@ -203,7 +211,7 @@ export default defineComponent({
             <button type="button" id="settings-frame-star" aria-pressed="false"><b>✦ Veyra</b><small>Star-centered coordinates</small></button>
           </div>
           <label class="settings-axis-switch" for="settings-show-axes"><input type="checkbox" id="settings-show-axes" checked /> Show coordinate axes and origin grid</label>
-          <p class="mini-note">The ruler and distance scale remain available in either frame without upgrades.</p>
+          <p class="mini-note">The ruler, object anchors, inertial compass and distance scale work in either frame without upgrades.</p>
         </section>
         <div class="settings-bottom"><span class="mini-note">Display choices are saved locally.</span><button type="button" id="settings-done" class="buy-btn">Done</button></div>
       </div>

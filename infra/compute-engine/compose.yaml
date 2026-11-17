@@ -24,6 +24,15 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@database:5432/${POSTGRES_DB:?}
       ORBITAL_DEV_COMMANDS: "0"
+      AUTH_ENABLED: ${AUTH_ENABLED:-0}
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      AUTH_ORIGINS: ${AUTH_ORIGINS:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+
     depends_on:
       database:
         condition: service_healthy
