@@ -5,7 +5,7 @@ const EMPTY:NavigationView = {
   locked:true,phase:'LOCKED',deltaV:'—',eta:'—',fuel:'—',status:'No plan',quick:'COMPUTER LOCKED',
   metrics:'Pick a contact · press C to calculate',engageText:'BUY NAV 60¤',
   engageDisabled:false,abortDisabled:true,donateDisabled:true,requestAllyDisabled:true,
-  allyInfo:'Select a friendly spacecraft',assistInfo:'No active transfers',selected:'',reserveKg:36
+  requestDonorDisabled:true,requestDonorText:'Select an ally to request fuel',allyInfo:'Select a friendly spacecraft',assistInfo:'No active transfers',selected:'',reserveKg:36
 }
 export default defineComponent({
   name:'NavigationPanel',
@@ -38,6 +38,7 @@ export default defineComponent({
       window.dispatchEvent(new CustomEvent('orbital-target-selected',{detail:{key}}))},
     offerFuel(){window.dispatchEvent(new CustomEvent('orbital-offer-fuel'))},
     requestAllyAssistance(){window.dispatchEvent(new CustomEvent('orbital-request-ally-assistance'))},
+    requestSelectedDonor(){window.dispatchEvent(new CustomEvent('orbital-request-selected-donor'))},
     beginReserveEdit(){this.editingReserve=true},
     editReserve(e:Event){this.reserveDraft=(e.target as HTMLInputElement).value},
     finishReserveEdit(){
@@ -87,6 +88,11 @@ export default defineComponent({
           <span>kg</span></div>
       </div>
       <div class="mini-note">Autopilot and fuel donations keep this fuel untouched; manual thrust remains unrestricted.</div>
+      <button type="button" class="wide-subtle-btn" id="nav-request-selected-donor"
+              :disabled="navigation.requestDonorDisabled" @click="requestSelectedDonor"
+              title="Request propellant delivery TO KESTREL-7 FROM the selected friendly spacecraft">
+        {{ navigation.requestDonorText }}
+      </button>
     </div>
   </div>
   <section v-else class="panel autopilot-panel" data-vue-managed="true">
@@ -110,6 +116,11 @@ export default defineComponent({
     <div class="control-note">Alt+click to set a waypoint. Manual steering disengages autopilot. Estimates assume impulsive burns; live thrust must correct.</div>
     <div class="mini-note" id="ally-fuel-status">{{ navigation.allyInfo }}</div>
     <div class="mini-note" id="assistance-status">{{ navigation.assistInfo }}</div>
+    <button type="button" class="wide-subtle-btn" id="nav-request-fuel-from-ally"
+            :disabled="navigation.requestDonorDisabled" @click="requestSelectedDonor"
+            title="Request fuel for your own ship from the selected AEGIS spacecraft">
+      {{ navigation.requestDonorText }}
+    </button>
     <button type="button" class="wide-subtle-btn" id="ally-assistance-btn"
             :disabled="navigation.requestAllyDisabled" @click="requestAllyAssistance"
             title="Request another available NPC to deliver fuel to your selected friendly spacecraft">

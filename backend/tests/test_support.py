@@ -121,3 +121,23 @@ def test_selected_ally_can_request_rescue_from_another_friendly_npc():
     assert recipient['fuel']==50.
     assert effects['fuel']==0.
     assert any('AEGIS-01' in e['message'] for e in sector['events'])
+
+
+def test_manual_donor_delivers_only_its_own_real_fuel_then_ends_order():
+    player={'id':'player','isPlayer':True,'name':'KESTREL-7','x':300.,
+            'y':0.,'vx':0.,'vy':32.,'fuel':15.,'fuelMax':200.,'alive':True}
+    first=ship('ally-01',300.,0.,True)
+    first.update(x=300.,y=0.,vx=0.,vy=32.,fuel=140.)
+    selected=ship('ally-02',300.,0.,True)
+    selected.update(x=300.,y=0.,vx=0.,vy=32.,fuel=140.)
+    sector={'assistance':[{'recipient':'player','donor':'ally-02',
+                           'manualDonor':True,'faction':'friendly',
+                           'createdAt':0.,'nextDecision':0.}], 'events':[]}
+    effects={'fuel':0.,'player_dvx':0.,'player_dvy':0.}
+    support_orders(sector,player,[first,selected],[],1.,310000.,effects)
+    assert effects['fuel']==35.
+    assert selected['fuel']==105.
+    assert first['fuel']==140.
+    assert player['fuel']==50.
+    assert not sector['assistance']
+    assert any('AEGIS-02 transferred' in e['message'] for e in sector['events'])

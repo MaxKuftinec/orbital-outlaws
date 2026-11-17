@@ -62,3 +62,20 @@ test('Vue-selected ally routes both donation and rescue through the live server'
   assert.match(vue,/:disabled="navigation\.donateDisabled"/);
   assert.match(vue,/:disabled="navigation\.requestAllyDisabled"/);
 });
+
+
+test('selected ally can be assigned as the donor TO the player, separately from helping that ally',()=>{
+  const nav=fs.readFileSync(path.join(root,'frontend/src/components/NavigationPanel.vue'),'utf8');
+  const types=fs.readFileSync(path.join(root,'frontend/src/services/instruments.ts'),'utf8');
+  assert.match(nav,/orbital-request-selected-donor/);
+  assert.match(nav,/id="nav-request-selected-donor"/);
+  assert.match(nav,/id="nav-request-fuel-from-ally"/);
+  assert.match(nav,/:disabled="navigation\.requestDonorDisabled"/);
+  assert.match(nav,/Request assistance for selected ally/);
+  assert.match(game,/function requestSelectedDonor\(/);
+  assert.match(game,/pilotLink\?\.requestAssistance\('player',ally\.id\)/);
+  assert.match(game,/window\.addEventListener\('orbital-request-selected-donor',requestSelectedDonor\)/);
+  assert.match(types,/requestDonorDisabled: boolean/);
+  assert.match(types,/requestDonorText: string/);
+  assert.match(persistence,/requestAssistance:\(recipient,donor\)=>send\('request_assistance'/);
+});

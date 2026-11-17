@@ -372,6 +372,10 @@ def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list
                 continue
         donor = by_id.get(order['donor'])
         if not donor or not donor.get('alive', True):
+            if order.get('manualDonor'):
+                event(sector,when,f"Requested donor {order['donor']} is unavailable; "
+                      f"the assigned fuel-rescue order has ended.",'danger')
+                continue
             order['donor'] = None
             remaining.append(order)
             continue
@@ -409,7 +413,7 @@ def support_orders(sector: dict, player: dict, allies: list[dict], enemies: list
             # Other available craft may take the next transfer; no free fuel is
             # created and each packet still needs a real low-speed rendezvous.
             remaining_need=max(0.,.75*recipient.get('fuelMax',200.)-recipient['fuel'])
-            if remaining_need > 5. and when-order['createdAt']<900:
+            if remaining_need > 5. and not order.get('manualDonor') and when-order['createdAt']<900:
                 other_donors=[a for a in allies if a['id'] not in set([donor['id'],*order.get('usedDonors',[])])
                               and a['id']!=recipient['id']
                               and a.get('alive',True) and a.get('arrivalPhase') not in ACTIVE_ARRIVAL

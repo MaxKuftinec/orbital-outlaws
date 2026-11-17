@@ -322,3 +322,22 @@ capture-window deadline while the server reels in the payload. If the line
 breaks or disappears without recovery, guidance stops and requires a new
 approach. The separate grapple-tension, overheating and fatigue limits remain;
 a line that becomes unsafe *after* attachment may still snap and damage hull.
+
+
+### Request fuel from a specific AEGIS spacecraft
+
+Select a living AEGIS ship in the Navigation target selector (or click it on
+the orbital map), then press **Request fuel for KESTREL-7 from AEGIS-XX** in
+the quick Navigation console or the full Rendezvous panel. This sends a
+server-validated donor ID with the assistance order. The selected ally must
+be alive, finished arriving, carrying more than 55 kg of fuel, and not
+occupied by a different rescue request. If KESTREL-7 already has an order
+with a different donor, the new selection **reassigns** it and stops the
+previous donor's rescue maneuver. Specified-donor orders conclude after
+one real rendezvous and physical transfer (up to 35 kg); request another
+ally separately for an additional delivery. On rejection, check the Comms
+log for the specific server error.
+
+The large **REQUEST FUEL ASSISTANCE** button (H) remains automatic:
+the server chooses an available donor and may ask another available ally
+for follow-up fuel if your ship is still short.

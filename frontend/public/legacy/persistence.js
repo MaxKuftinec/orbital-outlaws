@@ -62,7 +62,7 @@
     return {
       purchase:upgrade=>send('purchase',{upgrade}),
        setReserve:kg=>send('reserve',{kg}),
-       requestAssistance:recipient=>send('request_assistance',{recipient}),
+       requestAssistance:(recipient,donor)=>send('request_assistance',donor?{recipient,donor}:{recipient}),
        offerFuel:(target,kg=20)=>send('offer_fuel',{target,kg}),
       close:()=>{
         closed=true;clearInterval(interval);clearTimeout(retry);

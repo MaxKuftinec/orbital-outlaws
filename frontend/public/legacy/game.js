@@ -887,6 +887,23 @@
     if(ally.fuel<rescueFuelFloor()+24){startRescueLeg('scavenge');return;}
     startRescueLeg('deliver');
   }
+  function requestSelectedDonor(){
+    if(!persistentFlight||!flightOnline){
+      logEvent('A live flight server is required to choose a fuel donor.','danger');return;
+    }
+    if(!state.player.alive){logEvent('Destroyed ships cannot request fuel.','danger');return;}
+    if(state.player.fuel>=state.player.fuelMax-.1){
+      logEvent('Your propellant tank is already full.','danger');return;
+    }
+    const ally=navTarget(state.selectedNavKey);
+    if(!ally?.isAlly||!ally.alive){
+      logEvent('Select a living AEGIS spacecraft in Navigation before choosing your donor.','danger');return;
+    }
+    if(!pilotLink?.requestAssistance('player',ally.id)){
+      logEvent('Could not send donor request to the flight server.','danger');return;
+    }
+    logEvent('Requested fuel FROM '+ally.name+' TO KESTREL-7. Awaiting server validation.','neutral');
+  }
   function requestSelectedAllyAssistance(){
     if(!persistentFlight||!flightOnline){logEvent('Connected flight required for allied rescue orders.','danger');return;}
     const recipient=navTarget(state.selectedNavKey);
@@ -1241,6 +1258,14 @@
     const allyRange=friendly?magnitude(friendly.x-p.x,friendly.y-p.y):Infinity;
     const allyRelative=friendly?magnitude(friendly.vx-p.vx,friendly.vy-p.vy):Infinity;
     const alliance=(state.serverAssistance||[]).find(o=>o.recipient===friendly?.id);
+    const playerOrder=(state.serverAssistance||[]).find(o=>o.recipient==='player');
+    const otherOrder=(state.serverAssistance||[]).some(o=>
+      friendly?.id&&(o.recipient===friendly.id||(o.donor===friendly.id&&o.recipient!=='player')));
+    const arrivingPhases=['launch','course_burn','course_trim','approach','insertion_burn','insertion_trim'];
+    const canRequestFromAlly=!!friendly&&persistentFlight&&flightOnline&&
+      !state.ended&&p.alive&&p.fuel<p.fuelMax-.1&&
+      friendly.fuel>55&&!arrivingPhases.includes(friendly.arrivalPhase)&&
+      !otherOrder&&playerOrder?.donor!==friendly.id;
     const donorStatus=state.serverAssistance?.filter(o=>o.recipient==='player'||o.recipient===friendly?.id).map(o=>{
       const donor=[state.ally,...(state.allies||[])].find(a=>a.id===o.donor);
       return (o.recipient==='player'?'For you':friendly?.name||'Ally')+' · '+(donor?.name||'Awaiting donor')+
@@ -1323,6 +1348,10 @@
       engageDisabled:state.ended||!p.alive||!!state.autopilot||(persistentFlight&&!flightOnline)||(!state.navOwned&&p.credits<60),
       abortDisabled:!state.autopilot,donateDisabled:!canDonate,
       requestAllyDisabled:!canRequestForAlly,
+      requestDonorDisabled:!canRequestFromAlly,
+      requestDonorText:friendly?
+        (playerOrder?'Switch your fuel donor to ':'Request fuel for KESTREL-7 from ')+friendly.name:
+        'Select an AEGIS ally to request fuel',
       allyInfo:friendly?(friendly.name+' · '+friendly.fuel.toFixed(1)+' / '+friendly.fuelMax+
         ' kg fuel · '+allyRange.toFixed(1)+' km away · '+allyRelative.toFixed(2)+' km/s relative'):
         'Select a living friendly spacecraft in Navigation or click its icon on the map.',
@@ -1551,6 +1580,7 @@
       state.selectedNavKey=key;state.ephemerisCache=null;state.navPlan=null;updateHud();
     });
     window.addEventListener('orbital-request-ally-assistance',requestSelectedAllyAssistance);
+    window.addEventListener('orbital-request-selected-donor',requestSelectedDonor);
     window.addEventListener('orbital-offer-fuel',donateFuelToAlly);
     window.addEventListener('orbital-set-reserve',requestReserveSetting);
     $('settings-btn').addEventListener('click',openSettings);
@@ -1640,7 +1670,9 @@
         state.lastBallistic=-999;updateHud();
       },
       onAssistance:result=>{
-        if(result?.status==='queued')logEvent('Server accepted assistance order for '+result.recipient+'.','good');
+        if(result?.status==='queued')logEvent(
+          result.donor?'Server assigned '+result.donor+' to deliver fuel to '+result.recipient+'.':
+            'Server accepted automatic assistance order for '+result.recipient+'.','good');
         else if(result?.transferred_kg!==undefined)
           logEvent('Transfer complete: '+result.transferred_kg.toFixed(1)+' kg sent to '+result.target+'.','good');
         updateHud();

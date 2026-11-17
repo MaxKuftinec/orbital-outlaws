@@ -95,8 +95,9 @@ async def pilot_live(ws: WebSocket,pilot_id: str):
                                                      settings.kg)
                     await ws.send_json({'type':'progress','progress':progress})
                 elif kind=='request_assistance':
+                    order=FuelRequest.model_validate(message)
                     outcome=await run_in_threadpool(database.request_assistance,pilot_id,
-                                                     str(message.get('recipient','player')))
+                                                     order.recipient,order.donor)
                     await ws.send_json({'type':'assistance','result':outcome})
                 elif kind=='offer_fuel':
                     outcome=await run_in_threadpool(database.offer_fuel,pilot_id,
@@ -197,6 +198,7 @@ def set_reserve(pilot_id: str, config: ReserveConfig):
 
 class FuelRequest(BaseModel):
     recipient: str = 'player'
+    donor: str | None = None
 
 
 class FuelOffer(BaseModel):
@@ -208,7 +210,7 @@ class FuelOffer(BaseModel):
 def request_assistance(pilot_id: str, body: FuelRequest):
     require_dev_commands()
     try:
-        return store().request_assistance(pilot_id, body.recipient)
+        return store().request_assistance(pilot_id, body.recipient, body.donor)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
 

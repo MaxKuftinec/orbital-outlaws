@@ -169,3 +169,26 @@ def test_dev_respawn_requires_flag_and_only_revives_destroyed_ship(monkeypatch):
         assert revived.status_code==200,revived.text
         assert revived.json()['hp']==100
         assert revived.json()['progress_preserved'] is False
+
+
+def test_websocket_routes_specific_assistance_donor_to_server(monkeypatch):
+    import app.main as main
+    db=StubStore()
+    commands=[]
+    def request_assistance(pilot, recipient='player', donor=None):
+        commands.append((pilot,recipient,donor))
+        return {'status':'queued','recipient':recipient,'donor':donor}
+    db.request_assistance=request_assistance
+    monkeypatch.setattr(main,'store',lambda:db)
+    monkeypatch.setenv('ORBITAL_DEV_COMMANDS','1')
+    pilot='z'*32
+    with TestClient(app) as client:
+        with client.websocket_connect(f'/players/{pilot}/live') as ws:
+            receive_type(ws,'welcome')
+            ws.send_json({'type':'request_assistance','recipient':'player','donor':'ally-02'})
+            reply=receive_type(ws,'assistance')
+            assert reply['result']=={'status':'queued','recipient':'player','donor':'ally-02'}
+            assert commands==[(pilot,'player','ally-02')]
+            ws.send_json({'type':'request_assistance','recipient':'player'})
+            receive_type(ws,'assistance')
+            assert commands[-1]==(pilot,'player',None)

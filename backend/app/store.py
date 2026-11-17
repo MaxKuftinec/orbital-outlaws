@@ -11,6 +11,7 @@ from .models import Base, World, Entity, Event, FlightControl, PlayerProgress, P
 from .physics import State, propagate, orbital_envelope, apply_impulse
 from .flight import advance, LEASE_S
 from .universe import new_sector, advance_sector, player_fire as fire_projectile, incoming_ship, event as sector_event
+from .arrival_guidance import ACTIVE_ARRIVAL
 
 
 class WorldStore:
@@ -197,8 +198,9 @@ class WorldStore:
     def spawn_ally(self, pilot_id: str) -> dict:
         return self.spawn_ship(pilot_id, 'ally')
 
-    def request_assistance(self, pilot_id: str, recipient_id: str = 'player'):
-        """Request fuel delivery; server NPC guidance only, no instantaneous reward."""
+    def request_assistance(self, pilot_id: str, recipient_id: str = 'player',
+                           donor_id: str | None = None):
+        """Queue automatic assistance or safely assign a user-selected NPC donor."""
         self.player_encounter(pilot_id)
         entity_id = 'pilot-' + pilot_id
         with self.sessions.begin() as db:
@@ -215,15 +217,47 @@ class WorldStore:
                 if flight.fuel_kg >= 199.9: raise ValueError('Tank already full')
             elif recipient['fuel'] >= recipient.get('fuelMax', 170)-.1:
                 raise ValueError('Tank already full')
-            if any(o['recipient'] == recipient_id for o in sector.setdefault('assistance', [])):
+            orders=sector.setdefault('assistance', [])
+            existing=next((o for o in orders if o['recipient']==recipient_id),None)
+            if donor_id is not None:
+                allies=[sector['ally'],*sector.get('allies',[])]
+                donor=next((a for a in allies if a['id']==donor_id),None)
+                if donor is None or not donor.get('alive',True):
+                    raise ValueError('Selected fuel donor is not a living friendly spacecraft')
+                if donor_id==recipient_id:
+                    raise ValueError('A spacecraft cannot donate fuel to itself')
+                if donor.get('arrivalPhase') in ACTIVE_ARRIVAL:
+                    raise ValueError('Selected ally is still arriving; wait for orbital insertion')
+                if donor.get('fuel',0.)<=55.:
+                    raise ValueError('Selected ally needs more than 55 kg fuel to attempt a rescue')
+                if any(o is not existing and (o.get('donor')==donor_id or o.get('recipient')==donor_id)
+                       for o in orders):
+                    raise ValueError('Selected ally is already assigned to another rescue')
+                if existing and existing.get('donor')==donor_id:
+                    raise ValueError('This ally is already assigned to your rescue')
+            elif existing:
                 raise ValueError('Assistance already requested')
-            sector['assistance'].append({'recipient': recipient_id, 'donor': None,
-                                         'faction': 'friendly', 'createdAt': sector['t'],
-                                         'nextDecision': sector['t']})
-            sector_event(sector, sector['t'], f"Fuel assistance requested for {recipient_id}.")
-            saved.snapshot = sector
-            saved.saved_at_utc = time.time()
-            return {'status': 'queued', 'recipient': recipient_id}
+            if existing:
+                previous=next((a for a in [sector['ally'],*sector.get('allies',[])]
+                               if a['id']==existing.get('donor')),None)
+                if previous:
+                    previous.pop('burn',None)
+                orders.remove(existing)
+            order={'recipient':recipient_id,'donor':donor_id,
+                   'faction':'friendly','createdAt':sector['t'],
+                   'nextDecision':sector['t']}
+            if donor_id is not None:
+                order['manualDonor']=True
+            orders.append(order)
+            if donor_id:
+                sector_event(sector,sector['t'],
+                             f"Selected {donor['name']} to deliver fuel to {recipient_id}.")
+            else:
+                sector_event(sector,sector['t'],f"Fuel assistance requested for {recipient_id}.")
+            saved.snapshot=sector
+            saved.saved_at_utc=time.time()
+            return {'status':'queued','recipient':recipient_id,
+                    **({'donor':donor_id} if donor_id is not None else {})}
 
     def offer_fuel(self, pilot_id: str, target_id: str, requested_kg: float = 20.):
         """Safe player-to-ally delivery debits real player mass/fuel."""
