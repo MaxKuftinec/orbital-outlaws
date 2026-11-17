@@ -80,7 +80,7 @@ test('panel headings are the only minimize controls, and Panels is left of Fulls
   assert.match(workspace,/title\.dataset\.panelCollapse=''/);
   assert.match(workspace,/setCollapsed\(panel,!panel\.classList\.contains\('hud-minimized'\)\)/);
   assert.doesNotMatch(workspace,/data-panel-minimize|panelMinimize/);
-  assert.match(workspace,/toolbar\.append\(picker,fullscreen,menu\)/);
+  assert.match(workspace,/toolbar\.append\(toolsButton,picker,fullscreen,toolsMenu,menu\)/);
   assert.match(game,/window\.OrbitalHUD\.togglePanelById\(id\)/);
   assert.match(game,/if\(arrow\)arrow\.textContent/);
 });
