@@ -8,11 +8,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
-import re
 import secrets
 import smtplib
 import time
-from datetime import datetime, timezone
 from email.message import EmailMessage
 from uuid import uuid4
 
@@ -20,7 +18,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 from pwdlib import PasswordHash
 from sqlalchemy import or_, select
-from sqlalchemy.exc import IntegrityError
 
 from .models import Account, AccountSession, AuthThrottle, EmailChallenge
 
@@ -38,7 +35,8 @@ VERIFICATION_TTL_SECONDS = 10 * 60
 def require_accounts_enabled():
     if os.getenv('AUTH_ENABLED', '0') != '1':
         raise HTTPException(503, 'Account registration is not enabled on this deployment')
-    if len(os.getenv('AUTH_SECRET', '')) < 32:
+    secret = os.getenv('AUTH_SECRET', '')
+    if len(secret) < 32 or secret.startswith(('REPLACE', 'CHANGE_ME')):
         raise HTTPException(503, 'Account signing secret has not been configured')
 
 
@@ -272,7 +270,7 @@ def login(body: LoginBody, request: Request):
             'expires_in': SESSION_TTL_SECONDS, 'profile': profile}
 
 
-def signed_in(request: Request) -> tuple[str, Account]:
+def signed_in(request: Request) -> tuple[str, dict]:
     require_accounts_enabled()
     authorization = request.headers.get('Authorization', '')
     kind, _, token = authorization.partition(' ')
