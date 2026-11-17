@@ -1,6 +1,6 @@
 # Public PREVIEW gate. Gameplay and admin routes are CLOSED until
-# authenticated player ownership and live multiplayer security are built.
-# Caddy provisions TLS for API_DOMAIN once DNS points at the VM.
+# authenticated player ownership and live multiplayer security are built
+# Caddy provisions TLS for API_DOMAIN once DNS points at the VM
 {$API_DOMAIN} {
     encode zstd gzip
 

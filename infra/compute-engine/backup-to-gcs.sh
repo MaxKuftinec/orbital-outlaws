@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Off-VM PostgreSQL backup. Run as the VM operator; no backup credentials in Git.
+# Off-VM PostgreSQL backup. Run as the VM operator; no backup credentials in Git
 set -euo pipefail
 
 if [[ -z "${BACKUP_GCS_BUCKET:-}" ]]; then
@@ -19,7 +19,7 @@ tmp="$(mktemp)"
 chmod 600 "$tmp"
 trap 'rm -f "$tmp"' EXIT
 # The DB service supplies its own username/db name; avoid leaking a password
-# into shell command history and do not publish a Postgres port on the VM.
+# into shell command history and do not publish a Postgres port on the VM
 docker compose --env-file "$env_file" -f "$script_dir/compose.yaml" \
   exec -T database sh -c 'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc --no-owner --no-acl' > "$tmp"
 if [[ ! -s "$tmp" ]]; then

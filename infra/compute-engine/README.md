@@ -1,48 +1,34 @@
 # Compute Engine foundation — Orbital Outlaws public alpha
 
 **Status:** deployable configuration committed to the repository; **no Google
-Cloud resources have been provisioned by this change.**
+Cloud resources have been provisioned by this change**
 
 ## Architecture and rationale
 
-- Firebase Hosting: public, static Vue 3 + Vuetify preview.
-- Compute Engine: one Ubuntu VM running Docker Compose.
-- Caddy: the VM's only web ingress on ports 80/443, automatic TLS.
-- FastAPI/uvicorn: one authoritative process, internal port 8000.
-- PostgreSQL 16: private Docker network, durable named volume.
+- Firebase Hosting: public, static Vue 3 + Vuetify preview
+- Compute Engine: one Ubuntu VM running Docker Compose
+- Caddy: the VM's only web ingress on ports 80/443, automatic TLS
+- FastAPI/uvicorn: one authoritative process, internal port 8000
+- PostgreSQL 16: private Docker network, durable named volume
 - Offsite backups: PostgreSQL custom-format dump to a private Cloud Storage
-  bucket using the VM's scoped service account.
+bucket using the VM's scoped service account
 
-Initial suggested VM: `e2-standard-2` (2 dedicated vCPUs, 8 GB RAM), a
-50 GB balanced persistent boot disk, and a **reserved static external IP**
-in `asia-southeast1` (Singapore). This is an initial sizing hypothesis;
-benchmark with 10–30 invited testers before increasing capacity. The VM and
-disk incur ongoing costs while running. Configure billing budgets/alerts.
+Initial suggested VM: `e2-standard-2` (2 dedicated vCPUs, 8 GB RAM), a 50 GB balanced persistent boot disk, and a **reserved static external IP** in `asia-southeast1` (Singapore). This is an initial sizing hypothesis; benchmark with 10–30 invited testers before increasing capacity. The VM and disk incur ongoing costs while running. Configure billing budgets/alerts
 
 ### Security state: PUBLIC PREVIEW, NOT LIVE MULTIPLAYER
 
-The current project has **no account authentication**, uses client-generated
-pilot IDs, and simulates each pilot's sector independently. It is unsafe to
-publish the current WebSocket/command API to strangers. Consequently:
+The current project has **no account authentication**, uses client-generated pilot IDs, and simulates each pilot's sector independently. It is unsafe to publish the current WebSocket/command API to strangers. Consequently:
 
-- `ORBITAL_DEV_COMMANDS=0` is hardcoded in Compose.
-- Caddy **denies** `/players`, `/worlds`, `/dev`, Swagger and OpenAPI.
-- `/` (health) and `/system` (read-only star data) remain publicly available.
-- Firebase public-preview build sets `VITE_PUBLIC_PREVIEW=1`, disables the
-  anonymous-pilot WebSocket bridge and explicitly labels gameplay as an
-  unpersisted local sandbox. It does not store online progression.
-- Do **not** turn developer commands on in this VM or delete Caddy's route
-  restrictions to make gameplay work. Add verified identity, permission
-  checks, rate limits and real multiplayer authority first.
-- HTTP access is TLS-terminated by Caddy. Keep ports 5432 and 8000 private.
-  Restrict SSH access via OS Login/IAP rather than public 0.0.0.0/0 on port 22.
+- `ORBITAL_DEV_COMMANDS=0` is hardcoded in Compose
+- Caddy **denies** `/players`, `/worlds`, `/dev`, Swagger and OpenAPI
+- `/` (health) and `/system` (read-only star data) remain publicly available
+- Firebase public-preview build sets `VITE_PUBLIC_PREVIEW=1`, disables the anonymous-pilot WebSocket bridge and explicitly labels gameplay as an unpersisted local sandbox. It does not store online progression
+- Do **not** turn developer commands on in this VM or delete Caddy's route restrictions to make gameplay work. Add verified identity, permission checks, rate limits and real multiplayer authority first
+- HTTP access is TLS-terminated by Caddy. Keep ports 5432 and 8000 private. Restrict SSH access via OS Login/IAP rather than public 0.0.0.0/0 on port 22
 
 ## Provision the first VM
 
-You need a Google Cloud project with billing enabled, a domain for the API,
-Firebase Hosting configured for the frontend, Docker, and Google Cloud CLI.
-Replace the placeholder values. These are **manual** instructions, not
-commands executed by ChatGPT.
+You need a Google Cloud project with billing enabled, a domain for the API, Firebase Hosting configured for the frontend, Docker, and Google Cloud CLI. Replace the placeholder values. These are **manual** instructions, not commands executed by ChatGPT
 
 ```bash
 PROJECT_ID=your-project-id
@@ -146,10 +132,13 @@ disk are not sufficient.
 
 1. Firebase Authentication (or equivalent) integrated into frontend.
 2. FastAPI verifies credentials for REST and WebSocket connections, maps
+
    authenticated identities to owned pilots, and closes anonymous access.
 3. Shared sector/entity authority and transactions are designed and tested;
+
    existing per-pilot sectors do not let two human pilots meet.
 4. Rate limits, abuse protections, observability, deployment rollback,
+
    backup restoration, and an initial 10–30 user load test.
 5. Open the minimum necessary Caddy routes *only after* all those gates pass.
 
