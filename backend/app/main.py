@@ -4,6 +4,7 @@ import asyncio
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from functools import lru_cache
+from typing import Literal
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from starlette.concurrency import run_in_threadpool
 from pydantic import ValidationError
@@ -55,6 +56,16 @@ class PlayerInput(BaseModel):
     repair: bool = False
     aim_x: float = Field(default=0, ge=-1, le=1)
     aim_y: float = Field(default=0, ge=-1, le=1)
+
+
+
+class AutoBurnCommand(BaseModel):
+    direction: Literal['prograde','retrograde','radial_out','radial_in','heading','angle']
+    reference: Literal['kestrel','veyra'] = 'kestrel'
+    cutoff: Literal['duration','fuel'] = 'duration'
+    duration_s: float | None = Field(default=None, gt=0, le=40, allow_inf_nan=False)
+    fuel_floor_kg: float | None = Field(default=None, ge=0, le=200, allow_inf_nan=False)
+    angle_deg: float | None = Field(default=None, ge=-360, le=360, allow_inf_nan=False)
 
 
 
@@ -118,8 +129,27 @@ async def pilot_live(ws: WebSocket,pilot_id: str):
                                                      str(message.get('target','')),
                                                      float(message.get('kg',20)))
                     await ws.send_json({'type':'assistance','result':outcome})
+                elif kind=='auto_burn_start':
+                    command=AutoBurnCommand.model_validate(message)
+                    outcome=await run_in_threadpool(
+                        database.player_auto_start, pilot_id, direction=command.direction,
+                        reference=command.reference, cutoff=command.cutoff,
+                        duration_s=command.duration_s, fuel_floor_kg=command.fuel_floor_kg,
+                        angle_deg=command.angle_deg)
+                    await ws.send_json({'type':'auto_burn','result':outcome})
+                    flight=await run_in_threadpool(database.get_entity,'kestrel','pilot-'+pilot_id)
+                    await ws.send_json({'type':'snapshot','flight':flight,
+                                        'encounter':await run_in_threadpool(database.player_encounter,pilot_id),
+                                        'progress':await run_in_threadpool(database.player_progress,pilot_id)})
+                elif kind=='auto_burn_abort':
+                    outcome=await run_in_threadpool(database.player_auto_abort,pilot_id)
+                    await ws.send_json({'type':'auto_burn','result':outcome})
+                    flight=await run_in_threadpool(database.get_entity,'kestrel','pilot-'+pilot_id)
+                    await ws.send_json({'type':'snapshot','flight':flight,
+                                        'encounter':await run_in_threadpool(database.player_encounter,pilot_id),
+                                        'progress':await run_in_threadpool(database.player_progress,pilot_id)})
                 else:
-                    raise ValueError('Only flight inputs, purchases, reserve settings and authorized fuel-assistance orders are accepted; NPCs and loot are server-owned')
+                    raise ValueError('Only flight, guidance, purchases, reserve settings and fuel-assistance orders are accepted; NPCs and loot are server-owned')
             except (ValueError,ValidationError,LookupError) as exc:
                 await ws.send_json({'type':'error','message':str(exc)})
     except WebSocketDisconnect:
@@ -149,6 +179,36 @@ def player_input(pilot_id: str, command: PlayerInput):
     except LookupError as exc:
         raise HTTPException(404,str(exc)) from exc
 
+
+
+@app.post('/players/{pilot_id}/auto-burn')
+def start_auto_burn(pilot_id: str, command: AutoBurnCommand):
+    """Development-only REST alternative to the cockpit's WebSocket command."""
+    require_dev_commands()
+    if len(pilot_id)!=32 or any(c not in '0123456789abcdef' for c in pilot_id):
+        raise HTTPException(400, 'Expected 32-character pilot ID')
+    try:
+        return store().player_auto_start(
+            pilot_id, direction=command.direction, reference=command.reference,
+            cutoff=command.cutoff, duration_s=command.duration_s,
+            fuel_floor_kg=command.fuel_floor_kg, angle_deg=command.angle_deg)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.post('/players/{pilot_id}/auto-burn/abort')
+def abort_auto_burn(pilot_id: str):
+    require_dev_commands()
+    if len(pilot_id)!=32 or any(c not in '0123456789abcdef' for c in pilot_id):
+        raise HTTPException(400, 'Expected 32-character pilot ID')
+    try:
+        return store().player_auto_abort(pilot_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @app.post('/dev/players/{pilot_id}/raiders', status_code=201)
