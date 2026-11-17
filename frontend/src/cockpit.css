@@ -328,3 +328,12 @@
 @media(max-width:680px){
   .top-actions .atlas-app-nav{font-size:10px!important;padding-inline:8px!important}
 }
+
+/* Instrument panel: inertial ruler and compass use the same clear hierarchy. */
+#canvas-workspace .map-tools-popover{min-width:264px;max-width:min(310px,calc(100vw - 25px))}
+.map-ruler-controls{justify-content:stretch;flex-wrap:wrap}
+.map-ruler-controls button{flex:1 1 auto;min-height:32px}
+.map-ruler-controls #ruler-clear{flex:0 0 auto}
+.map-tools-tip{margin:8px 0 0;color:#819cb2;font:10px/1.55 ui-sans-serif,system-ui}
+.map-ruler-distance{padding-top:10px;text-align:left;font:700 11px/1.5 ui-monospace,monospace;overflow-wrap:anywhere}
+@media(max-width:600px){#canvas-workspace .map-tools-popover{min-width:216px;max-width:calc(100vw - 110px)}}
