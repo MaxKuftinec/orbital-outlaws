@@ -91,10 +91,12 @@ export default defineComponent({
   },
   mounted() {
     window.addEventListener('orbital-auto-burn-state', this.onServerState as EventListener)
+    window.addEventListener('orbital-auto-burn-ack', this.onServerAck as EventListener)
     window.addEventListener('orbital-auto-burn-error', this.onServerError as EventListener)
   },
   beforeUnmount() {
     window.removeEventListener('orbital-auto-burn-state', this.onServerState as EventListener)
+    window.removeEventListener('orbital-auto-burn-ack', this.onServerAck as EventListener)
     window.removeEventListener('orbital-auto-burn-error', this.onServerError as EventListener)
   },
   methods: {
@@ -118,6 +120,10 @@ export default defineComponent({
           this.pending = false
         }
       }
+    },
+    onServerAck() {
+      this.pending = false
+      this.feedback = ''
     },
     onServerError(event: Event) {
       this.feedback = String((event as CustomEvent<{message?:string}>).detail?.message || 'Flight command rejected.')
