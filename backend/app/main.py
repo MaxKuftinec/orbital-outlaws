@@ -178,6 +178,25 @@ def respawn_dev_pilot(pilot_id: str):
         raise HTTPException(409, str(exc)) from exc
 
 
+class DevRefuelBody(BaseModel):
+    """Omit kg to refill the pilot's tank to its 200 kg capacity."""
+    kg: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+
+
+@app.post('/dev/players/{pilot_id}/refuel')
+def refuel_dev_pilot(pilot_id: str, body: DevRefuelBody | None = None):
+    """Development-only propellant refill; never exposed as a cockpit control."""
+    require_dev_commands()
+    if len(pilot_id) != 32 or any(ch not in '0123456789abcdef' for ch in pilot_id):
+        raise HTTPException(400, 'Expected 32-character pilot ID')
+    try:
+        return store().refuel_player(pilot_id, body.kg if body else None)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
 @app.get('/system')
 def system_view():
     """Read-only star-centered ephemeris for the system map."""
