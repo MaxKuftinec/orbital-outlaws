@@ -28,13 +28,14 @@ function harness(){
     performance:{now:()=>now},setInterval:fn=>{interval=fn;return 1},clearInterval:()=>{},
     setTimeout:()=>1,clearTimeout:()=>{}};
   vm.runInNewContext(source,context);
-  const states=[],progress=[],encounters=[],statuses=[],errors=[];
+  const states=[],progress=[],encounters=[],statuses=[],errors=[],burns=[];
   const handle=window.OrbitalPersistence.attach({
     controls:()=>control,onState:state=>states.push(state),
     onProgress:value=>progress.push(value),onEncounter:value=>encounters.push(value),
-    onConnected:value=>statuses.push(value),onError:reason=>errors.push(reason)
+    onConnected:value=>statuses.push(value),onError:reason=>errors.push(reason),
+    onBurn:value=>burns.push(value)
   });
-  return {sockets,sent,handle,states,progress,encounters,statuses,errors,document,
+  return {sockets,sent,handle,states,progress,encounters,statuses,errors,burns,document,
     listeners,docListeners,control,
     setTime:v=>{now=v},setControl:value=>{control=value},tick:()=>interval()};
 }
@@ -109,4 +110,26 @@ test('pilot can request a persistent protected propellant reserve',()=>{
   assert.deepEqual(h.sent.at(-1),{type:'reserve',kg:74});
   h.sockets[0].emit({type:'progress',progress:{credits:65,upgrades:{},reserve_kg:74}});
   assert.equal(h.progress.at(-1).reserve_kg,74);
+});
+
+
+test('guided burn uses server messages, not browser-local intervals or fuel edits',()=>{
+  const h=harness();
+  h.sockets[0].emit(welcome);
+  const plan={direction:'prograde',reference:'kestrel',cutoff:'duration',
+              duration_s:5,fuel_floor_kg:null,angle_deg:null};
+  assert.equal(h.handle.startBurn(plan),true);
+  assert.deepEqual(h.sent.at(-1),{type:'auto_burn_start',...plan});
+  assert.equal(h.handle.abortBurn(),true);
+  assert.deepEqual(h.sent.at(-1),{type:'auto_burn_abort'});
+  h.sockets[0].emit({type:'auto_burn',result:{auto_burn:{status:'aligning',active:true}}});
+  assert.equal(h.burns.at(-1).auto_burn.status,'aligning');
+  h.sockets[0].emit({type:'snapshot',
+    flight:{state:{x:333,fuel_kg:140},auto_burn:{status:'burning',active:true,burn_elapsed_s:1.5}},
+    encounter:sector,progress:{reserve_kg:36}});
+  assert.equal(h.states.at(-1).auto_burn.burn_elapsed_s,1.5);
+  assert.ok(!h.sent.some(m=>'state' in m||'mass_kg' in m||'fuel_kg' in m));
+  h.sockets[0].close();
+  assert.equal(h.handle.startBurn(plan),false);
+  assert.equal(h.handle.abortBurn(),false);
 });
