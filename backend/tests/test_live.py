@@ -181,7 +181,7 @@ def test_websocket_routes_specific_assistance_donor_to_server(monkeypatch):
     db.request_assistance=request_assistance
     monkeypatch.setattr(main,'store',lambda:db)
     monkeypatch.setenv('ORBITAL_DEV_COMMANDS','1')
-    pilot='z'*32
+    pilot='a'*32  # Pilot IDs must be valid hexadecimal UUID strings.
     with TestClient(app) as client:
         with client.websocket_connect(f'/players/{pilot}/live') as ws:
             receive_type(ws,'welcome')
