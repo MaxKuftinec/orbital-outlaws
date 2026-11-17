@@ -1988,6 +1988,7 @@
         state.lastBallistic=-999;updateHud();
       },
       onBurn:result=>{
+        window.dispatchEvent(new CustomEvent('orbital-auto-burn-ack',{detail:result}));
         if(result?.auto_burn){
           serverBurn=result.auto_burn;
           dispatchBurnState();
