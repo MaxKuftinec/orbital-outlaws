@@ -8,6 +8,7 @@ import TargetingPanel from './components/TargetingPanel.vue'
 import NavigationPanel from './components/NavigationPanel.vue'
 import SystemAtlas from './components/SystemAtlas.vue'
 import PilotProfile from './components/PilotProfile.vue'
+import AutoBurnPanel from './components/AutoBurnPanel.vue'
 
 const publicPreview = import.meta.env.VITE_PUBLIC_PREVIEW === '1'
 
@@ -18,7 +19,7 @@ const legacyFiles = [
 
 export default defineComponent({
   name: 'OrbitalCockpit',
-  components: { CommsPanel, ShipPanel, TechnologyMarket, TelemetryPanel, TargetingPanel, NavigationPanel, SystemAtlas, PilotProfile },
+  components: { CommsPanel, ShipPanel, TechnologyMarket, TelemetryPanel, TargetingPanel, NavigationPanel, SystemAtlas, PilotProfile, AutoBurnPanel },
   data() {
     return {
       publicPreview,
@@ -169,6 +170,7 @@ export default defineComponent({
             <button type="button" id="fire-btn" class="fire-button" aria-label="Fire at selected target"><b>⌖</b><strong>FIRE</strong><small>SPACE</small></button>
           </div>
           <div class="control-note">Left-click a raider to lock guns, click empty space for cursor-following manual aim, then hold SPACE to fire. W fires the engine. Right/middle drag or Shift+drag pans. Mouse wheel zooms toward cursor <button id="lock-btn" type="button">Lock nearest raider ↗</button></div>
+          <AutoBurnPanel />
         </section>
       </section>
 
