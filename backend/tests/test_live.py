@@ -21,7 +21,8 @@ class StubStore:
 
     def get_entity(self, world, entity):
         return {'id':entity,'version':self.version,'state':{
-            'x':260,'heading':0,'fuel_kg':200}}
+            'x':260,'heading':0,'fuel_kg':200},
+            'auto_burn':getattr(self,'auto_burn',None)}
 
     def spawn_raider(self, pilot_id):
         return {'ship': {'id': 'raider-03', 'name': 'RAIDER-03'}, 'intent': 'orbit', 'faction': 'raider', 'ship_count': 3}
@@ -50,6 +51,14 @@ class StubStore:
             'version':3,'player':{'hp':self.hp,'ammo':self.ammo,'alive':True},
             'enemies':[{'id':'raider-01','alive':False}],
             'ally':{'id':'ally-01','alive':True},'shots':[],'pickups':[]}}
+
+    def player_auto_start(self, pilot_id, **command):
+        self.auto_burn={'status':'aligning','active':True,**command}
+        return {'pilot_id':pilot_id,'auto_burn':self.auto_burn}
+
+    def player_auto_abort(self, pilot_id):
+        self.auto_burn={**self.auto_burn,'status':'aborted','active':False}
+        return {'pilot_id':pilot_id,'auto_burn':self.auto_burn}
 
     def player_input(self, pilot_id, thrust, turn, stabilize, gimbal):
         self.version += 1
@@ -196,3 +205,28 @@ def test_websocket_routes_specific_assistance_donor_to_server(monkeypatch):
             ws.send_json({'type':'request_assistance','recipient':'player'})
             receive_type(ws,'assistance')
             assert commands[-1]==(pilot,'player',None)
+
+
+def test_websocket_guided_burn_accepts_commands_and_reports_status(monkeypatch):
+    import app.main as main
+    db=StubStore()
+    monkeypatch.setattr(main,'store',lambda:db)
+    monkeypatch.setenv('ORBITAL_DEV_COMMANDS','1')
+    pilot='e'*32
+    with TestClient(app) as client:
+        with client.websocket_connect(f'/players/{pilot}/live') as ws:
+            receive_type(ws,'welcome')
+            ws.send_json({'type':'auto_burn_start','direction':'prograde',
+                          'reference':'kestrel','cutoff':'duration',
+                          'duration_s':5})
+            accepted=receive_type(ws,'auto_burn')
+            assert accepted['result']['auto_burn']['active'] is True
+            snap=receive_type(ws,'snapshot')
+            assert snap['flight']['auto_burn']['status']=='aligning'
+            ws.send_json({'type':'auto_burn_abort'})
+            stopped=receive_type(ws,'auto_burn')
+            assert stopped['result']['auto_burn']['status']=='aborted'
+            ws.send_json({'type':'auto_burn_start','direction':'prograde',
+                          'cutoff':'duration','duration_s':100})
+            bad=receive_type(ws,'error')
+            assert 'less than or equal to 40' in bad['message']
