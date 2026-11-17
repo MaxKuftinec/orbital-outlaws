@@ -79,3 +79,10 @@ test('system zoom preserves the world point beneath the cursor',()=>{
   const b=ctx.fromScreen(214,381);
   assert.ok(Math.hypot(a.x-b.x,a.y-b.y)<1e-7);
 });
+
+test('system-map celestial markers take priority over the large zoom-scaled ship hitbox',()=>{
+  const begin=game.indexOf("canvas.addEventListener('pointerdown'");
+  const celestial=game.indexOf('if(state.systemView){',begin);
+  const enemy=game.indexOf('for(const enemy of state.enemies)',begin);
+  assert.ok(celestial>begin&&celestial<enemy);
+});

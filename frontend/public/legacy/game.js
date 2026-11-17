@@ -1728,6 +1728,19 @@
       if(state.ended||!state.player.alive)return;
       if(e.button!==0)return;
       if(e.altKey){state.waypoint={x:p.x,y:p.y};updateTargetOptions('waypoint');state.navPlan=null;logEvent('Waypoint plotted at '+p.x.toFixed(0)+', '+p.y.toFixed(0)+' km.');updateHud();return;}
+      // Pick celestial bodies with a SCREEN-space hit radius at system scale.
+      // Do not let a star-map click accidentally become a gun-aim command.
+      if(state.systemView){
+        const sun=STAR.star(state.t),sunPt=toScreen(sun.x,sun.y);
+        const kestrelPt=toScreen(0,0);
+        const nearSun=Math.hypot(pt.px-sunPt.x,pt.py-sunPt.y)<Math.max(20,STAR.STAR_RADIUS_KM*scale());
+        const nearPlanet=Math.hypot(pt.px-kestrelPt.x,pt.py-kestrelPt.y)<16;
+        if(nearSun||nearPlanet){
+          updateTargetOptions(nearSun?'star':'planet');state.navPlan=null;
+          logEvent((nearSun?'KESTREL PRIMARY':'KESTREL')+' selected in the system map.','good');
+          updateHud();return;
+        }
+      }
       let candidate=null,dist=Infinity;
       for(const enemy of state.enemies)if(enemy.alive){const d=magnitude(p.x-enemy.x,p.y-enemy.y);if(d<Math.max(23,23/scale())&&d<dist){dist=d;candidate=enemy;}}
       if(candidate){state.targetId=candidate.id;state.aimMode='locked';state.lastBallistic=-999;state.navPlan=null;logEvent('Target lock: '+candidate.name);updateTargetOptions('enemy:'+candidate.id);updateHud();return;}
@@ -1746,19 +1759,6 @@
       }
       for(const pickup of state.pickups)if(pickup.alive){const d=magnitude(p.x-pickup.x,p.y-pickup.y);if(d<Math.max(17,19/scale())&&d<dist){dist=d;candidate=pickup;}}
       if(candidate&&candidate.type){updateTargetOptions('pickup:'+candidate.id);state.navPlan=null;logEvent('Navigation target selected: '+candidate.type+'.');updateHud();return;}
-      // Pick celestial bodies with a SCREEN-space hit radius at system scale.
-      // Do not let a star-map click accidentally become a gun-aim command.
-      if(state.systemView){
-        const sun=STAR.star(state.t),sunPt=toScreen(sun.x,sun.y);
-        const kestrelPt=toScreen(0,0);
-        const nearSun=Math.hypot(pt.px-sunPt.x,pt.py-sunPt.y)<Math.max(20,STAR.STAR_RADIUS_KM*scale());
-        const nearPlanet=Math.hypot(pt.px-kestrelPt.x,pt.py-kestrelPt.y)<16;
-        if(nearSun||nearPlanet){
-          updateTargetOptions(nearSun?'star':'planet');state.navPlan=null;
-          logEvent((nearSun?'KESTREL PRIMARY':'KESTREL')+' selected in the system map.','good');
-          updateHud();return;
-        }
-      }
       e.preventDefault();state.aimMode='manual';state.mouseTarget=p;state.gimbalTarget=p;state.lastBallistic=-999;logEvent('Manual gun aim: curved shot path shown. Hold SPACE to fire.');updateHud();
     });
     function endPointer(e){if(drag&&drag.id===e.pointerId)drag=null;if(state.pointerThrust){state.pointerThrust=false;state.down.delete('main');}}
