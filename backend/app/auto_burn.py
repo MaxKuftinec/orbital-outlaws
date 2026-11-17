@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 from .flight import GIMBAL_MAX, burn_segment
 from .physics import State, propagate
-from .star_system import planet as planet_ephemeris, propagate_local
+from .star_system import planet_ephemeris, propagate_local
 
 ENGINE_FLOW_KG_S = 5.
 MAX_IGNITION_S = 40.
