@@ -328,6 +328,62 @@ class WorldStore:
             return {'target': target_id, 'transferred_kg': moved,
                     'remaining_fuel_kg': state.fuel_kg}
 
+    def refuel_player(self, pilot_id: str, requested_kg: float | None = None) -> dict:
+        """Add dev-only propellant without exceeding the player's 200 kg tank.
+
+        Refueling adds the same mass as fuel; it never changes dry mass,
+        orbital velocity, progression, or the surrounding NPC sector.
+        """
+        if requested_kg is not None and (
+                not math.isfinite(requested_kg) or requested_kg <= 0):
+            raise ValueError('Refuel amount must be finite and greater than zero')
+        entity_id = 'pilot-' + pilot_id
+        with self.sessions() as db:
+            entity = db.get(Entity, entity_id)
+            if not entity or entity.kind != 'player':
+                raise LookupError('Unknown pilot')
+
+        # Resolve elapsed flight/encounter activity before applying the refill.
+        self.player_encounter(pilot_id)
+        with self.sessions.begin() as db:
+            world = db.get(World, 'kestrel')
+            entity = db.scalars(select(Entity).where(
+                Entity.id == entity_id).with_for_update()).one()
+            saved = db.scalars(select(EncounterSnapshot).where(
+                EncounterSnapshot.entity_id == entity_id).with_for_update()).one()
+            if not saved.snapshot['player']['alive']:
+                raise ValueError('Destroyed pilot ship must respawn before refueling')
+            flight = db.get(FlightControl, entity_id)
+            at = max(self.now(world), entity.checkpoint_s)
+            current = advance(State(**entity.checkpoint), entity.checkpoint_s, at,
+                              world.mu, self._controls(flight), flight.expires_s,
+                              system=True)
+            capacity_kg = 200.0
+            room_kg = max(0.0, capacity_kg - current.fuel_kg)
+            added_kg = min(room_kg, requested_kg) if requested_kg is not None else room_kg
+            if added_kg <= 0:
+                return {'pilot_id': pilot_id, 'added_kg': 0.0,
+                        'fuel_kg': current.fuel_kg, 'fuel_capacity_kg': capacity_kg,
+                        'state': current.as_dict(), 'version': entity.version}
+
+            refueled = State(current.x, current.y, current.vx, current.vy,
+                             current.mass_kg + added_kg, current.fuel_kg + added_kg,
+                             current.heading, current.omega)
+            peri, apo = orbital_envelope(refueled, world.mu)
+            entity.checkpoint_s = at
+            entity.checkpoint = refueled.as_dict()
+            entity.periapsis_km, entity.apoapsis_km = peri, apo
+            entity.version += 1
+            db.add(Event(world_id='kestrel', entity_id=entity_id, at_s=at,
+                         kind='dev_refuel',
+                         payload={'added_kg': added_kg, 'control': self._controls(flight),
+                                  'expires_s': flight.expires_s},
+                         after=refueled.as_dict(),
+                         idempotency_key='dev-refuel:' + secrets.token_hex(16)))
+            return {'pilot_id': pilot_id, 'added_kg': added_kg,
+                    'fuel_kg': refueled.fuel_kg, 'fuel_capacity_kg': capacity_kg,
+                    'state': refueled.as_dict(), 'version': entity.version}
+
     def respawn_player(self, pilot_id: str) -> dict:
         """Begin a new run from an active or destroyed pilot, preserving the sector."""
         entity_id = 'pilot-' + pilot_id
