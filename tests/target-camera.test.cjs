@@ -43,7 +43,7 @@ function cameraHarness(){
   };
   vm.createContext(ctx);
   vm.runInContext(extract(game,'selectedContact','updateTargetOptions'),ctx);
-  vm.runInContext(extract(game,'centerCameraOn','zoomAt'),ctx);
+  vm.runInContext(extract(game,'cameraOffset','zoomAt'),ctx);
   return {ctx,state,ship,target,events};
 }
 test('focus centers even a distant wreck, zooms in, and does not alter flight or weapon targeting',()=>{
