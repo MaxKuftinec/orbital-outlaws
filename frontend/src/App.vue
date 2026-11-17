@@ -8,6 +8,8 @@ import TargetingPanel from './components/TargetingPanel.vue'
 import NavigationPanel from './components/NavigationPanel.vue'
 import SystemAtlas from './components/SystemAtlas.vue'
 
+const publicPreview = import.meta.env.VITE_PUBLIC_PREVIEW === '1'
+
 const legacyFiles = [
   'map-tools.js', 'map-visuals.js', 'star-system.js', 'reference-frames.js', 'autopilot-attitude.js', 'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
   'arrival.js', 'persistence.js', 'workspace.js', 'rendering.js', 'game.js'
@@ -18,6 +20,7 @@ export default defineComponent({
   components: { CommsPanel, ShipPanel, TechnologyMarket, TelemetryPanel, TargetingPanel, NavigationPanel, SystemAtlas },
   data() {
     return {
+      publicPreview,
       backendOnline: false,
       persistentOnline: false,
       startupError: '',
@@ -74,10 +77,15 @@ export default defineComponent({
     },
     async startCockpit() {
       try {
-        for (const filename of legacyFiles) await this.loadLegacyScript(filename)
+        for (const filename of legacyFiles) {
+          // Anonymous pilot WebSockets are private until authenticated alpha.
+          if (this.publicPreview && filename === 'persistence.js') continue
+          await this.loadLegacyScript(filename)
+        }
       } catch (error) {
         this.startupError = error instanceof Error ? error.message : String(error)
       }
+      if (this.publicPreview) return
       try {
         const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
         const response = await fetch(base ? base + '/' : '/backend-health')
@@ -101,7 +109,7 @@ export default defineComponent({
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
         <div><div class="eyebrow">VERSION 1.1</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
-      <div class="top-actions"><v-chip :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Live · flight and upgrades saved' : backendOnline ? 'Backend online · connecting flight' : 'Local gameplay · backend offline' }}</v-chip>
+      <div class="top-actions"><v-chip v-if="publicPreview" color="info" size="x-small" variant="outlined">PUBLIC ALPHA · LOCAL SANDBOX · NOT SAVED</v-chip><v-chip v-else :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Live · flight and upgrades saved' : backendOnline ? 'Backend online · connecting flight' : 'Local gameplay · backend offline' }}</v-chip>
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">ENCOUNTER TIME</span><strong id="sim-clock">00:00</strong></div></div>
         
         <v-btn density="compact" variant="outlined" id="open-atlas-btn" class="action-btn atlas-app-nav" title="Open the Veyra System Atlas: lore, star system and flight guides" @click="openAtlas">◈ System Atlas</v-btn>
