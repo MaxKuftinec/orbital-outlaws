@@ -1614,11 +1614,13 @@
   function draw(){
     // Attached rulers move with physical bodies; refresh the Tools readout at
     // 4 Hz instead of writing to the DOM on every 60 FPS canvas render.
-    const measurement=state.measurement,uiNow=performance.now();
+    const measurement=state.measurement;
     if(measurement?.enabled && measurement.start &&
-       (measurement.start.object||measurement.end?.object) &&
-       uiNow-lastMeasurementUiUpdate>250){
-      updateRulerUI();lastMeasurementUiUpdate=uiNow;
+       (measurement.start.object||measurement.end?.object)){
+      const uiNow=performance.now();
+      if(uiNow-lastMeasurementUiUpdate>250){
+        updateRulerUI();lastMeasurementUiUpdate=uiNow;
+      }
     }
     if(state.followPlayer){
       centerCameraOn(state.player);
