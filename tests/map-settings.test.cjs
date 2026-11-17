@@ -82,7 +82,7 @@ test('ruler measures any two points without changing flight, and can be cleared'
   assert.equal(state.measurement.start,null);
   assert.equal(state.measurement.end,null);
   assert.deepEqual(state.player,shipBefore);
-  assert.match(game,/if\(state\.measurement\.enabled\)\{\s*e\.preventDefault\(\);chooseRulerPoint\(p\);return;/);
+  assert.match(game,/if\\(state\\.measurement\\.enabled\\)\\{\\s*e\\.preventDefault\\(\\);chooseRulerPoint\\(measurementAnchor\\(pt,p\\)\\);return;/);
   assert.match(renderer,/function drawMeasurement\(\)/);
 });
 test('projectile ETA remains hidden until Predictive Fire Control is owned',()=>{
