@@ -53,7 +53,7 @@ test('Atlas source explicitly distinguishes Neris proposal from simulated star a
   assert.match(data,/id: 'veyra'.*status: 'Simulated'/s);
   assert.match(data,/id: 'kestrel'.*status:'Simulated'/s);
   assert.match(data,/the encounter currently uses an 85 km collision radius/i);
-  assert.match(data,/gravitational parameter/);
+  assert.match(data,/gravitational parameter/i);
   assert.match(data,/insolationEarth/);
   assert.match(data,/orbitalDays/);
 });
