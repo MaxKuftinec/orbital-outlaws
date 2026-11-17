@@ -7,6 +7,7 @@ import TelemetryPanel from './components/TelemetryPanel.vue'
 import TargetingPanel from './components/TargetingPanel.vue'
 import NavigationPanel from './components/NavigationPanel.vue'
 import SystemAtlas from './components/SystemAtlas.vue'
+import PilotProfile from './components/PilotProfile.vue'
 
 const publicPreview = import.meta.env.VITE_PUBLIC_PREVIEW === '1'
 
@@ -17,7 +18,7 @@ const legacyFiles = [
 
 export default defineComponent({
   name: 'OrbitalCockpit',
-  components: { CommsPanel, ShipPanel, TechnologyMarket, TelemetryPanel, TargetingPanel, NavigationPanel, SystemAtlas },
+  components: { CommsPanel, ShipPanel, TechnologyMarket, TelemetryPanel, TargetingPanel, NavigationPanel, SystemAtlas, PilotProfile },
   data() {
     return {
       publicPreview,
@@ -39,6 +40,9 @@ export default defineComponent({
     window.removeEventListener('hashchange', this.onHashChange as EventListener)
   },
   methods: {
+    openProfile() {
+      (this.$refs.pilotProfile as { show: () => void } | undefined)?.show()
+    },
     onHashChange() {
       this.view = window.location.hash === '#/atlas' ? 'atlas' : 'cockpit'
       this.$nextTick(() => window.dispatchEvent(new Event('resize')))
@@ -102,6 +106,7 @@ export default defineComponent({
 <v-app class="orbital-vuetify">
   <v-main>
 
+  <PilotProfile ref="pilotProfile" />
   <SystemAtlas v-show="view==='atlas'" @back="openCockpit" @inspect="inspectBody" />
   <div v-show="view==='cockpit'" class="app-shell">
     <header class="topbar">
@@ -112,6 +117,7 @@ export default defineComponent({
       <div class="top-actions"><v-chip v-if="publicPreview" color="info" size="x-small" variant="outlined">PUBLIC ALPHA · LOCAL SANDBOX · NOT SAVED</v-chip><v-chip v-else :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Live · flight and upgrades saved' : backendOnline ? 'Backend online · connecting flight' : 'Local gameplay · backend offline' }}</v-chip>
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">ENCOUNTER TIME</span><strong id="sim-clock">00:00</strong></div></div>
         
+        <v-btn density="compact" variant="tonal" class="pilot-registry-nav" title="Register, verify or sign in to your pilot profile" @click="openProfile">✧ Pilot Profile</v-btn>
         <v-btn density="compact" variant="outlined" id="open-atlas-btn" class="action-btn atlas-app-nav" title="Open the Veyra System Atlas: lore, star system and flight guides" @click="openAtlas">◈ System Atlas</v-btn>
         <v-btn density="compact" variant="tonal"  id="settings-btn" type="button" class="action-btn" title="Flight control and map settings">⚙ Settings</v-btn>
         
