@@ -137,9 +137,11 @@ export default defineComponent({
           <div id="map-measure-tools" class="map-measure-tools" aria-label="Map measuring tools">
             <div class="map-ruler-controls">
               <button type="button" id="ruler-toggle" aria-pressed="false" title="Click two points on the map to measure distance">↔ Ruler</button>
-              <button type="button" id="ruler-clear" title="Clear ruler endpoints">Clear</button>
+              <button type="button" id="compass-toggle" aria-pressed="false" title="Choose a bearing between two points; snaps to body centers">◈ Compass</button>
+              <button type="button" id="ruler-clear" title="Clear measurement endpoints">Clear</button>
             </div>
-            <div id="ruler-distance" class="map-ruler-distance" aria-live="polite">Ruler off</div>
+            <div id="ruler-distance" class="map-ruler-distance" aria-live="polite">Tools off</div>
+            <p class="map-tools-tip">Click two locations, or tap near a ship, Kestrel or Veyra to anchor its centre. Anchors follow their objects in either reference frame.</p>
           </div>
           <!-- Independent overlay: the scale bar never sits inside a panel. -->
           <div id="map-scale-overlay" class="map-scale-readout" aria-label="Map distance scale">
@@ -203,7 +205,7 @@ export default defineComponent({
             <button type="button" id="settings-frame-star" aria-pressed="false"><b>✦ Veyra</b><small>Star-centered coordinates</small></button>
           </div>
           <label class="settings-axis-switch" for="settings-show-axes"><input type="checkbox" id="settings-show-axes" checked /> Show coordinate axes and origin grid</label>
-          <p class="mini-note">The ruler and distance scale remain available in either frame without upgrades.</p>
+          <p class="mini-note">The ruler, object anchors, inertial compass and distance scale work in either frame without upgrades.</p>
         </section>
         <div class="settings-bottom"><span class="mini-note">Display choices are saved locally.</span><button type="button" id="settings-done" class="buy-btn">Done</button></div>
       </div>
