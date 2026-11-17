@@ -40,9 +40,18 @@ or a ship snaps the measuring endpoint to the moving object's centre.
 Very long lines are clipped to visible canvas bounds to avoid costly
 astronomical-scale draw calls.
 
-**Automated engine burn:** A proposed basic guidance console is documented in
-[Automated thrust UI concept](docs/AUTO_THRUST_UI_CONCEPT.md). It has **not**
-been implemented in game physics, server commands or cockpit controls.
+**Automated engine burn (implemented):** A basic expandable flight computer
+under Attitude & Propulsion lets a connected pilot order **prograde,
+retrograde, radial, ship-heading or custom inertial burns** without holding a
+thrust key. Choose a duration (0.05–40 seconds of ignition) or remaining
+fuel level. FastAPI stores the plan in PostgreSQL, integrates physical RCS
+attitude control and finite engine thrust, protects the saved fuel reserve,
+and lazily completes or aborts the burn after disconnect/restart. The
+cockpit displays live phase, ignition time, RCS fuel and estimated Δv.
+Manual W/A/D/S steering or the Abort button cancels the server plan.
+These routes are still **dev-only** under the existing
+`ORBITAL_DEV_COMMANDS=1` guard; they must not be exposed publicly.
+See [Automated thrust guide](docs/AUTO_THRUST_UI_CONCEPT.md).
 
 ## Current architecture
 
