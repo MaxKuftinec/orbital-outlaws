@@ -181,7 +181,7 @@
   toolsButton.className='hud-picker map-tools-trigger';
   toolsButton.textContent='⌖ Tools';toolsButton.setAttribute('aria-expanded','false');
   toolsButton.setAttribute('aria-controls','map-tools-menu');
-  toolsButton.title='Map ruler and measurements';
+  toolsButton.title='Inertial ruler, object-snapping anchors and compass';
   const toolsMenu=document.createElement('div');
   toolsMenu.id='map-tools-menu';toolsMenu.className='map-tools-popover';
   toolsMenu.hidden=true;
