@@ -96,8 +96,6 @@ export default defineComponent({
           <!-- <NavigationPanel :console="true" /> We don't need this, please don't uncomment-->
           <ShipPanel />
           <button type="button" id="sos-btn" class="sos-btn" title="Request a fuel rendezvous from a friendly spacecraft">⚑ REQUEST FUEL ASSISTANCE</button>
-          <div class="canvas-overlay top-left"><span class="tiny-dot blue"></span><span id="target-indicator">TRACKING: RAIDER-01</span></div>
-          <div class="selected-target-caption" id="nav-selected-contact" aria-label="Selected navigation target">NAV TARGET: NONE</div>
           <div id="map-measure-tools" class="map-measure-tools" aria-label="Map measuring tools">
             <div class="map-ruler-controls">
               <button type="button" id="ruler-toggle" aria-pressed="false" title="Click two locations to measure the distance between them">↔ Ruler</button>
@@ -113,7 +111,7 @@ export default defineComponent({
           <!-- Status is announced in Comms; the map remains visible and pannable after death -->
           <div id="game-over" hidden style="display:none"><span id="game-over-details"></span></div>
         </div>
-        <div class="mission-strip"><span class="objective-icon">◎</span><span><strong>OBJECTIVE</strong></span><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
+        <div class="mission-strip"><span class="objective-icon">◎</span><span><strong id="nav-selected-contact">OBJECTIVE</strong></span><span class="mission-right" id="mission-status">2 hostiles in sector</span></div>
         <section class="flight-controls" aria-label="Spacecraft flight controls">
           <div class="control-description"><strong>ATTITUDE & PROPULSION</strong><small>Point ship using nose/tail RCS. Aim the ±28° main gimbal with your cursor, then hold W to burn. Left-click selects targets or manual gun aim</small></div>
           <div class="control-grid">

@@ -41,7 +41,6 @@
       ctx.moveTo(0,center.y);ctx.lineTo(W,center.y);
       ctx.moveTo(center.x,0);ctx.lineTo(center.x,H);ctx.stroke();
       ctx.fillStyle='#648ba5';ctx.font='10px ui-monospace,monospace';
-      ctx.fillText(state.systemView?'VEYRA · ORIGIN':'KESTREL · ORIGIN',center.x+9,center.y+15);
     }
     ctx.restore();
     drawCentralBody(planetCenter.x,planetCenter.y,s);

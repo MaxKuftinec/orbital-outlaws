@@ -956,7 +956,6 @@
     $('target-state').textContent=state.aimMode==='manual'?'FREE AIM':target?'HOSTILE':'SCANNING';
     $('range-value').textContent=target?magnitude(target.x-p.x,target.y-p.y).toFixed(1)+' km':'—';
     $('target-hull').textContent=target?Math.ceil(target.hp)+' / 66':'—';
-    $('target-indicator').textContent=state.aimMode==='manual'?'AIM MODE: MANUAL':target?'TRACKING: '+target.name:'NO TARGET';
     const liveHostiles=state.enemies.filter(ship=>ship.alive).length;
     const activeAllies=(state.ally.alive?1:0)+(state.allies||[]).filter(ally=>ally.alive).length;
     $('mission-status').textContent=liveHostiles+' hostile'+(liveHostiles!==1?'s':'')+' · '+activeAllies+' active allies';

@@ -1271,11 +1271,10 @@
     setLegacyText('target-state',state.aimMode==='manual'?'FREE AIM':target?'HOSTILE':'SCANNING');
     setLegacyText('range-value',target?magnitude(target.x-p.x,target.y-p.y).toFixed(1)+' km':'—');
     setLegacyText('target-hull',target?Math.ceil(target.hp)+' / 66':'—');
-    $('target-indicator').textContent=state.aimMode==='manual'?'AIM MODE: MANUAL':target?'TRACKING: '+target.name:'NO TARGET';
     const selected=selectedContact();
     const currentDistance=selected?magnitude(selected.x-p.x,selected.y-p.y):0;
     $('nav-selected-contact').textContent=selected?
-      'NAV TARGET: '+selected.label+' · '+currentDistance.toFixed(1)+' km':'NAV TARGET: NONE';
+      'FOCUS: '+selected.label+' · '+currentDistance.toFixed(1)+' km':'FOCUS: NONE';
     $('focus-target-btn').disabled=!selected;
     $('follow-target-btn').disabled=!selected;
     $('follow-target-btn').classList.toggle('selected',!!selected&&state.followTarget);
