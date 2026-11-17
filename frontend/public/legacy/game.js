@@ -1610,7 +1610,16 @@
     getEphemerisTarget:()=>navTarget(state.selectedNavKey),
     getSelectedContact:selectedContact
   });
+  let lastMeasurementUiUpdate=0;
   function draw(){
+    // Attached rulers move with physical bodies; refresh the Tools readout at
+    // 4 Hz instead of writing to the DOM on every 60 FPS canvas render.
+    const measurement=state.measurement,uiNow=performance.now();
+    if(measurement?.enabled && measurement.start &&
+       (measurement.start.object||measurement.end?.object) &&
+       uiNow-lastMeasurementUiUpdate>250){
+      updateRulerUI();lastMeasurementUiUpdate=uiNow;
+    }
     if(state.followPlayer){
       centerCameraOn(state.player);
     }else if(state.followTarget){
