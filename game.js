@@ -1174,7 +1174,7 @@
     ctx.setTransform(dpr,0,0,dpr,0,0);drawBackground();
     if(!encounterReady){
       ctx.fillStyle='#a6dbe8';ctx.font='bold 14px system-ui';ctx.textAlign='center';
-      ctx.fillText('RESTORING PERSISTENT SECTOR…',W/2,H/2);ctx.textAlign='left';
+      ctx.fillText('LOADING SECTOR…',W/2,H/2);ctx.textAlign='left';
       return;
     }
     drawTrails();
