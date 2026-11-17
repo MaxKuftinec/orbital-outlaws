@@ -32,10 +32,16 @@
       // A release is urgent. Never let a long stream of old throttle inputs
       // sit ahead of a stop command in the WebSocket/server queue.
       const release=!!lastControls?.thrust&&!value.thrust;
+      // Short key/button taps must not disappear while a previous command
+      // is awaiting acknowledgement. Allow a small bounded queue for actual
+      // button edges; do not queue repeated held-state/gimbal updates.
+      const buttonEdge=!!lastControls&&['thrust','turn','stabilize','fire','repair']
+        .some(key=>lastControls[key]!==value[key]);
       const sendNormally=pending.size===0&&
         (fingerprint!==last||(active&&now-lastSent>=180));
-      const sendRelease=release&&pending.size<2;
-      if(sendNormally||sendRelease){
+      const sendEdge=buttonEdge&&pending.size<3;
+      const sendRelease=release;
+      if(sendNormally||sendEdge||sendRelease){
         const seq=nextSeq++;
         if(send('input',{...value,seq})){
           pending.add(seq);last=fingerprint;lastSent=now;lastControls=value;

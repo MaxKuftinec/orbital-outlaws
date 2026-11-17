@@ -5,7 +5,10 @@ const path=require('node:path');
 const vm=require('node:vm');
 const root=path.join(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const attitude=require('../frontend/public/legacy/autopilot-attitude.js');
+// frontend/package.json declares ESM; evaluate the browser UMD in a CJS sandbox.
+const attitudeContext={module:{exports:{}}};
+vm.runInNewContext(read('frontend/public/legacy/autopilot-attitude.js'),attitudeContext);
+const attitude=attitudeContext.module.exports;
 
 test('braking-aware attitude controller turns toward a distant heading without sustained spins',()=>{
   const direction={x:1,y:0},alpha=2.1,dt=.015;
