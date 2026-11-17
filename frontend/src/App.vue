@@ -91,9 +91,9 @@ export default defineComponent({
           <button type="button" id="fullscreen-btn" class="fullscreen-btn" aria-label="Enter fullscreen cockpit">⛶ Fullscreen</button>
           <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat"></canvas>
           <!-- Separate floating consoles are required by the legacy control bridge;
-               sidebar instances provide the full instrument readouts. -->
-          <TelemetryPanel :console="true" />
-          <NavigationPanel :console="true" />
+               sidebar instances provide the full instrument readouts -->
+          <!-- <TelemetryPanel :console="true" /> We don't need this, please don't uncomment--> 
+          <!-- <NavigationPanel :console="true" /> We don't need this, please don't uncomment-->
           <ShipPanel />
           <button type="button" id="sos-btn" class="sos-btn" title="Request a fuel rendezvous from a friendly spacecraft">⚑ REQUEST FUEL ASSISTANCE</button>
           <div class="canvas-overlay top-left"><span class="tiny-dot blue"></span><span id="target-indicator">TRACKING: RAIDER-01</span></div>
