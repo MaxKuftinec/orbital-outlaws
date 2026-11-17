@@ -10,7 +10,7 @@
     }
     return id;
   }
-  function attach({controls,onState,onProgress,onEncounter,onAssistance,onConnected,onError}){
+  function attach({controls,onState,onProgress,onEncounter,onAssistance,onBurn,onConnected,onError}){
     const origin=new URL(root.ORBITAL_API_BASE_URL||'/',location.href);
     const address=(origin.protocol==='https:'?'wss:':'ws:')+'//'+origin.host+
       origin.pathname.replace(/\/$/,'')+'/players/'+pilotId()+'/live';
@@ -71,6 +71,7 @@
           }
         }else if(data.type==='progress')onProgress(data.progress);
         else if(data.type==='assistance')onAssistance?.(data.result);
+        else if(data.type==='auto_burn')onBurn?.(data.result);
         else if(data.type==='error')onError(data.message);
       };
       ws.onerror=()=>onError('WebSocket connection error');
@@ -91,6 +92,8 @@
        setReserve:kg=>send('reserve',{kg}),
        requestAssistance:(recipient,donor)=>send('request_assistance',donor?{recipient,donor}:{recipient}),
        offerFuel:(target,kg=20)=>send('offer_fuel',{target,kg}),
+       startBurn:plan=>send('auto_burn_start',plan),
+       abortBurn:()=>send('auto_burn_abort'),
       close:()=>{
         closed=true;clearInterval(interval);clearTimeout(retry);
         for(const name of events)root.removeEventListener(name,tick);
