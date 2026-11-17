@@ -91,10 +91,16 @@
     const propellant=options.propellantKg??200;
     const maxDv=exhaust*Math.log(mass/Math.max(1,mass-propellant));
     let best=null, reachable=0, minimumDv=Infinity;
+    // Player autopilots need time to rotate with physical RCS before departing.
+    // The low-level navigation API defaults to zero minimums for existing callers.
+    const minWait=options.minWaitSeconds??0;
+    const minFlight=options.minFlightSeconds??0;
     for(const wait of waits){
+      if(wait<minWait)continue;
       const departure=propagate(start,wait,mu,.18,inner,outer);
       if(!departure.safe)continue;
       for(const flight of flights){
+        if(flight<minFlight)continue;
         const targetFuture=targetAt(target,wait+flight,mu,inner,outer);
         if(!targetFuture.safe)continue;
         const s=shoot(departure,targetFuture,flight,mu,inner,outer);

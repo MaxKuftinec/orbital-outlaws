@@ -20,6 +20,7 @@ export interface ShipView {
   deltaV: number
   status: string
   statusColor: string
+  followPlayer: boolean
   repairDisabled: boolean
   repairing: boolean
 }

@@ -17,7 +17,8 @@
   const COLL = window.OrbitalCollisions;
   const SAFE = window.OrbitalSafety;
   const ARRIVAL = window.OrbitalArrival;
-  if(!NAV||!BALL||!COLL||!SAFE||!ARRIVAL)throw new Error('Simulation modules missing');
+  const ATTITUDE=window.OrbitalAttitude;
+  if(!NAV||!BALL||!COLL||!SAFE||!ARRIVAL||!ATTITUDE)throw new Error('Simulation modules missing');
   // 1 world distance unit = 1 km; velocities in km/s. Engines are futuristic.
   const ENGINE=Object.freeze({dryKg:900,propellantKg:200,thrustN:1600000,flowKgS:5,rcsN:2500,rcsFlowKgS:.04,leverM:7,shipLengthM:14,gimbalMax:28*Math.PI/180});
   const exhaustKmS=ENGINE.thrustN/ENGINE.flowKgS/1000;
@@ -79,7 +80,7 @@
   function escapeHtml(str) { return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
   function reset() {
     if(persistentFlight&&state){
-      state.followTarget=false;state.panX=0;state.panY=0;state.zoom=1;updateZoom();
+      state.followTarget=false;state.followPlayer=false;state.panX=0;state.panY=0;state.zoom=1;updateZoom();
       logEvent('View recentered; live encounter and pilot remain unchanged.','good');
       return;
     }
@@ -97,7 +98,7 @@
     state = {t:0, player, ally, allies:[], enemies:[e1,e2], shots:[], pickups:[
       newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30),newPickup(295,1.1,'parts',8)
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
-    orbitVisible:true, ephemerisVisible:true, selectedNavKey:'', followTarget:false, predictive:false, trajectoryIntel:false, ephemerisOwned:false, captureOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
+    orbitVisible:true, ephemerisVisible:true, selectedNavKey:'', followTarget:false, followPlayer:false, predictive:false, trajectoryIntel:false, ephemerisOwned:false, captureOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
     collisionCooldown:new Map(), playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false,
     playerReserveKg:storedReserve(),captureTether:null};
     if(oldTech){Object.assign(state,oldTech);player.credits=oldPilot.credits;}
@@ -162,7 +163,7 @@
       p.captureFailures=info.captureFailures||0;
       if(revived){
         state.ended=false;state.autopilot=null;state.navPlan=null;state.down.clear();
-        state.panX=-p.x*scale();state.panY=-p.y*scale();
+        state.panX=-p.x*scale();state.panY=-p.y*scale();state.followPlayer=true;state.followTarget=false;
         correction=null;flightHistory=[];
         logEvent('Replacement spacecraft received from FastAPI. Manual approach controls ready.','good');
       }
@@ -255,12 +256,10 @@
     if(state.autopilot){
       const wanted=state.autoDirection;
       if(!wanted)return {thrust:false,turn:0,stabilize:true,gimbal:0,...weapons};
-      const angle=normAngle(Math.atan2(wanted.y,wanted.x)-p.heading);
       const alpha=2*ENGINE.rcsN*ENGINE.leverM/(mass(p)*ENGINE.shipLengthM**2/12);
-      const error=clamp(2.7*angle,-1.9,1.9)-p.omega;
-      const turn=Math.abs(error)<alpha*.05*.4?0:Math.sign(error);
-      return {thrust:!!state.autoBurnAllowed&&p.fuel>state.autopilot.reserveKg,
-        turn,stabilize:false,gimbal:clamp(angle,-ENGINE.gimbalMax,ENGINE.gimbalMax),...weapons};
+      const guidance=ATTITUDE.steer(p.heading,p.omega,wanted,alpha,.16);
+      return {thrust:!!state.autoBurnAllowed&&guidance.aligned&&p.fuel>state.autopilot.reserveKg,
+        turn:guidance.turn,stabilize:guidance.stabilize,gimbal:guidance.gimbal,...weapons};
     }
     return {
       thrust:!state.ended&&state.down.has('main'),
@@ -342,14 +341,15 @@
     ship.heading=normAngle(ship.heading+ship.omega*dt);
   }
   function autoAttitude(ship,dt,wanted,minReserve=0){
-    const difference=normAngle(Math.atan2(wanted.y,wanted.x)-ship.heading);
-    const maxAlpha=(2*ENGINE.rcsN*ENGINE.leverM)/(mass(ship)*ENGINE.shipLengthM**2/12);
-    const omegaTarget=clamp(2.7*difference,-1.9,1.9);
-    const error=omegaTarget-ship.omega;
-    const command=Math.abs(error)<maxAlpha*dt*.4?'idle':error<0?'rotate-left':'rotate-right';
+    const alpha=(2*ENGINE.rcsN*ENGINE.leverM)/(mass(ship)*ENGINE.shipLengthM**2/12);
+    const guidance=ATTITUDE.steer(ship.heading,ship.omega,wanted,alpha,dt);
+    const command=guidance.stabilize?'stabilize':guidance.turn<0?'rotate-left':
+      guidance.turn>0?'rotate-right':'idle';
     rcsControl(ship,dt,command,minReserve);
-    ship.gimbal=clamp(normAngle(Math.atan2(wanted.y,wanted.x)-ship.heading),-ENGINE.gimbalMax,ENGINE.gimbalMax);
-    return Math.abs(normAngle(Math.atan2(wanted.y,wanted.x)-ship.heading))<.13 && Math.abs(ship.omega)<.35;
+    ship.gimbal=guidance.gimbal;
+    // Finite burn is allowed only when the spacecraft is actually settled
+    // near the intended direction, preventing unintended side impulses.
+    return guidance.aligned;
   }
   function manualAttitude(ship,dt){
     let command='idle';
@@ -973,7 +973,7 @@
       const dx=target.x-ally.x,dy=target.y-ally.y,dvx=target.vx-ally.vx,dvy=target.vy-ally.vy;
       const timeScale=clamp(magnitude(dx,dy)/Math.max(3,magnitude(dvx,dvy)),2,10);
       const correction={x:dvx+dx/timeScale,y:dvy+dy/timeScale};
-      if(magnitude(correction.x,correction.y)<.25)return null;
+      if(magnitude(correction.x,correction.y)<.35)return null;
       return unit(correction.x,correction.y);
     }
     return null;
@@ -1009,6 +1009,7 @@
     let diagnostics=null;
     const plan=usableFuel>0?NAV.plan(state.player,target,{mu:WORLD.mu,inner:WORLD.crashRadius+7,outer:WORLD.outerRadius-10,
       massKg:mass(state.player),propellantKg:usableFuel,exhaustKmS,extended:true,
+      minWaitSeconds:10,minFlightSeconds:25,
       onDiagnostics:report=>{diagnostics=report;}}):null;
     const safety=plan?SAFE.authorize({fuelKg:state.player.fuel,capacityKg:state.player.fuelMax,massKg:mass(state.player),dvKmS:plan.dv,exhaustKmS,reserve:reserve}):null;
     state.navPlan=plan&&safety.ok?{...plan,targetKey:key,calculatedAt:state.t,safety}:null;
@@ -1385,7 +1386,7 @@
         captureTensionN:state.captureTether?.tensionN||0,
         captureStatus:state.captureTether?'REELING · '+state.captureTether.durationS.toFixed(1)+' s':'STANDBY',
         deltaV:exhaustKmS*Math.log(mass(p)/(p.dryMass+p.repairParts)),
-        status:shipStatus,statusColor:shipStatusColor,
+        status:shipStatus,statusColor:shipStatusColor,followPlayer:!!state.followPlayer,
         repairDisabled:state.ended||p.hp>=100||p.repairParts<=.00001,
         repairing:state.down.has('repair')
       },
@@ -1404,7 +1405,7 @@
     const target=selectedContact();
     if(!target){logEvent('Select a live navigation target before focusing the camera.');return;}
     state.zoom=clamp(Math.max(state.zoom,2.8),.35,6);
-    state.followTarget=follow;
+    state.followTarget=follow;state.followPlayer=false;
     centerCameraOn(target);updateZoom();
     logEvent((follow?'Camera following ':'Camera focused on ')+target.label+
       '. Ship flight and weapon lock unchanged.','good');
@@ -1415,6 +1416,15 @@
       state.followTarget=false;
       logEvent('Camera follow disengaged.');updateHud();
     }else focusSelectedTarget(true);
+  }
+  function centerOnMyShip(){
+    if(!state?.player)return;
+    state.followTarget=false;state.followPlayer=true;
+    state.zoom=clamp(Math.max(state.zoom,2.8),.35,6);
+    centerCameraOn(state.player);
+    updateZoom();
+    logEvent('Camera centered on KESTREL-7 · tracking your spacecraft. Drag to release camera follow.','good');
+    updateHud();
   }
   function updateZoom(){$('zoom-level').textContent=state.zoom.toFixed(2)+'×';}
   function zoomAt(factor,px=W/2,py=H/2){
@@ -1443,7 +1453,9 @@
     getSelectedContact:selectedContact
   });
   function draw(){
-    if(state.followTarget){
+    if(state.followPlayer){
+      centerCameraOn(state.player);
+    }else if(state.followTarget){
       const target=selectedContact();
       if(target)centerCameraOn(target);
       else state.followTarget=false;
@@ -1631,6 +1643,7 @@
     window.addEventListener('orbital-request-selected-donor',requestSelectedDonor);
     window.addEventListener('orbital-focus-target',()=>focusSelectedTarget(false));
     window.addEventListener('orbital-follow-target',toggleFollowTarget);
+    window.addEventListener('orbital-center-ship',centerOnMyShip);
     window.addEventListener('orbital-offer-fuel',donateFuelToAlly);
     window.addEventListener('orbital-set-reserve',requestReserveSetting);
     $('settings-btn').addEventListener('click',openSettings);
@@ -1653,7 +1666,9 @@
       const pt=coords(e),p=fromScreen(pt.px,pt.py);
       if(e.button===1||e.button===2||e.shiftKey){
         e.preventDefault();
-        if(state.followTarget){state.followTarget=false;updateHud();}
+        if(state.followTarget||state.followPlayer){
+          state.followTarget=false;state.followPlayer=false;updateHud();
+        }
         drag={id:e.pointerId,px:pt.px,py:pt.py};canvas.setPointerCapture(e.pointerId);return;
       }
       if(state.ended||!state.player.alive)return;

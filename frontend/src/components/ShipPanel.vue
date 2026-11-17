@@ -6,7 +6,7 @@ const DEFAULT_SHIP: ShipView = {
   hp: 100, fuel: 200, fuelMax: 200, repairParts: 10, repairCapacity: 24,
   ammo: 36, credits: 65, captureHeatMJ: 0, captureCapacityMJ: 520, cargoKg: 0, captureTensionN: 0, captureStatus: 'STANDBY',
   deltaV: 0, status: 'Nominal orbit',
-  statusColor: '#67e0aa', repairDisabled: true, repairing: false
+  statusColor: '#67e0aa', followPlayer: false, repairDisabled: true, repairing: false
 }
 
 export default defineComponent({
@@ -25,6 +25,9 @@ export default defineComponent({
   methods: {
     onState(event: Event) {
       this.ship = { ...(event as CustomEvent<CockpitState>).detail.ship }
+    },
+    centerOnShip() {
+      window.dispatchEvent(new CustomEvent('orbital-center-ship'))
     }
   }
 })
@@ -42,6 +45,10 @@ export default defineComponent({
       <span class="ship-glyph">△</span>
       <span>KESTREL-7<small id="status-text" :style="{ color: ship.statusColor }">{{ ship.status }}</small></span>
     </div>
+    <button type="button" class="small-btn ship-center-btn"
+            :aria-pressed="ship.followPlayer"
+            title="Center and continuously follow KESTREL-7. Drag the map to return to free camera."
+            @click="centerOnShip">⌖ {{ ship.followPlayer ? 'FOLLOWING MY SHIP' : 'CENTER ON MY SHIP' }}</button>
     <div class="meter-title">
       <span>HULL INTEGRITY</span><b id="hull-value">{{ Math.round(ship.hp) }}%</b>
     </div>

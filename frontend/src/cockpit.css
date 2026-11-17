@@ -218,3 +218,9 @@
 .nav-command-camera-actions{display:flex;gap:6px;margin-top:8px;margin-bottom:6px}
 .nav-command-camera-actions .small-btn{flex:1;min-width:0;font-size:10px;padding:7px 6px}
 .nav-command-camera-actions .small-btn[aria-pressed="true"]{color:#91ecfa;background:#144358;border-color:#49bed7}
+
+/* Rescue camera: locating the player is always possible, even far from Kestrel. */
+.ship-center-btn{display:block;width:100%;margin:0 0 12px;padding:9px 11px;text-align:center;
+  border:1px solid #376c8c;background:#11344b;color:#a7e9fa;font-weight:800;letter-spacing:.25px}
+.ship-center-btn[aria-pressed="true"]{color:#b4f7e5;background:#10433a;border-color:#4cb6a5}
+.ship-center-btn:hover{background:#1b516e}
