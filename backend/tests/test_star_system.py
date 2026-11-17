@@ -77,7 +77,8 @@ def test_system_ephemeris_has_no_migration_of_legacy_player_coordinates(postgres
 def test_veyra_is_a_plausible_k_dwarf_with_an_au_scale_planetary_orbit():
     from app.star_system import (
         STAR_MASS_SOLAR, STAR_RADIUS_SOLAR, STAR_LUMINOSITY_SOLAR,
-        STAR_EFFECTIVE_TEMPERATURE_K, AU_KM, NERIS_ORBIT_KM, NERIS_PERIOD_S,
+        STAR_EFFECTIVE_TEMPERATURE_K, STAR_RADIUS_KM,
+        AU_KM, NERIS_ORBIT_KM, NERIS_PERIOD_S,
     )
     assert STAR_MASS_SOLAR == pytest.approx(.82)
     assert STAR_RADIUS_SOLAR == pytest.approx(.78)
