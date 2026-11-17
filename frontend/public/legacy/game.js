@@ -20,7 +20,8 @@
   const ATTITUDE=window.OrbitalAttitude;
   const STAR=window.OrbitalStarSystem;
   const MAP=window.OrbitalMapTools;
-  if(!NAV||!BALL||!COLL||!SAFE||!ARRIVAL||!ATTITUDE||!STAR||!MAP)throw new Error('Simulation modules missing');
+  const VIS=window.OrbitalVisuals;
+  if(!NAV||!BALL||!COLL||!SAFE||!ARRIVAL||!ATTITUDE||!STAR||!MAP||!VIS)throw new Error('Simulation modules missing');
   // 1 world distance unit = 1 km; velocities in km/s. Engines are futuristic.
   const ENGINE=Object.freeze({dryKg:900,propellantKg:200,thrustN:1600000,flowKgS:5,rcsN:2500,rcsFlowKgS:.04,leverM:7,shipLengthM:14,gimbalMax:28*Math.PI/180});
   const exhaustKmS=ENGINE.thrustN/ENGINE.flowKgS/1000;
@@ -1282,8 +1283,10 @@
     const liveHostiles=state.enemies.filter(ship=>ship.alive).length;
     const activeAllies=(state.ally.alive?1:0)+(state.allies||[]).filter(ally=>ally.alive).length;
     $('mission-status').textContent=liveHostiles+' hostile'+(liveHostiles!==1?'s':'')+' · '+activeAllies+' active allies';
-    $('sos-btn').disabled=state.ended||!p.alive||(persistentFlight&&!flightOnline)||(!persistentFlight&&!state.ally.alive);
-    $('sos-btn').textContent=(state.rescue||state.serverAssistance?.some(o=>o.recipient==='player'))?'⚑ ASSISTANCE REQUESTED':'⚑ REQUEST FUEL ASSISTANCE';
+    const sosDisabled=state.ended||!p.alive||(persistentFlight&&!flightOnline)||
+      (!persistentFlight&&!state.ally.alive);
+    const sosText=(state.rescue||state.serverAssistance?.some(o=>o.recipient==='player'))?
+      '⚑ Fuel assistance requested':'⚑ Request fuel assistance · automatic';
     const ephemerisToggle=$('ephemeris-visibility-btn');
     ephemerisToggle.disabled=!state.ephemerisOwned;
     ephemerisToggle.textContent=state.ephemerisVisible?'◎ Ephemeris ON':'◎ Ephemeris OFF';
@@ -1388,7 +1391,7 @@
       engageText:state.navOwned?'ENGAGE':'BUY NAV 60¤',
       engageDisabled:state.ended||!p.alive||!!state.autopilot||(persistentFlight&&!flightOnline)||(!state.navOwned&&p.credits<60),
       abortDisabled:!state.autopilot,donateDisabled:!canDonate,
-      requestAllyDisabled:!canRequestForAlly,
+      requestAllyDisabled:!canRequestForAlly,sosDisabled,sosText,
       requestDonorDisabled:!canRequestFromAlly,
       requestDonorText:friendly?
         (playerOrder?'Switch your fuel donor to ':'Request fuel for KESTREL-7 from ')+friendly.name:
@@ -1549,7 +1552,8 @@
   const renderer=window.OrbitalRenderer.create({
     ctx,WORLD,ENGINE,palette,NAV,getState:()=>state,
     getViewport:()=>({W,H,dpr,starfield,encounterReady}),
-    toScreen,scale,clamp,getSystem:()=>STAR,getEphemerisTarget:()=>navTarget(state.selectedNavKey),
+    toScreen,scale,clamp,getSystem:()=>STAR,getVisuals:()=>VIS,
+    getEphemerisTarget:()=>navTarget(state.selectedNavKey),
     getSelectedContact:selectedContact
   });
   function draw(){
@@ -1615,7 +1619,7 @@
     $('nav-engage').title='Buy or engage ('+keyLabel(hotkeys.engageNav)+')';
     $('nav-next').title='Next navigation target ('+keyLabel(hotkeys.nextNav)+')';
     $('nav-abort').title='Abort ('+keyLabel(hotkeys.abortNav)+')';
-    $('sos-btn').title='Request allied fuel assistance ('+keyLabel(hotkeys.sos)+')';
+    // Fuel assistance is now a Navigation action; the H hotkey remains available.
   }
   function renderHotkeys(){
     const list=$('hotkey-list');list.replaceChildren();
@@ -1744,7 +1748,7 @@
     $('nav-target').addEventListener('change',()=>{state.selectedNavKey=$('nav-target').value;state.ephemerisCache=null;state.navPlan=null;updateHud();});
     $('nav-toggle').addEventListener('click',()=>toggleConsole('nav'));
     $('telemetry-toggle').addEventListener('click',()=>toggleConsole('telemetry'));
-    $('sos-btn').addEventListener('click',requestFuelHelp);
+    window.addEventListener('orbital-request-fuel-assistance',requestFuelHelp);
     $('ephemeris-visibility-btn').addEventListener('click',()=>{
       if(!state.ephemerisOwned)return;
       state.ephemerisVisible=!state.ephemerisVisible;state.ephemerisCache=null;

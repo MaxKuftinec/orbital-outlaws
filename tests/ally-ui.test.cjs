@@ -79,3 +79,18 @@ test('selected ally can be assigned as the donor TO the player, separately from 
   assert.match(types,/requestDonorText: string/);
   assert.match(persistence,/requestAssistance:\(recipient,donor\)=>send\('request_assistance'/);
 });
+
+
+test('automatic fuel requests live in the Navigation sidebar, never on the map',()=>{
+  const nav=fs.readFileSync(path.join(root,'frontend/src/components/NavigationPanel.vue'),'utf8');
+  const app=fs.readFileSync(path.join(root,'frontend/src/App.vue'),'utf8');
+  const bridge=fs.readFileSync(path.join(root,'frontend/src/services/instruments.ts'),'utf8');
+  assert.doesNotMatch(app,/id="sos-btn"/);
+  assert.match(nav,/id="nav-sos-btn"/);
+  assert.match(nav,/@click="requestAutomaticFuel"/);
+  assert.match(nav,/orbital-request-fuel-assistance/);
+  assert.match(bridge,/sosDisabled: boolean; sosText: string/);
+  assert.match(game,/window\.addEventListener\('orbital-request-fuel-assistance',requestFuelHelp\)/);
+  assert.doesNotMatch(game,/\$\('sos-btn'\)/);
+  assert.match(game,/if\(command==='sos'\)requestFuelHelp\(\)/);
+});

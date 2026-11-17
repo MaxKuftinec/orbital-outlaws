@@ -2,7 +2,7 @@
 (function(root){
   'use strict';
   root.OrbitalRenderer={
-    create({ctx,WORLD,ENGINE,palette,NAV,getState,getViewport,toScreen,scale,clamp,getEphemerisTarget,getSelectedContact,getSystem}){
+    create({ctx,WORLD,ENGINE,palette,NAV,getState,getViewport,toScreen,scale,clamp,getEphemerisTarget,getSelectedContact,getSystem,getVisuals}){
       const TWO_PI=Math.PI*2;
       let state,W,H,dpr,starfield,encounterReady;
   function pathWorld(points,stroke,lineWidth=1,dash=[]) {
@@ -92,7 +92,17 @@
   }
   function drawShip(ship){
     if(!ship.alive)return;
-    const p=toScreen(ship.x,ship.y),s=clamp(scale()*2.1,.8,1.85),a=ship.heading+Math.PI/2;
+    const p=toScreen(ship.x,ship.y),visual=getVisuals().spacecraft(scale());
+    if(p.x<-34||p.x>W+34||p.y<-34||p.y>H+34)return;
+    // At system distance a real spacecraft is subpixel. Show a tiny dot,
+    // never a fixed 20–40px sprite or health bar covering Veyra/Kestrel.
+    if(!visual.sprite){
+      ctx.save();ctx.fillStyle=ship.color||palette.cyan;
+      ctx.globalAlpha=ship.isPlayer?.95:.7;
+      ctx.beginPath();ctx.arc(p.x,p.y,visual.dotRadius,0,TWO_PI);ctx.fill();
+      ctx.restore();return;
+    }
+    const s=visual.scale,a=ship.heading+Math.PI/2;
     ctx.save();ctx.translate(p.x,p.y);ctx.rotate(a);ctx.scale(s,s);
     if(ship.thrustVector){
       const burnAngle=ship.isPlayer?ship.gimbal:0;
@@ -110,14 +120,35 @@
       ctx.save();ctx.strokeStyle='#80b3ce88';ctx.setLineDash([2,5]);ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,35,-Math.PI/2-ENGINE.gimbalMax,-Math.PI/2+ENGINE.gimbalMax);ctx.stroke();ctx.restore();
     }
     ctx.restore();
-    if(!ship.isPlayer){ctx.font='10px system-ui';ctx.fillStyle=ship.color;ctx.fillText((ship.isAlly?'★ ':'')+ship.name,p.x+13,p.y-12);ctx.fillStyle='#254052';ctx.fillRect(p.x+13,p.y-7,48,3);ctx.fillStyle=ship.color;ctx.fillRect(p.x+13,p.y-7,48*(ship.hp/(ship.isAlly?80:66)),3);}
-    if(ship.isPlayer){ctx.save();ctx.strokeStyle=palette.cyan;ctx.globalAlpha=.4;ctx.setLineDash([4,6]);ctx.beginPath();ctx.arc(p.x,p.y,22,0,TWO_PI);ctx.stroke();ctx.restore();}
+    if(!ship.isPlayer&&visual.showLabel){
+      ctx.font='10px system-ui';ctx.fillStyle=ship.color;
+      ctx.fillText((ship.isAlly?'★ ':'')+ship.name,p.x+13*s,p.y-12*s);
+      if(visual.showHealth){
+        ctx.fillStyle='#254052';ctx.fillRect(p.x+13*s,p.y-7*s,48,3);
+        ctx.fillStyle=ship.color;ctx.fillRect(p.x+13*s,p.y-7*s,48*(ship.hp/(ship.isAlly?80:66)),3);
+      }
+    }
+    if(ship.isPlayer&&visual.showPlayerRing){
+      ctx.save();ctx.strokeStyle=palette.cyan;ctx.globalAlpha=.4;ctx.setLineDash([4,6]);
+      ctx.beginPath();ctx.arc(p.x,p.y,22*s,0,TWO_PI);ctx.stroke();ctx.restore();
+    }
   }
-  function drawPickup(pod){const p=toScreen(pod.x,pod.y),s=clamp(scale(),.5,1.25),size=6*s+2;
+  function drawPickup(pod){
+    const p=toScreen(pod.x,pod.y),visual=getVisuals().salvage(scale());
+    if(p.x<-30||p.x>W+30||p.y<-30||p.y>H+30)return;
     const color=pod.type==='fuel'?palette.green:pod.type==='ammo'?palette.purple:pod.type==='wreck'?palette.red:pod.type==='parts'?palette.cyan:palette.yellow;
-    ctx.save();ctx.translate(p.x,p.y);ctx.rotate(state.t*.4+pod.phase);ctx.strokeStyle=color;ctx.lineWidth=1.6;ctx.fillStyle='#102334';ctx.beginPath();ctx.moveTo(0,-size);ctx.lineTo(size,0);ctx.lineTo(0,size);ctx.lineTo(-size,0);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
-    ctx.save();ctx.strokeStyle=color;ctx.globalAlpha=.24+.13*Math.sin(state.t*2+pod.phase);ctx.beginPath();ctx.arc(p.x,p.y,size+6,0,TWO_PI);ctx.stroke();ctx.restore();
-    ctx.fillStyle=color;ctx.font='9px monospace';ctx.fillText(pod.type==='wreck'?'WRECK':pod.type.toUpperCase(),p.x+10,p.y+14);
+    if(visual.marker){
+      ctx.save();ctx.fillStyle=color;ctx.globalAlpha=.75;
+      ctx.beginPath();ctx.arc(p.x,p.y,visual.radius,0,TWO_PI);ctx.fill();
+      ctx.restore();return;
+    }
+    const size=visual.radius;
+    ctx.save();ctx.translate(p.x,p.y);ctx.rotate(state.t*.4+pod.phase);ctx.strokeStyle=color;ctx.lineWidth=1.6;ctx.fillStyle='#102334';
+    ctx.beginPath();ctx.moveTo(0,-size);ctx.lineTo(size,0);ctx.lineTo(0,size);ctx.lineTo(-size,0);
+    ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
+    ctx.save();ctx.strokeStyle=color;ctx.globalAlpha=.24+.13*Math.sin(state.t*2+pod.phase);
+    ctx.beginPath();ctx.arc(p.x,p.y,size+6,0,TWO_PI);ctx.stroke();ctx.restore();
+    if(visual.label){ctx.fillStyle=color;ctx.font='9px monospace';ctx.fillText(pod.type==='wreck'?'WRECK':pod.type.toUpperCase(),p.x+10,p.y+14);}
   }
   function drawTether(){
     const line=state.captureTether;
@@ -215,11 +246,17 @@
   function drawSelectedContact(){
     const selected=getSelectedContact?.();
     if(!selected||!Number.isFinite(selected.x)||!Number.isFinite(selected.y))return;
-    const raw=toScreen(selected.x,selected.y),margin=38;
+    const pxPerKm=scale(),celestial=selected.kind==='star'||selected.kind==='planet';
+    const bodyRadius=selected.kind==='star'?
+      Math.max(5,getSystem().STAR_RADIUS_KM*pxPerKm):
+      selected.kind==='planet'?Math.max(state.systemView?3:0,WORLD.radius*pxPerKm):0;
+    const style=getVisuals().reticle(pxPerKm,selected.kind,bodyRadius);
+    const raw=toScreen(selected.x,selected.y),margin=Math.max(30,style.radius+9);
     const inside=raw.x>=margin&&raw.x<=W-margin&&raw.y>=margin&&raw.y<=H-margin;
     let cx=raw.x,cy=raw.y;
     if(!inside){
-      // Point toward objects far beyond the camera, using the screen edge.
+      // Offscreen bearings retain their directional arrows. Markers remain
+      // small even when the selected object is hundreds of thousands of km away.
       const dx=raw.x-W/2,dy=raw.y-H/2;
       const factor=Math.min((W/2-margin)/Math.max(1e-9,Math.abs(dx)),
                             (H/2-margin)/Math.max(1e-9,Math.abs(dy)));
@@ -227,38 +264,60 @@
     }
     const stroke=selected.kind==='enemy'?palette.red:selected.kind==='ally'?palette.green:
       selected.kind==='salvage'||selected.kind==='star'?palette.yellow:palette.cyan;
+    const reduced=typeof window!=='undefined'&&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const clock=reduced?0:typeof performance!=='undefined'?
+      performance.now()/1000:(state.t||0);
+    const phase=clock*.52,alpha=.62+(reduced?0:.2*Math.sin(clock*2.4));
+    const radius=style.radius+(reduced?0:.8*Math.sin(clock*1.7));
     ctx.save();
-    ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.shadowColor=stroke;ctx.shadowBlur=7;
-    // Unique in-game reticle: circular sight, cross ticks and four corners.
-    ctx.beginPath();ctx.arc(cx,cy,21,0,TWO_PI);
-    ctx.moveTo(cx-29,cy);ctx.lineTo(cx-17,cy);
-    ctx.moveTo(cx+17,cy);ctx.lineTo(cx+29,cy);
-    ctx.moveTo(cx,cy-29);ctx.lineTo(cx,cy-17);
-    ctx.moveTo(cx,cy+17);ctx.lineTo(cx,cy+29);
-    for(const signX of [-1,1])for(const signY of [-1,1]){
-      const x=cx+signX*34,y=cy+signY*34;
-      ctx.moveTo(x-signX*12,y);ctx.lineTo(x,y);ctx.lineTo(x,y-signY*12);
+    ctx.strokeStyle=stroke;ctx.lineWidth=style.system?1.35:1.7;
+    ctx.globalAlpha=alpha;ctx.shadowColor=stroke;ctx.shadowBlur=style.system?2:5;
+    ctx.translate(cx,cy);
+    // Two slow rotating arc segments provide acquisition motion. Their
+    // radius and corners follow the map LOD, never dwarfing distant bodies.
+    ctx.beginPath();
+    ctx.arc(0,0,radius,phase,phase+Math.PI*.74);
+    ctx.arc(0,0,radius,phase+Math.PI,phase+Math.PI*1.74);
+    ctx.stroke();
+    ctx.rotate(reduced?0:-phase*.38);
+    const cornerOffset=radius+5,leg=style.corner;
+    ctx.beginPath();
+    for(const sx of [-1,1])for(const sy of [-1,1]){
+      const x=sx*cornerOffset,y=sy*cornerOffset;
+      ctx.moveTo(x-sx*leg,y);ctx.lineTo(x,y);ctx.lineTo(x,y-sy*leg);
     }
-    ctx.stroke();ctx.shadowBlur=0;
-    ctx.beginPath();ctx.arc(cx,cy,5,0,TWO_PI);ctx.stroke();
+    if(style.ticks&&!celestial){
+      const outer=radius+7,inner=radius-4;
+      ctx.moveTo(-outer,0);ctx.lineTo(-inner,0);
+      ctx.moveTo(outer,0);ctx.lineTo(inner,0);
+      ctx.moveTo(0,-outer);ctx.lineTo(0,-inner);
+      ctx.moveTo(0,outer);ctx.lineTo(0,inner);
+    }
+    ctx.stroke();ctx.restore();
     if(!inside){
       const dir=Math.atan2(raw.y-H/2,raw.x-W/2);
-      ctx.translate(cx,cy);ctx.rotate(dir);ctx.fillStyle=stroke;
-      ctx.beginPath();ctx.moveTo(23,0);ctx.lineTo(10,-6);ctx.lineTo(10,6);
-      ctx.closePath();ctx.fill();
-      // Reset the arrow-local transform before positioning the text.
-      ctx.rotate(-dir);ctx.translate(-cx,-cy);
+      ctx.save();ctx.translate(cx,cy);ctx.rotate(dir);ctx.fillStyle=stroke;
+      const tip=style.radius+9;
+      ctx.beginPath();ctx.moveTo(tip+4,0);ctx.lineTo(tip-6,-4);ctx.lineTo(tip-6,4);
+      ctx.closePath();ctx.fill();ctx.restore();
     }
-    const range=Math.hypot(selected.x-state.player.x,selected.y-state.player.y);
-    const text=String(selected.label).slice(0,36)+' · '+range.toFixed(1)+' km'+(inside?'':' · OFFSCREEN');
-    ctx.font='bold 10px ui-monospace,monospace';ctx.textAlign='left';
-    const width=Math.min(W-16,ctx.measureText(text).width+18);
-    const labelX=clamp(cx+39,8,Math.max(8,W-width-8));
-    const labelY=clamp(cy-48,8,Math.max(8,H-25));
-    ctx.fillStyle='rgba(5,20,34,.94)';ctx.fillRect(labelX,labelY,width,22);
-    ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.strokeRect(labelX,labelY,width,22);
-    ctx.fillStyle=stroke;ctx.fillText(text,labelX+8,labelY+15,Math.max(0,width-14));
-    ctx.restore();
+    // The persistent NAV TARGET caption identifies system-scale contacts.
+    // A second big canvas label would obscure Kestrel or Veyra.
+    if(!inside||style.label){
+      const range=Math.hypot(selected.x-state.player.x,selected.y-state.player.y);
+      const label=String(selected.label).slice(0,inside?28:18);
+      const distance=range.toLocaleString('en-US',{maximumFractionDigits:range>=100?0:1});
+      const text=label+' · '+distance+' km'+(inside?'':' · OFFSCREEN');
+      ctx.save();ctx.font='bold 10px ui-monospace,monospace';ctx.textAlign='left';
+      const width=Math.min(W-16,ctx.measureText(text).width+16);
+      const labelX=clamp(cx+style.radius+16,8,Math.max(8,W-width-8));
+      const labelY=clamp(cy-style.radius-24,8,Math.max(8,H-25));
+      ctx.fillStyle='rgba(5,20,34,.94)';ctx.fillRect(labelX,labelY,width,22);
+      ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.strokeRect(labelX,labelY,width,22);
+      ctx.fillStyle=stroke;ctx.fillText(text,labelX+8,labelY+15,Math.max(0,width-14));
+      ctx.restore();
+    }
   }
   function draw(){
     if(!state)return;

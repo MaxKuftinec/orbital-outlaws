@@ -17,6 +17,7 @@ export interface NavigationView {
   fuel: string; status: string; quick: string; metrics: string
   engageText: string; engageDisabled: boolean; abortDisabled: boolean; donateDisabled: boolean
   requestAllyDisabled: boolean; requestDonorDisabled: boolean
+  sosDisabled: boolean; sosText: string
   requestDonorText: string; allyInfo: string; assistInfo: string
   selected: string; reserveKg: number; focusDisabled: boolean; followTarget: boolean
 }

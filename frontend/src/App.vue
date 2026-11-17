@@ -8,7 +8,7 @@ import TargetingPanel from './components/TargetingPanel.vue'
 import NavigationPanel from './components/NavigationPanel.vue'
 
 const legacyFiles = [
-  'map-tools.js', 'star-system.js', 'autopilot-attitude.js', 'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
+  'map-tools.js', 'map-visuals.js', 'star-system.js', 'autopilot-attitude.js', 'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
   'arrival.js', 'persistence.js', 'workspace.js', 'rendering.js', 'game.js'
 ]
 
@@ -95,7 +95,6 @@ export default defineComponent({
           <!-- <TelemetryPanel :console="true" /> We don't need this, please don't uncomment--> 
           <!-- <NavigationPanel :console="true" /> We don't need this, please don't uncomment-->
           <ShipPanel />
-          <button type="button" id="sos-btn" class="sos-btn" title="Request a fuel rendezvous from a friendly spacecraft">⚑ REQUEST FUEL ASSISTANCE</button>
           <div id="map-measure-tools" class="map-measure-tools" aria-label="Map measuring tools">
             <div class="map-ruler-controls">
               <button type="button" id="ruler-toggle" aria-pressed="false" title="Click two locations to measure the distance between them">↔ Ruler</button>

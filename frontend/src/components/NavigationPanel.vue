@@ -5,6 +5,7 @@ const EMPTY:NavigationView = {
   locked:true,phase:'LOCKED',deltaV:'—',eta:'—',fuel:'—',status:'No plan',quick:'COMPUTER LOCKED',
   metrics:'Pick a contact · press C to calculate',engageText:'BUY NAV 60¤',
   engageDisabled:false,abortDisabled:true,donateDisabled:true,requestAllyDisabled:true,
+  sosDisabled:true,sosText:'Request fuel assistance · automatic',
   requestDonorDisabled:true,requestDonorText:'Select an ally to request fuel',allyInfo:'Select a friendly spacecraft',assistInfo:'No active transfers',selected:'',reserveKg:36,focusDisabled:true,followTarget:false
 }
 export default defineComponent({
@@ -38,6 +39,7 @@ export default defineComponent({
       window.dispatchEvent(new CustomEvent('orbital-target-selected',{detail:{key}}))},
     offerFuel(){window.dispatchEvent(new CustomEvent('orbital-offer-fuel'))},
     requestAllyAssistance(){window.dispatchEvent(new CustomEvent('orbital-request-ally-assistance'))},
+    requestAutomaticFuel(){window.dispatchEvent(new CustomEvent('orbital-request-fuel-assistance'))},
     requestSelectedDonor(){window.dispatchEvent(new CustomEvent('orbital-request-selected-donor'))},
     focusTarget(){window.dispatchEvent(new CustomEvent('orbital-focus-target'))},
     followTarget(){window.dispatchEvent(new CustomEvent('orbital-follow-target'))},
@@ -133,6 +135,11 @@ export default defineComponent({
     <div class="control-note">Alt+click to set a waypoint. Manual steering disengages autopilot. Estimates assume impulsive burns; live thrust must correct.</div>
     <div class="mini-note" id="ally-fuel-status">{{ navigation.allyInfo }}</div>
     <div class="mini-note" id="assistance-status">{{ navigation.assistInfo }}</div>
+    <button type="button" id="nav-sos-btn" class="wide-subtle-btn nav-sos-btn"
+            :disabled="navigation.sosDisabled" @click="requestAutomaticFuel"
+            title="Request fuel delivery to KESTREL-7 from an automatically selected available ally (H)">
+      {{ navigation.sosText }}
+    </button>
     <button type="button" class="wide-subtle-btn" id="nav-request-fuel-from-ally"
             :disabled="navigation.requestDonorDisabled" @click="requestSelectedDonor"
             title="Request fuel for your own ship from the selected AEGIS spacecraft">

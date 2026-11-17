@@ -79,15 +79,24 @@ test('follow retargets the camera as the object moves and can be disengaged',()=
   ctx.draw();
   assert.equal(state.panX,panX);
 });
-function drawSelection(x,y){
+function visualModel(){
+  const ctx={module:{exports:{}}};
+  vm.runInNewContext(fs.readFileSync(path.join(root,'frontend/public/legacy/map-visuals.js'),'utf8'),ctx);
+  return ctx.module.exports;
+}
+function drawSelection(x,y,{scale=.75,kind='salvage',time=5000,reduced=false}={}){
   const ops=[];
   const fake=new Proxy({measureText:t=>({width:t.length*6})},{
     get(target,k){return k in target?target[k]:(...args)=>{ops.push({op:k,args})}},
     set(target,k,value){target[k]=value;return true}
   });
-  const state={player:{x:0,y:0}};
-  const ctx={ctx:fake,getSelectedContact:()=>({x,y,label:'WRECK r-26',kind:'salvage'}),
-    toScreen:(x,y)=>({x:x+400,y:y+300}),W:800,H:600,clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),
+  const state={player:{x:0,y:0},t:0,systemView:scale<.18};
+  const ctx={ctx:fake,getSelectedContact:()=>({x,y,label:'WRECK r-26',kind}),
+    toScreen:(x,y)=>({x:x+400,y:y+300}),scale:()=>scale,
+    getVisuals:()=>visualModel(),
+    getSystem:()=>({STAR_RADIUS_KM:4500}),WORLD:{radius:85},
+    performance:{now:()=>time},window:{matchMedia:()=>({matches:reduced})},
+    W:800,H:600,clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),
     state,palette:{yellow:'#edbe6b',green:'#67e0aa',cyan:'#62d9f6',red:'#ff7184'},
     TWO_PI:Math.PI*2
   };
@@ -96,18 +105,35 @@ function drawSelection(x,y){
   ctx.drawSelectedContact();
   return ops;
 }
-test('visible navigation selection draws a round-and-corner scope around the actual body',()=>{
+test('visible navigation selection uses compact rotating arc and brackets',()=>{
   const ops=drawSelection(0,0);
-  assert.ok(ops.some(x=>x.op==='arc'&&x.args[0]===400&&x.args[1]===300&&x.args[2]===21));
+  assert.ok(ops.some(x=>x.op==='arc'&&x.args[0]===0&&x.args[1]===0&&x.args[2]<24));
   assert.ok(ops.some(x=>x.op==='lineTo'));
   assert.ok(ops.some(x=>x.op==='fillText'&&x.args[0].includes('WRECK r-26')));
 });
 test('off-screen targets receive an edge direction cue and range label',()=>{
   const ops=drawSelection(30000,-1800);
-  const ring=ops.find(x=>x.op==='arc'&&x.args[2]===21);
-  assert.ok(ring);
-  assert.ok(ring.args[0]>=35&&ring.args[0]<=765);
-  assert.ok(ring.args[1]>=35&&ring.args[1]<=565);
+  const translate=ops.find(x=>x.op==='translate');
+  assert.ok(translate);
+  assert.ok(translate.args[0]>=30&&translate.args[0]<=770);
+  assert.ok(translate.args[1]>=30&&translate.args[1]<=570);
   assert.ok(ops.some(x=>x.op==='rotate'));
   assert.ok(ops.some(x=>x.op==='fillText'&&x.args[0].includes('OFFSCREEN')));
+});
+test('system-scale star and wreck scopes remain small, animate, and omit a covering label',()=>{
+  const first=drawSelection(0,0,{scale:.002,kind:'star',time:0});
+  const later=drawSelection(0,0,{scale:.002,kind:'star',time:2000});
+  assert.ok(first.some(x=>x.op==='arc'&&x.args[2]<22));
+  assert.equal(first.filter(x=>x.op==='fillText').length,0);
+  const turns=first.filter(x=>x.op==='rotate').map(x=>x.args[0]);
+  const rotated=later.filter(x=>x.op==='rotate').map(x=>x.args[0]);
+  assert.notDeepEqual(rotated,turns,'selected target reticle should slowly rotate');
+  const reducedA=drawSelection(0,0,{scale:.002,time:0,reduced:true});
+  const reducedB=drawSelection(0,0,{scale:.002,time:9000,reduced:true});
+  assert.deepEqual(reducedA.filter(x=>x.op==='rotate').map(x=>x.args[0]),
+                   reducedB.filter(x=>x.op==='rotate').map(x=>x.args[0]),
+                   'respect reduced-motion preferences');
+  const wreck=drawSelection(0,0,{scale:.002,kind:'salvage'});
+  assert.ok(wreck.some(x=>x.op==='arc'&&x.args[2]<14));
+  assert.equal(wreck.filter(x=>x.op==='fillText').length,0);
 });

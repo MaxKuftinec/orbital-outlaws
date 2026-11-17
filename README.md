@@ -461,3 +461,30 @@ resets 65 starter credits and technology ownership, and preserves NPC/salvage
 sector state and event history. The old ship's last checkpoint is archived
 in the respawn event; it is no longer an active controllable vessel.
 It does **not** create a new browser pilot ID or separate login account.
+
+
+## v1.0 navigation and rendering refinement
+
+**Fuel assistance** is a normal action inside the **Rendezvous Computer /
+Navigation sidebar**, alongside selecting a donor or assisting another ally.
+The automatic `⚑ Request fuel assistance` command still works using the **H**
+shortcut, has the same live-server validation and transfer physics, and
+does not occupy the canvas or block the map's distance scale.
+
+**Visual size now responds to zoom level without a large minimum sprite.**
+At planet-scale zoom, individual spacecraft remain readable with ship
+silhouettes, engine effects and health indicators. At star-system distances,
+ships and salvage become **tiny colored point markers** (normally less than
+2 px radius); text labels, health bars, gimbal rings, and large player
+circles disappear until the camera zooms in again. Veyra and Kestrel retain
+their own visibly larger celestial markers.
+
+**Target acquisition** uses a compact, pulsing ring with slow rotating
+arc segments and corner brackets. Its size is based on map zoom and the
+selected body's visible radius, with a bounded maximum; it does not
+become a giant fixed-size scope covering a planet or star. At distant
+zoom, the selection identity remains in the existing NAV TARGET caption
+rather than a large label over the object. Offscreen targets still show
+direction and distance. Users requesting reduced animation motion see a
+stationary reticle. These are presentation-only changes: target selection,
+weapon lock, trajectory, and fuel consumption are unchanged.

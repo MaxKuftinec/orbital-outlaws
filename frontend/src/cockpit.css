@@ -280,3 +280,8 @@
  #canvas-workspace .map-measure-tools{right:7px;bottom:63px;max-width:54%;min-width:120px;padding:7px}
  .settings-frame-choice{grid-template-columns:1fr}
 }
+
+/* Automatic SOS is a normal Navigation action, not a floating emergency overlay. */
+.nav-sos-btn{margin-top:8px;border-color:#567389;background:#152c3b;color:#c9e8f0;
+  font-weight:700;text-align:center}
+.nav-sos-btn:disabled{opacity:.48;cursor:not-allowed}
