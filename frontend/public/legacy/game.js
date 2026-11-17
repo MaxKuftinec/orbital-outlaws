@@ -1088,6 +1088,10 @@
     logEvent(message);updateHud();
   }
   function engageNav(){
+    if(serverBurn?.active){
+      logEvent('Abort the active automated burn before engaging rendezvous navigation.','danger');
+      return;
+    }
     if(persistentFlight&&!flightOnline){
       logEvent('Reconnect to the flight server before engaging autopilot.','danger');return;
     }
