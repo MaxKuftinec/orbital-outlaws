@@ -359,3 +359,19 @@ TARGET LOCK readout.
 
 These camera controls do not require a paid technology, move spacecraft,
 use propellant, engage autopilot, or change weapon targeting.
+
+
+### Flight-input release safety and attitude control
+
+Live flight inputs are now acknowledged with an incrementing `seq` on the
+existing WebSocket snapshots. The client keeps at most one ordinary in-flight
+control command, coalesces high-frequency thrust/turn/aim changes into the
+latest sample, and **sends engine releases immediately** even while the last
+command is awaiting acknowledgement. Existing finite 0.4-second server
+leases remain an emergency expiry; network/server processing latency still
+matters, so exact zero-latency cutoff over an unreliable connection cannot
+be promised. Local player-input prediction stops as soon as the key/button is
+released. Autopilot now uses a common braking-aware angular-rate controller
+for both local movement and server flight commands, with a 0.55 rad/s speed
+limit rather than the previous 1.9 rad/s cap; dynamic rendezvous accuracy
+still depends on trajectory replanning and finite-burn planning.

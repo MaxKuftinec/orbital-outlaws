@@ -15,6 +15,9 @@
     const address=(origin.protocol==='https:'?'wss:':'ws:')+'//'+origin.host+
       origin.pathname.replace(/\/$/,'')+'/players/'+pilotId()+'/live';
     let socket=null,connected=false,last='',lastSent=0,retry=null,closed=false;
+    let nextSeq=1,lastControls=null;
+    const pending=new Set(); // One normal in-flight command; at most one urgent release.
+
     const send=(type,body={})=>{
       if(!connected||socket?.readyState!==WebSocket.OPEN)return false;
       socket.send(JSON.stringify({type,...body}));
@@ -26,8 +29,23 @@
         {thrust:false,turn:0,stabilize:false,gimbal:0,fire:false,repair:false,aim_x:0,aim_y:0}:controls();
       const fingerprint=JSON.stringify(value),now=performance.now();
       const active=value.thrust||value.turn||value.stabilize||value.fire||value.repair;
-      if(fingerprint!==last||(active&&now-lastSent>=180)){
-        if(send('input',value)){last=fingerprint;lastSent=now;}
+      // A release is urgent. Never let a long stream of old throttle inputs
+      // sit ahead of a stop command in the WebSocket/server queue.
+      const release=!!lastControls?.thrust&&!value.thrust;
+      // Short key/button taps must not disappear while a previous command
+      // is awaiting acknowledgement. Allow a small bounded queue for actual
+      // button edges; do not queue repeated held-state/gimbal updates.
+      const buttonEdge=!!lastControls&&['thrust','turn','stabilize','fire','repair']
+        .some(key=>lastControls[key]!==value[key]);
+      const sendNormally=pending.size===0&&
+        (fingerprint!==last||(active&&now-lastSent>=180));
+      const sendEdge=buttonEdge&&pending.size<3;
+      const sendRelease=release;
+      if(sendNormally||sendEdge||sendRelease){
+        const seq=nextSeq++;
+        if(send('input',{...value,seq})){
+          pending.add(seq);last=fingerprint;lastSent=now;lastControls=value;
+        }
       }
     }
     function connect(){
@@ -37,11 +55,19 @@
       ws.onmessage=event=>{
         const data=JSON.parse(event.data);
         if(data.type==='welcome'||data.type==='snapshot'){
+          if(data.type==='snapshot'&&Number.isInteger(data.input_ack)){
+            for(const seq of pending)if(seq<=data.input_ack)pending.delete(seq);
+          }
           onState({...data.flight,clientSampleMs:performance.now()});
           if(data.progress)onProgress(data.progress);
           if(onEncounter)onEncounter(data.encounter);
           if(data.type==='welcome'){
-            connected=true;last='';onConnected(true);tick();
+            connected=true;last='';lastControls=null;pending.clear();
+            onConnected(true);tick();
+          }else if(Number.isInteger(data.input_ack)){
+            // The server has finished this command; submit at most one
+            // fresh control state, not all the stale intermediate samples.
+            tick();
           }
         }else if(data.type==='progress')onProgress(data.progress);
         else if(data.type==='assistance')onAssistance?.(data.result);
@@ -49,6 +75,7 @@
       };
       ws.onerror=()=>onError('WebSocket connection error');
       ws.onclose=event=>{
+        pending.clear();lastControls=null;
         if(connected){connected=false;onConnected(false);}
         if(event.code===1008){onError('Development WebSocket disabled. Enable ORBITAL_DEV_COMMANDS=1 locally.');return;}
         if(!closed)retry=setTimeout(connect,1500);

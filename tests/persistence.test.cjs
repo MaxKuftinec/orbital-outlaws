@@ -77,6 +77,13 @@ test('active controls renew their lease; hidden tabs send neutral intents',()=>{
   h.setTime(1100);h.tick();
   for(let t=1110;t<1260;t+=10){h.setTime(t);h.tick();}
   h.setTime(1300);h.tick();
+  // Held commands are now ACK-paced. Processing the pending ACK renews the
+  // lease with the current control state instead of queuing old samples.
+  assert.equal(h.sent.filter(m=>m.type==='input').length,2);
+  h.sockets[0].emit({type:'snapshot',flight:{},encounter:sector,
+    progress:{},input_ack:1});
+  h.sockets[0].emit({type:'snapshot',flight:{},encounter:sector,
+    progress:{},input_ack:2});
   assert.equal(h.sent.filter(m=>m.type==='input').length,3);
   h.document.hidden=true;h.docListeners.get('visibilitychange')();
   assert.equal(h.sent.at(-1).thrust,false);

@@ -34,6 +34,7 @@ def require_dev_commands():
 
 
 class PlayerInput(BaseModel):
+    seq: int = Field(default=0, ge=0)
     thrust: bool = False
     turn: int = Field(default=0, ge=-1, le=1)
     stabilize: bool = False
@@ -84,7 +85,8 @@ async def pilot_live(ws: WebSocket,pilot_id: str):
                     flight=await run_in_threadpool(database.get_entity,'kestrel','pilot-'+pilot_id)
                     progress=await run_in_threadpool(database.player_progress,pilot_id)
                     await ws.send_json({'type':'snapshot','flight':flight,
-                                        'encounter':encounter,'progress':progress})
+                                        'encounter':encounter,'progress':progress,
+                                        'input_ack':body.seq})
                 elif kind=='purchase':
                     progress=await run_in_threadpool(database.player_purchase,pilot_id,
                                                      str(message.get('upgrade','')))

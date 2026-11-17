@@ -91,10 +91,11 @@ def test_websocket_sector_combat_and_ephemeris(monkeypatch):
             welcome=receive_type(ws,'welcome')
             assert welcome['progress']['credits']==65
             assert welcome['encounter']['snapshot']['enemies'][0]['alive'] is False
-            ws.send_json({'type':'input','thrust':True,'turn':1,
+            ws.send_json({'type':'input','seq':17,'thrust':True,'turn':1,
                           'stabilize':False,'gimbal':0,
                           'fire':True,'repair':True,'aim_x':1,'aim_y':0})
             update=receive_type(ws,'snapshot')
+            assert update['input_ack']==17
             assert update['flight']['version']>=1
             assert update['encounter']['snapshot']['player']['ammo']==35
             assert update['encounter']['snapshot']['player']['hp']==86

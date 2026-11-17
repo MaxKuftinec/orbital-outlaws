@@ -8,7 +8,7 @@ import TargetingPanel from './components/TargetingPanel.vue'
 import NavigationPanel from './components/NavigationPanel.vue'
 
 const legacyFiles = [
-  'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
+  'autopilot-attitude.js', 'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
   'arrival.js', 'persistence.js', 'workspace.js', 'rendering.js', 'game.js'
 ]
 
