@@ -65,3 +65,9 @@ test('Atlas stylesheet is responsive and respects reduced-motion preferences',()
   assert.match(css,/atlas-sun/);
   assert.match(css,/atlas-hero-art/);
 });
+
+test('Atlas in-page navigation does not replace the hash-based view route',()=>{
+  assert.doesNotMatch(atlas,/href="#atlas-explorer"/);
+  assert.match(atlas,/@click="scrollToExplorer"/);
+  assert.match(atlas,/document\.getElementById\('atlas-explorer'\)\?\.scrollIntoView/);
+});

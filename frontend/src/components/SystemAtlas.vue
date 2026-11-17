@@ -52,6 +52,11 @@ export default defineComponent({
       if (this.selectedObject.status === 'Simulated')
         this.$emit('inspect', this.selectedObject.id)
     },
+    scrollToExplorer() {
+      document.getElementById('atlas-explorer')?.scrollIntoView({
+        behavior:'smooth',block:'start'
+      })
+    },
     viewDossier(id: AtlasId) {
       this.selectedId = id
       this.$nextTick(() => document.getElementById('atlas-dossier')?.scrollIntoView({
@@ -89,7 +94,7 @@ export default defineComponent({
               <h1 id="atlas-heading">Beyond one world.<br /><em>Under one star.</em></h1>
               <p>Welcome to Veyra: a place where humanity can travel between worlds, but cannot negotiate with gravity. Trace the orbital architecture, meet its inhabitants-to-be, and learn how to survive the journey.</p>
               <div class="atlas-hero-actions">
-                <a href="#atlas-explorer" class="atlas-primary-link">Explore the system <span aria-hidden="true">↗</span></a>
+                <button type="button" class="atlas-primary-link" @click="scrollToExplorer">Explore the system <span aria-hidden="true">↗</span></button>
                 <button type="button" class="atlas-secondary-link" @click="switchTab('guides')">Read the pilot's handbook <span aria-hidden="true">→</span></button>
               </div>
             </div>
