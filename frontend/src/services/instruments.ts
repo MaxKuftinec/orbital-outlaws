@@ -6,6 +6,7 @@ export const NAV_OPTIONS_EVENT = 'orbital-navigation-options'
 export interface TelemetryView {
   altitude: string; speed: string; periapsis: string; apoapsis: string
   period: string; predicted: string; reserve: string; flight: string
+  frame: string; model: string
 }
 export interface TargetingView {
   status: string; name: string; range: string; hull: string

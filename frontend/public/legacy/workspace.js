@@ -173,8 +173,29 @@
   picker.type='button';picker.className='hud-picker';picker.textContent='☷ Panels';
   const menu=document.createElement('div');
   menu.className='hud-picker-menu';menu.hidden=true;
+  // Tools is deliberately LEFT of Panels; measurement is not a floating
+  // persistent box. Move the existing controls, preserving their IDs so the
+  // gameplay controller can attach click handlers after workspace.js loads.
+  const toolsButton=document.createElement('button');
+  toolsButton.type='button';toolsButton.id='map-tools-btn';
+  toolsButton.className='hud-picker map-tools-trigger';
+  toolsButton.textContent='⌖ Tools';toolsButton.setAttribute('aria-expanded','false');
+  toolsButton.setAttribute('aria-controls','map-tools-menu');
+  toolsButton.title='Map ruler and measurements';
+  const toolsMenu=document.createElement('div');
+  toolsMenu.id='map-tools-menu';toolsMenu.className='map-tools-popover';
+  toolsMenu.hidden=true;
+  const measure=document.getElementById('map-measure-tools');
+  if(measure)toolsMenu.append(measure);
   workspace.append(toolbar);
-  toolbar.append(picker,fullscreen,menu);
+  toolbar.append(toolsButton,picker,fullscreen,toolsMenu,menu);
+  function setToolsOpen(open){
+    toolsMenu.hidden=!open;
+    toolsButton.setAttribute('aria-expanded',String(open));
+  }
+  toolsButton.addEventListener('click',()=>{
+    setToolsOpen(toolsMenu.hidden);menu.hidden=true;
+  });
   function renderMenu(){
     menu.replaceChildren();
     for(const definition of panels){
@@ -202,9 +223,16 @@
     });
     menu.append(reset);
   }
-  picker.addEventListener('click',()=>{menu.hidden=!menu.hidden;if(!menu.hidden)renderMenu();});
+  picker.addEventListener('click',()=>{
+    menu.hidden=!menu.hidden;setToolsOpen(false);
+    if(!menu.hidden)renderMenu();
+  });
   document.addEventListener('pointerdown',event=>{
     if(!menu.contains(event.target)&&event.target!==picker)menu.hidden=true;
+    if(!toolsMenu.contains(event.target)&&event.target!==toolsButton)setToolsOpen(false);
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape')setToolsOpen(false);
   });
 
   function refreshFullscreen(){

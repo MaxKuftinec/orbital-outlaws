@@ -2,13 +2,16 @@
 (function(root){
   'use strict';
   root.OrbitalRenderer={
-    create({ctx,WORLD,ENGINE,palette,NAV,getState,getViewport,toScreen,scale,clamp,getEphemerisTarget,getSelectedContact,getSystem,getVisuals}){
+    create({ctx,WORLD,ENGINE,palette,NAV,getState,getViewport,toScreen,scale,clamp,getEphemerisTarget,getSelectedContact,getSystem,getVisuals,getFrameSample}){
       const TWO_PI=Math.PI*2;
       let state,W,H,dpr,starfield,encounterReady;
-  function pathWorld(points,stroke,lineWidth=1,dash=[]) {
-    if(points.length<2)return;
-    ctx.save();ctx.beginPath();const first=toScreen(points[0].x,points[0].y);ctx.moveTo(first.x,first.y);
-    for(let i=1;i<points.length;i++){const p=toScreen(points[i].x,points[i].y);ctx.lineTo(p.x,p.y);}
+  function pathWorld(points,stroke,lineWidth=1,dash=[],sampled=false) {
+    // A star-frame history must use the planet's ephemeris at EACH sample
+    // epoch, rather than translating every point by the present planet.
+    const positions=sampled?points.map(p=>getFrameSample(p)).filter(Boolean):points;
+    if(positions.length<2)return;
+    ctx.save();ctx.beginPath();const first=toScreen(positions[0].x,positions[0].y);ctx.moveTo(first.x,first.y);
+    for(let i=1;i<positions.length;i++){const p=toScreen(positions[i].x,positions[i].y);ctx.lineTo(p.x,p.y);}
     ctx.strokeStyle=stroke;ctx.lineWidth=lineWidth;ctx.setLineDash(dash);ctx.stroke();ctx.restore();
   }
   function drawBackground(){
@@ -85,10 +88,10 @@
     ctx.fillStyle='#dda96e';ctx.font='11px ui-monospace,monospace';ctx.textAlign='center';ctx.fillText('KESTREL',x,y+R+20);ctx.textAlign='left';
   }
   function drawTrails(){
-    if(state.orbitVisible){pathWorld(state.predicted, state.dangerPrediction?'rgba(255,113,132,.72)':'rgba(98,217,246,.63)',1.7,[5,5]);}
-    if(state.navPlan){pathWorld(state.navPlan.coastPath,'#67e0aa9a',2.1,[6,4]);const a=state.navPlan.arrival;if(a){const q=toScreen(a.x,a.y);ctx.strokeStyle=palette.green;ctx.beginPath();ctx.arc(q.x,q.y,11,0,TWO_PI);ctx.stroke();}}
+    if(state.orbitVisible){pathWorld(state.predicted, state.dangerPrediction?'rgba(255,113,132,.72)':'rgba(98,217,246,.63)',1.7,[5,5],true);}
+    if(state.navPlan&&!state.systemView){pathWorld(state.navPlan.coastPath,'#67e0aa9a',2.1,[6,4]);const a=state.navPlan.arrival;if(a){const q=toScreen(a.x,a.y);ctx.strokeStyle=palette.green;ctx.beginPath();ctx.arc(q.x,q.y,11,0,TWO_PI);ctx.stroke();}}
     if(state.waypoint){const q=toScreen(state.waypoint.x,state.waypoint.y);ctx.strokeStyle=palette.yellow;ctx.lineWidth=2;ctx.strokeRect(q.x-8,q.y-8,16,16);}
-    for(const e of [...state.enemies,state.ally,...(state.allies||[]),state.player])if(e.alive)pathWorld(e.trail,e.isPlayer?'#62d9f654':e.isAlly?'#67e0aa55':'#ff718433',1.5);
+    for(const e of [...state.enemies,state.ally,...(state.allies||[]),state.player])if(e.alive)pathWorld(e.trail,e.isPlayer?'#62d9f654':e.isAlly?'#67e0aa55':'#ff718433',1.5,[],true);
   }
   function drawShip(ship){
     if(!ship.alive)return;

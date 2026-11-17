@@ -4,7 +4,8 @@ import { TELEMETRY_EVENT, type TelemetryView } from '../services/instruments'
 
 const EMPTY: TelemetryView = {
   altitude:'—', speed:'—', periapsis:'—', apoapsis:'—',
-  period:'—', predicted:'SAFE', reserve:'—', flight:'FREE'
+  period:'—', predicted:'SAFE', reserve:'—', flight:'FREE',
+  frame:'Kestrel',model:'Instantaneous two-body estimate; other-body gravity still acts'
 }
 export default defineComponent({
   name:'TelemetryPanel',
@@ -32,12 +33,13 @@ export default defineComponent({
     </div>
   </div>
   <section v-else class="panel instruments" data-vue-managed="true">
-    <div class="panel-heading"><span>ORBITAL TELEMETRY</span><span class="status-pill">NEWTONIAN</span></div>
+    <div class="panel-heading"><span>ORBITAL TELEMETRY · {{ telemetry.frame.toUpperCase() }}</span><span class="status-pill">NEWTONIAN</span></div>
+    <div class="mini-note">Reference origin: {{ telemetry.frame }} · {{ telemetry.model }}</div>
     <div class="metric-row"><span>Altitude</span><strong id="alt-value">{{ telemetry.altitude }}</strong></div>
     <div class="metric-row"><span>Speed</span><strong id="speed-value">{{ telemetry.speed }}</strong></div>
     <div class="metric-row"><span>Periapsis</span><strong id="peri-value">{{ telemetry.periapsis }}</strong></div>
     <div class="metric-row"><span>Apoapsis</span><strong id="apo-value">{{ telemetry.apoapsis }}</strong></div>
     <div class="metric-row"><span>Orbit period</span><strong id="period-value">{{ telemetry.period }}</strong></div>
-    <div class="metric-row"><span>Predicted path</span><strong id="path-status">{{ telemetry.predicted }}</strong></div>
+    <div class="metric-row"><span>Instantaneous conic</span><strong id="path-status">{{ telemetry.predicted }}</strong></div>
   </section>
 </template>

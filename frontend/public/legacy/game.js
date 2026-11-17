@@ -21,7 +21,8 @@
   const STAR=window.OrbitalStarSystem;
   const MAP=window.OrbitalMapTools;
   const VIS=window.OrbitalVisuals;
-  if(!NAV||!BALL||!COLL||!SAFE||!ARRIVAL||!ATTITUDE||!STAR||!MAP||!VIS)throw new Error('Simulation modules missing');
+  const FRAMES=window.OrbitalReferenceFrames;
+  if(!NAV||!BALL||!COLL||!SAFE||!ARRIVAL||!ATTITUDE||!STAR||!MAP||!VIS||!FRAMES)throw new Error('Simulation modules missing');
   // 1 world distance unit = 1 km; velocities in km/s. Engines are futuristic.
   const ENGINE=Object.freeze({dryKg:900,propellantKg:200,thrustN:1600000,flowKgS:5,rcsN:2500,rcsFlowKgS:.04,leverM:7,shipLengthM:14,gimbalMax:28*Math.PI/180});
   const exhaustKmS=ENGINE.thrustN/ENGINE.flowKgS/1000;
@@ -236,12 +237,12 @@
   function accel(x,y,at=state.t) {
     return STAR.acceleration(x,y,at);
   }
-  function stepBody(body, dt, extra=null) {
-    const a = accel(body.x,body.y,state.t-dt);
+  function stepBody(body, dt, extra=null, at=state.t) {
+    const a = accel(body.x,body.y,at-dt);
     const ax = a.x + (extra?.x || 0), ay = a.y + (extra?.y || 0);
     const halfVx = body.vx + .5*dt*ax, halfVy = body.vy + .5*dt*ay;
     body.x += halfVx*dt; body.y += halfVy*dt;
-    const a2 = accel(body.x,body.y,state.t);
+    const a2 = accel(body.x,body.y,at);
     body.vx = halfVx + .5*dt*(a2.x + (extra?.x || 0));
     body.vy = halfVy + .5*dt*(a2.y + (extra?.y || 0));
   }
@@ -444,7 +445,7 @@
     stepBody(ship,dt,extra);
     ship.gunCooldown=Math.max(0,ship.gunCooldown-dt);
     ship.trailT+=dt;
-    if(ship.trailT>.16){ship.trail.push({x:ship.x,y:ship.y});if(ship.trail.length>120)ship.trail.shift();ship.trailT=0;}
+    if(ship.trailT>.16){ship.trail.push({x:ship.x,y:ship.y,t:state.t});if(ship.trail.length>120)ship.trail.shift();ship.trailT=0;}
     if(magnitude(ship.x,ship.y)<WORLD.crashRadius){
       if(ship.isPlayer)endGame('Your spacecraft intersected the surface of Kestrel.');
       else if(ship.isAlly)destroyAlly('fell into the gravity well');
@@ -1206,19 +1207,18 @@
     logEvent('MISSION FAILED: '+reason,'danger');
   }
   function orbitalElements(b){
-    const r=magnitude(b.x,b.y),v2=b.vx*b.vx+b.vy*b.vy,h=b.x*b.vy-b.y*b.vx,eps=v2/2-WORLD.mu/r;
-    const e=Math.sqrt(Math.max(0,1+2*eps*h*h/(WORLD.mu*WORLD.mu)));
-    const rp=h*h/(WORLD.mu*(1+e));
-    const ra=e<1? h*h/(WORLD.mu*(1-e)) : Infinity;
-    const a=eps<0?-WORLD.mu/(2*eps):Infinity;
-    const period=isFinite(a)?TWO_PI*Math.sqrt(a*a*a/WORLD.mu):Infinity;
-    return {r,v:Math.sqrt(v2),e,rp,ra,period};
+    // The persisted Kestrel-relative ship is translated into the chosen
+    // inertial frame for observations only; flight physics stays unchanged.
+    // These are instantaneous two-body conics, not full N-body predictions.
+    return FRAMES.telemetry(b,state.t,!!state.systemView,STAR,WORLD.radius);
   }
   function computePrediction(){
     const b=state.player, ghost={x:b.x,y:b.y,vx:b.vx,vy:b.vy},out=[];
     let dangerous=false;
     for(let i=0;i<580;i++) {
-      stepBody(ghost,.22);out.push({x:ghost.x,y:ghost.y});
+      const sampleT=state.t+(i+1)*.22;
+      stepBody(ghost,.22,null,sampleT);
+      out.push({x:ghost.x,y:ghost.y,t:sampleT});
       const r=magnitude(ghost.x,ghost.y);
       if(r<WORLD.crashRadius){dangerous=true;break;}
       if(r>1400) break;
@@ -1237,11 +1237,12 @@
   function setLegacyDisabled(id,value){const node=legacyNode(id);if(node)node.disabled=value;}
   function updateHud() {
     const p=state.player;const e=orbitalElements(p);
+    const originRadius=state.systemView?STAR.STAR_RADIUS_KM:WORLD.radius;
     $('sim-clock').textContent=formatTime(state.t);
-    setLegacyText('quick-alt',(e.r-WORLD.radius).toFixed(1)+' km');
+    setLegacyText('quick-alt',(e.r-originRadius).toFixed(1)+' km');
     setLegacyText('quick-speed',e.v.toFixed(1)+' km/s');
-    setLegacyText('quick-peri',Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' km':'—');
-    setLegacyText('quick-apo',Number.isFinite(e.ra)?Math.max(0,e.ra-WORLD.radius).toFixed(1)+' km':'ESCAPE');
+    setLegacyText('quick-peri',Number.isFinite(e.rp)?Math.max(0,e.rp-originRadius).toFixed(1)+' km':'—');
+    setLegacyText('quick-apo',Number.isFinite(e.ra)?Math.max(0,e.ra-originRadius).toFixed(1)+' km':'ESCAPE');
     setLegacyText('quick-reserve',state.playerReserveKg.toFixed(1)+' kg (autopilot & donations)');
     setLegacyText('quick-flight',state.autopilot?state.autopilot.phase.toUpperCase():state.rescue?'ALLY ASSIST':'FREE');
     if($('ship-panel') && $('ship-panel').dataset.vueManaged!=='true'){
@@ -1254,12 +1255,13 @@
       $('credits-value').innerHTML=p.credits+' <i>¤</i>';
       $('dv-value').textContent=(exhaustKmS*Math.log(mass(p)/(p.dryMass+p.repairParts))).toFixed(1)+' km/s';
     }
-    setLegacyText('alt-value',(e.r-WORLD.radius).toFixed(1)+' km');
+    setLegacyText('alt-value',(e.r-originRadius).toFixed(1)+' km');
     setLegacyText('speed-value',e.v.toFixed(1)+' km/s');
-    setLegacyText('peri-value',Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' km':'—');
-    setLegacyText('apo-value',Number.isFinite(e.ra)?Math.max(0,e.ra-WORLD.radius).toFixed(1)+' km':'ESCAPE');
+    setLegacyText('peri-value',Number.isFinite(e.rp)?Math.max(0,e.rp-originRadius).toFixed(1)+' km':'—');
+    setLegacyText('apo-value',Number.isFinite(e.ra)?Math.max(0,e.ra-originRadius).toFixed(1)+' km':'ESCAPE');
     setLegacyText('period-value',Number.isFinite(e.period)?e.period.toFixed(1)+' s':'UNBOUND');
-    setLegacyText('path-status',state.dangerPrediction?'IMPACT':e.e>=1?'UNBOUND':'BOUND');
+    setLegacyText('path-status',state.dangerPrediction?'KESTREL IMPACT':
+      e.e>=1?'UNBOUND (2-BODY)':'BOUND (2-BODY)');
     setLegacyColor('path-status',state.dangerPrediction?palette.red:e.e>=1?palette.yellow:palette.green);
     const shipStatus=(state.ended||!p.alive)?'Spacecraft lost':state.repairing?'Repairing hull':state.autopilot?'Autopilot '+state.autopilot.phase:p.thrustVector?'Main engine firing':p.rcsFiring?'RCS firing':e.e>=1?'Escape trajectory':'Coasting (fuel conserved)';
     const shipStatusColor=(state.ended||!p.alive)?palette.red:p.thrustVector?palette.yellow:palette.green;
@@ -1361,11 +1363,13 @@
     setLegacyText('nav-quick-status',state.autopilot?'AUTO · '+state.autopilot.phase.toUpperCase():state.navOwned?'COMPUTER ONLINE':'COMPUTER LOCKED');
     setLegacyText('nav-quick-metrics',state.navPlan?`${state.navPlan.dv.toFixed(2)} km/s Δv · ${state.navPlan.eta.toFixed(0)}s ETA · ${state.navPlan.safety.estimatedKg.toFixed(1)} kg ideal · ${state.navPlan.safety.reserveKg.toFixed(0)} kg reserved`: 'Pick a contact · press C to calculate');
     window.dispatchEvent(new CustomEvent('orbital-telemetry-state',{detail:{
-      altitude:(e.r-WORLD.radius).toFixed(1)+' km',speed:e.v.toFixed(1)+' km/s',
-      periapsis:Number.isFinite(e.rp)?Math.max(0,e.rp-WORLD.radius).toFixed(1)+' km':'—',
-      apoapsis:Number.isFinite(e.ra)?Math.max(0,e.ra-WORLD.radius).toFixed(1)+' km':'ESCAPE',
+      altitude:(e.r-originRadius).toFixed(1)+' km',speed:e.v.toFixed(1)+' km/s',
+      periapsis:Number.isFinite(e.rp)?Math.max(0,e.rp-originRadius).toFixed(1)+' km':'—',
+      apoapsis:Number.isFinite(e.ra)?Math.max(0,e.ra-originRadius).toFixed(1)+' km':'ESCAPE',
       period:Number.isFinite(e.period)?e.period.toFixed(1)+' s':'UNBOUND',
-      predicted:state.dangerPrediction?'IMPACT':e.e>=1?'UNBOUND':'BOUND',
+      predicted:state.dangerPrediction?'KESTREL IMPACT':
+        e.e>=1?'UNBOUND (2-BODY)':'BOUND (2-BODY)',
+      frame:e.frame,model:e.model,
       reserve:state.playerReserveKg.toFixed(1)+' kg (autopilot & donations)',
       flight:!p.alive?'LOST':state.autopilot?state.autopilot.phase.toUpperCase():state.serverAssistance?.some(o=>o.recipient==='player')?'ALLY ASSIST':'FREE'
     }}));
@@ -1553,6 +1557,7 @@
     ctx,WORLD,ENGINE,palette,NAV,getState:()=>state,
     getViewport:()=>({W,H,dpr,starfield,encounterReady}),
     toScreen,scale,clamp,getSystem:()=>STAR,getVisuals:()=>VIS,
+    getFrameSample:point=>FRAMES.mapSample(point,state.t,!!state.systemView,STAR.planet),
     getEphemerisTarget:()=>navTarget(state.selectedNavKey),
     getSelectedContact:selectedContact
   });

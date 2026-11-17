@@ -1,4 +1,4 @@
-# Orbital Outlaws — v0.19 finite-force salvage tether and allied fleet coordination
+# Orbital Outlaws — v1.0 Veyra system and persistent orbital combat
 
 A persistent 2D Newtonian orbital combat prototype using **Vue 3 + Vuetify (Options API)**, **FastAPI**, **PostgreSQL** and a bidirectional **WebSocket**.
 
@@ -488,3 +488,32 @@ rather than a large label over the object. Offscreen targets still show
 direction and distance. Users requesting reduced animation motion see a
 stationary reticle. These are presentation-only changes: target selection,
 weapon lock, trajectory, and fuel consumption are unchanged.
+
+
+## Reference frame, history and map toolbar
+
+The selected **Settings → Frame of reference** now controls the
+**historical trajectories and telemetry**, not merely the axes. Each newly
+recorded ship trail point and near-term player prediction carries a game
+timestamp; star-centered rendering translates the point using Kestrel's
+**position at that sample time**, avoiding a misleading path that follows
+today's planetary origin. Old un-timestamped trail points do not claim to
+be valid star-frame history and are omitted until fresh samples appear.
+
+The single **Orbital Telemetry** panel reports position/speed, reference-body
+altitude and instantaneous two-body osculating periapsis/apoapsis/period
+against the selected body (Veyra or Kestrel). Its heading identifies the
+origin and warns that these conics are approximations: stellar/planetary
+perturbations can invalidate Keplerian long-term predictions.
+The planet-only NAV transfer overlay is hidden in Veyra view because its
+samples lack stellar-frame epoch information; actual spacecraft physics
+and active guidance are not changed by this camera setting.
+
+At top-right of the map, **⌖ Tools** appears directly to the left of
+**☷ Panels**, with free **↔ Ruler** and **Clear** controls in its dropdown.
+The distance scale is a standalone **unboxed bottom-right canvas overlay**
+and remains live while zooming in either reference frame.
+
+See [Second Planet Design Candidate](docs/SECOND_PLANET_DESIGN.md) for
+an Earth-mass, Earth-radius potential civilization world and the two
+possible Veyra stellar models. It is a proposal, not a shipped planet.

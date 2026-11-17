@@ -285,3 +285,35 @@
 .nav-sos-btn{margin-top:8px;border-color:#567389;background:#152c3b;color:#c9e8f0;
   font-weight:700;text-align:center}
 .nav-sos-btn:disabled{opacity:.48;cursor:not-allowed}
+
+/* The Tools control is immediately left of Panels, never over the map center. */
+#canvas-workspace .map-tools-popover{
+  position:absolute;z-index:1003;right:116px;top:calc(100% + 7px);
+  min-width:225px;max-width:min(265px,calc(100vw - 25px));
+  padding:12px;border:1px solid #355f78;border-radius:9px;
+  background:#081d2eec;box-shadow:0 12px 28px #000a;
+  color:#d3eefa;font-size:11px
+}
+#canvas-workspace .map-tools-popover[hidden]{display:none}
+#canvas-workspace .map-tools-popover .map-measure-tools{
+  position:static;min-width:0;max-width:none;width:100%;
+  padding:0;margin:0;border:0;box-shadow:none;background:none;backdrop-filter:none
+}
+#canvas-workspace .hud-toolbar .map-tools-trigger[aria-expanded="true"]{
+  border-color:#b9a1dd;color:#e7d6ff;background:#38264d
+}
+/* The distance bar has no panel, border, button or boxed backing. */
+#canvas-workspace #map-scale-overlay{
+  position:absolute;right:13px;bottom:11px;z-index:7;
+  pointer-events:none;display:flex;flex-direction:column;
+  align-items:flex-end;gap:4px;margin:0;padding:0;
+  border:0;background:transparent;box-shadow:none
+}
+#map-scale-overlay #map-scale-label{color:#e2f4fd;font-size:11px;
+  text-shadow:0 1px 3px #06101b,0 1px 8px #06101b}
+#map-scale-overlay #map-scale-bar{max-width:160px;border-color:#cbe8f8;
+  filter:drop-shadow(0 1px 2px #06101b)}
+@media(max-width:600px){
+  #canvas-workspace .map-tools-popover{right:90px;min-width:188px;padding:9px}
+  #canvas-workspace #map-scale-overlay{right:8px;bottom:9px}
+}

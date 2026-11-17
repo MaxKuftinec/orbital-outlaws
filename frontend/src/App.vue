@@ -8,7 +8,7 @@ import TargetingPanel from './components/TargetingPanel.vue'
 import NavigationPanel from './components/NavigationPanel.vue'
 
 const legacyFiles = [
-  'map-tools.js', 'map-visuals.js', 'star-system.js', 'autopilot-attitude.js', 'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
+  'map-tools.js', 'map-visuals.js', 'star-system.js', 'reference-frames.js', 'autopilot-attitude.js', 'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
   'arrival.js', 'persistence.js', 'workspace.js', 'rendering.js', 'game.js'
 ]
 
@@ -95,16 +95,18 @@ export default defineComponent({
           <!-- <TelemetryPanel :console="true" /> We don't need this, please don't uncomment--> 
           <!-- <NavigationPanel :console="true" /> We don't need this, please don't uncomment-->
           <ShipPanel />
+          <!-- Workspace moves this controls group into the Tools dropdown. -->
           <div id="map-measure-tools" class="map-measure-tools" aria-label="Map measuring tools">
             <div class="map-ruler-controls">
-              <button type="button" id="ruler-toggle" aria-pressed="false" title="Click two locations to measure the distance between them">↔ Ruler</button>
+              <button type="button" id="ruler-toggle" aria-pressed="false" title="Click two points on the map to measure distance">↔ Ruler</button>
               <button type="button" id="ruler-clear" title="Clear ruler endpoints">Clear</button>
             </div>
             <div id="ruler-distance" class="map-ruler-distance" aria-live="polite">Ruler off</div>
-            <div class="map-scale-readout" aria-label="Map distance scale">
-              <span id="map-scale-label">100 km</span>
-              <div id="map-scale-bar" class="map-scale-bar"></div>
-            </div>
+          </div>
+          <!-- Independent overlay: the scale bar never sits inside a panel. -->
+          <div id="map-scale-overlay" class="map-scale-readout" aria-label="Map distance scale">
+            <span id="map-scale-label">100 km</span>
+            <div id="map-scale-bar" class="map-scale-bar"></div>
           </div>
           <div class="canvas-overlay bottom-left"><span class="keyboard-tag">W</span> engine <span class="keyboard-tag">LMB</span> aim <span class="keyboard-tag">A / D</span> rotate <span class="keyboard-tag">RMB</span> pan <span class="keyboard-tag">WHEEL</span> zoom <span class="keyboard-tag">N/C/E/X</span> nav <span class="keyboard-tag">H</span> help</div>
           <!-- Status is announced in Comms; the map remains visible and pannable after death -->
@@ -157,7 +159,7 @@ export default defineComponent({
           <button type="button" id="hotkey-reset" class="small-btn">Restore key defaults</button>
         </section>
         <section id="settings-frame-pane" class="hidden" aria-label="Reference frame and map axes">
-          <p class="mini-note">Choose the map coordinate origin. This changes only the camera and coordinate axes, not spacecraft velocities or your flight path.</p>
+          <p class="mini-note">Choose the map reference frame. Axes, spacecraft trails and telemetry follow the chosen body; the authoritative flight physics and fuel remain unchanged.</p>
           <div class="settings-frame-choice" role="group" aria-label="Map frame of reference">
             <button type="button" id="settings-frame-planet" aria-pressed="true"><b>◎ Kestrel</b><small>Planet-centered coordinates</small></button>
             <button type="button" id="settings-frame-star" aria-pressed="false"><b>✦ Veyra</b><small>Star-centered coordinates</small></button>
