@@ -7,9 +7,11 @@ from __future__ import annotations
 import math, time, json, copy, secrets
 from sqlalchemy import create_engine, select, and_, or_
 from sqlalchemy.orm import sessionmaker
-from .models import Base, World, Entity, Event, FlightControl, PlayerProgress, PlayerSettings, SalvageClaim, EncounterSnapshot
+from .models import Base, World, Entity, Event, FlightControl, AutoBurn, PlayerProgress, PlayerSettings, SalvageClaim, EncounterSnapshot
 from .physics import State, propagate, orbital_envelope, apply_impulse
 from .flight import advance, LEASE_S
+from .auto_burn import (advance_guided, validate_plan, initial_progress,
+                        public_status, ACTIVE_STATES)
 from .star_system import propagate_local, system_info
 from .universe import new_sector, advance_sector, player_fire as fire_projectile, incoming_ship, event as sector_event
 from .arrival_guidance import ACTIVE_ARRIVAL
@@ -58,6 +60,121 @@ class WorldStore:
     def _controls(flight):
         return {'thrust':flight.thrust,'turn':flight.turn,
                 'stabilize':flight.stabilize,'gimbal':flight.gimbal}
+
+    def _settle_auto(self, db, entity: Entity, world: World, at_s: float):
+        """Atomically checkpoint guidance before any change to the spacecraft.
+
+        The optional plan is reused across disconnects and server restarts.
+        Every active integration is bounded to the remaining alignment/burn
+        window; coasting beyond that uses the existing Kepler/tide propagator.
+        """
+        auto = db.get(AutoBurn, entity.id)
+        if not auto or auto.progress['status'] not in ACTIVE_STATES:
+            flight = db.get(FlightControl, entity.id)
+            control = self._controls(flight) if flight else None
+            return advance(State(**entity.checkpoint), entity.checkpoint_s, at_s,
+                           world.mu, control, flight.expires_s if flight else 0,
+                           system=world.id == 'kestrel')
+        before = State(**entity.checkpoint)
+        after, progress = advance_guided(before, entity.checkpoint_s, at_s,
+                                         world.mu, auto.plan, auto.progress,
+                                         system=world.id == 'kestrel')
+        if at_s > entity.checkpoint_s:
+            peri, apo = orbital_envelope(after, world.mu)
+            entity.checkpoint_s = at_s
+            entity.checkpoint = after.as_dict()
+            entity.periapsis_km, entity.apoapsis_km = peri, apo
+            entity.version += 1
+            auto.progress = progress
+            auto.updated_s = at_s
+            if progress['status'] not in ACTIVE_STATES:
+                db.add(Event(world_id=world.id, entity_id=entity.id, at_s=at_s,
+                             kind='auto_finish',
+                             payload={'auto_status': public_status(auto.plan, progress)},
+                             after=after.as_dict(),
+                             idempotency_key='auto-finish:'+secrets.token_hex(16)))
+        return after
+
+    def player_auto_start(self, pilot_id: str, *, direction: str,
+                          reference: str, cutoff: str,
+                          duration_s: float | None = None,
+                          fuel_floor_kg: float | None = None,
+                          angle_deg: float | None = None):
+        self.player_encounter(pilot_id)
+        entity_id = 'pilot-' + pilot_id
+        with self.sessions.begin() as db:
+            world = db.get(World, 'kestrel')
+            entity = db.scalars(select(Entity).where(
+                Entity.id == entity_id).with_for_update()).first()
+            if not entity or entity.kind != 'player':
+                raise LookupError('Unknown pilot')
+            saved = db.get(EncounterSnapshot, entity_id)
+            if not saved or not saved.snapshot.get('player', {}).get('alive', False):
+                raise ValueError('Destroyed spacecraft cannot engage automated thrust')
+            existing = db.get(AutoBurn, entity_id)
+            if existing and existing.progress['status'] in ACTIVE_STATES:
+                raise ValueError('An automated burn is already active; abort it first')
+            flight = db.get(FlightControl, entity_id)
+            now = max(self.now(world), entity.checkpoint_s)
+            current = advance(State(**entity.checkpoint), entity.checkpoint_s, now,
+                              world.mu, self._controls(flight), flight.expires_s, system=True)
+            reserve_row = db.get(PlayerSettings, entity_id)
+            reserve = reserve_row.reserve_kg if reserve_row else 36.
+            plan = validate_plan(direction, reference, cutoff, duration_s,
+                                 fuel_floor_kg, angle_deg, reserve,
+                                 current.fuel_kg, current.heading)
+            progress = initial_progress()
+            peri, apo = orbital_envelope(current, world.mu)
+            entity.checkpoint_s = now
+            entity.checkpoint = current.as_dict()
+            entity.periapsis_km, entity.apoapsis_km = peri, apo
+            entity.version += 1
+            # Any previous manual lease is cancelled before authority changes.
+            flight.thrust = False
+            flight.turn = 0
+            flight.stabilize = False
+            flight.gimbal = 0.
+            flight.expires_s = 0.
+            if existing:
+                existing.plan = plan
+                existing.progress = progress
+                existing.started_s = now
+                existing.updated_s = now
+            else:
+                db.add(AutoBurn(entity_id=entity_id, plan=plan, progress=progress,
+                                started_s=now, updated_s=now))
+            db.add(Event(world_id='kestrel', entity_id=entity_id, at_s=now,
+                         kind='auto_start', payload={'auto_plan': plan,
+                                                     'auto_progress': progress},
+                         after=current.as_dict(),
+                         idempotency_key='auto-start:'+secrets.token_hex(16)))
+            return {'pilot_id':pilot_id, 'auto_burn':public_status(plan,progress),
+                    'state':current.as_dict(), 'at_s':now}
+
+    def player_auto_abort(self, pilot_id: str, reason: str = 'Pilot aborted burn'):
+        self.player_encounter(pilot_id)
+        entity_id = 'pilot-' + pilot_id
+        with self.sessions.begin() as db:
+            world = db.get(World, 'kestrel')
+            entity = db.scalars(select(Entity).where(
+                Entity.id == entity_id).with_for_update()).first()
+            if not entity:raise LookupError('Unknown pilot')
+            auto = db.get(AutoBurn, entity_id)
+            if not auto or auto.progress['status'] not in ACTIVE_STATES:
+                raise ValueError('No active automated burn to abort')
+            now = max(self.now(world), entity.checkpoint_s)
+            current = self._settle_auto(db, entity, world, now)
+            if auto.progress['status'] in ACTIVE_STATES:
+                progress = {**auto.progress, 'status':'aborted', 'reason':reason}
+                auto.progress = progress
+                auto.updated_s = now
+                db.add(Event(world_id='kestrel', entity_id=entity_id, at_s=now,
+                             kind='auto_abort', payload={'reason':reason},
+                             after=current.as_dict(),
+                             idempotency_key='auto-abort:'+secrets.token_hex(16)))
+            return {'pilot_id':pilot_id,
+                    'auto_burn':public_status(auto.plan, auto.progress),
+                    'state':current.as_dict(), 'at_s':now}
 
     def connect_player(self, pilot_id: str):
         """Single browser pilot: create once, then always resume the stored ship."""
@@ -130,7 +247,14 @@ class WorldStore:
                     progress.credits += effects['credits']
                 if (effects['fuel'] or effects.get('capture_cargo_mass') or
                         effects['player_dvx'] or effects['player_dvy']):
-                    _, _, _, end_player = self._at(db, 'kestrel', entity_id, current_world_s)
+                    # Integrate the active guidance before applying physical
+                    # salvage/grapple impulses, so new fuel and mass are never
+                    # accidentally replayed through an earlier burn interval.
+                    active_auto = db.get(AutoBurn, entity_id)
+                    if active_auto and active_auto.progress['status'] in ACTIVE_STATES:
+                        end_player = self._settle_auto(db, entity, world, current_world_s)
+                    else:
+                        _, _, _, end_player = self._at(db, 'kestrel', entity_id, current_world_s)
                     added_fuel = effects['fuel']
                     new_state = State(
                         end_player.x, end_player.y,
@@ -150,6 +274,12 @@ class WorldStore:
                                  idempotency_key='sector:'+str(__import__('uuid').uuid4())))
                 saved.snapshot = snapshot
                 saved.saved_at_utc = now
+            # Guidance is lazily materialized at the same authoritative world
+            # time as the NPC encounter. Do this AFTER obtaining the historical
+            # start state, preserving the encounter's pre-integration timestamp.
+            auto = db.get(AutoBurn, entity_id)
+            if auto and auto.progress['status'] in ACTIVE_STATES:
+                self._settle_auto(db, entity, world, current_world_s)
             return {'saved_at_utc':saved.saved_at_utc,
                     'snapshot':copy.deepcopy(saved.snapshot)}
 
@@ -422,6 +552,11 @@ class WorldStore:
             flight.stabilize = False
             flight.gimbal = 0.
             flight.expires_s = 0.
+            auto = db.get(AutoBurn, entity_id)
+            if auto:
+                auto.progress = {**auto.progress, 'status':'aborted',
+                                 'reason':'Spacecraft respawned'}
+                auto.updated_s = now
 
             previous = snapshot['player']
             snapshot['player'] = {
@@ -513,6 +648,9 @@ class WorldStore:
         with self.sessions.begin() as db:
             if not db.get(Entity,entity_id):
                 raise LookupError('Unknown pilot')
+            auto=db.get(AutoBurn,entity_id)
+            if auto and auto.progress['status'] in ACTIVE_STATES:
+                raise ValueError('Abort automated thrust before changing the protected reserve')
             settings=db.scalars(select(PlayerSettings).where(
                 PlayerSettings.entity_id==entity_id).with_for_update()).first()
             if not settings:
@@ -552,30 +690,53 @@ class WorldStore:
         return self.player_progress(pilot_id)
 
     def player_input(self, pilot_id: str, thrust: bool, turn: int, stabilize: bool, gimbal: float):
-        """Advance using the previous leased input, then atomically set the next input."""
+        """Manual attitude/throttle overrides active server guidance immediately.
+
+        Neutral input packets still carry gun/fire/recovery via the WebSocket,
+        but they never cancel or renew a server-side automated burn.
+        """
         self.player_encounter(pilot_id)
         entity_id = 'pilot-' + pilot_id
         with self.sessions.begin() as db:
             entity = db.scalars(select(Entity).where(Entity.id==entity_id).with_for_update()).one()
-            world = db.get(World,'kestrel')
-            flight = db.get(FlightControl,entity_id)
-            now = max(self.now(world),entity.checkpoint_s)
-            current = advance(State(**entity.checkpoint),entity.checkpoint_s,now,
-                              world.mu,self._controls(flight),flight.expires_s,system=True)
-            peri,apo = orbital_envelope(current,world.mu)
-            entity.checkpoint_s=now
-            entity.checkpoint=current.as_dict()
-            entity.periapsis_km=peri
-            entity.apoapsis_km=apo
-            entity.version+=1
-            flight.thrust=thrust
-            flight.turn=turn
-            flight.stabilize=stabilize
-            flight.gimbal=gimbal
-            flight.expires_s=now+LEASE_S
-            db.add(Event(world_id='kestrel', entity_id=entity_id, at_s=now,kind='control',
-                         payload={'control':self._controls(flight),'expires_s':flight.expires_s},
-                         after=current.as_dict(),idempotency_key='control:'+str(__import__('uuid').uuid4())))
+            world = db.get(World, 'kestrel')
+            flight = db.get(FlightControl, entity_id)
+            auto = db.get(AutoBurn, entity_id)
+            active = auto and auto.progress['status'] in ACTIVE_STATES
+            if active and not (thrust or turn or stabilize):
+                # Do not create flight lease/events for regular neutral cockpit
+                # polling. Guidance remains server-owned across disconnects.
+                pass
+            else:
+                now = max(self.now(world), entity.checkpoint_s)
+                if active:
+                    current = self._settle_auto(db, entity, world, now)
+                    if auto.progress['status'] in ACTIVE_STATES:
+                        auto.progress = {**auto.progress, 'status':'aborted',
+                                         'reason':'Manual flight control override'}
+                        auto.updated_s = now
+                        db.add(Event(world_id='kestrel', entity_id=entity_id, at_s=now,
+                                     kind='auto_abort', payload={'reason':'manual override'},
+                                     after=current.as_dict(),
+                                     idempotency_key='auto-abort:'+secrets.token_hex(16)))
+                else:
+                    current = advance(State(**entity.checkpoint),entity.checkpoint_s,now,
+                                      world.mu,self._controls(flight),flight.expires_s,
+                                      system=True)
+                peri,apo = orbital_envelope(current,world.mu)
+                entity.checkpoint_s=now
+                entity.checkpoint=current.as_dict()
+                entity.periapsis_km=peri
+                entity.apoapsis_km=apo
+                entity.version+=1
+                flight.thrust=thrust
+                flight.turn=turn
+                flight.stabilize=stabilize
+                flight.gimbal=gimbal
+                flight.expires_s=now+LEASE_S
+                db.add(Event(world_id='kestrel', entity_id=entity_id, at_s=now,kind='control',
+                             payload={'control':self._controls(flight),'expires_s':flight.expires_s},
+                             after=current.as_dict(),idempotency_key='control:'+secrets.token_hex(16)))
         return self.get_entity('kestrel', entity_id)
 
     def _at(self,db,world_id,entity_id,at_s: float|None=None):
@@ -590,10 +751,22 @@ class WorldStore:
             flight=db.get(FlightControl,entity_id) if entity.kind=='player' else None
             control=self._controls(flight) if flight else None
             expires=flight.expires_s if flight else 0
+            auto=db.get(AutoBurn,entity_id) if entity.kind=='player' else None
+            if auto and auto.progress['status'] in ACTIVE_STATES:
+                result,_=advance_guided(base,base_t,at,world.mu,auto.plan,
+                                        auto.progress,system=world_id=='kestrel')
+                return world,entity,at,result
         else:
             event=db.scalars(select(Event).where(and_(Event.entity_id==entity_id,Event.at_s<=at)).order_by(Event.at_s.desc(),Event.id.desc()).limit(1)).first()
             if not event:raise ValueError('Entity did not exist at this time')
             base=State(**event.after);base_t=event.at_s
+            historical_plan=event.payload.get('auto_plan')
+            historical_progress=event.payload.get('auto_progress')
+            if historical_plan and historical_progress and historical_progress['status'] in ACTIVE_STATES:
+                projected,_=advance_guided(base,base_t,at,world.mu,
+                                           historical_plan,historical_progress,
+                                           system=world_id=='kestrel')
+                return world,entity,at,projected
             control=event.payload.get('control')
             expires=event.payload.get('expires_s',0)
         return world,entity,at,advance(base,base_t,at,world.mu,control,expires,
@@ -602,8 +775,20 @@ class WorldStore:
     def get_entity(self,world_id: str,entity_id: str,at_s: float|None=None):
         with self.sessions() as db:
             world,ent,at,s=self._at(db,world_id,entity_id,at_s)
-            return {'id':ent.id,'kind':ent.kind,'state':s.as_dict(),'at_s':at,
+            result={'id':ent.id,'kind':ent.kind,'state':s.as_dict(),'at_s':at,
                     'version':ent.version,'predicted':at>self.now(world)+.005}
+            if ent.kind=='player':
+                auto=db.get(AutoBurn,ent.id)
+                if auto:
+                    if auto.progress['status'] in ACTIVE_STATES and at>=ent.checkpoint_s:
+                        _,projected=advance_guided(State(**ent.checkpoint),
+                                                   ent.checkpoint_s,at,world.mu,
+                                                   auto.plan,auto.progress,
+                                                   system=world_id=='kestrel')
+                    else:
+                        projected=auto.progress
+                    result['auto_burn']=public_status(auto.plan,projected)
+            return result
 
     def viewport(self,world_id: str,cx: float,cy: float,radius_km: float,at_s: float|None=None):
         if not 0<radius_km<=100000:raise ValueError('Invalid viewport radius')
