@@ -38,6 +38,13 @@ jobs:
       - name: Python and PostgreSQL tests
         working-directory: backend
         run: python -m pytest -q
+      - name: Validate Compute Engine Compose and Caddy config
+        run: |
+          docker compose --env-file infra/compute-engine/.env.example \
+            -f infra/compute-engine/compose.yaml config --quiet
+          docker run --rm -e API_DOMAIN=api.example.com \
+            -v "$PWD/infra/compute-engine/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
