@@ -157,6 +157,12 @@ def advance_guided(state: State, start_s: float, at_s: float, mu: float,
                 status['reason'] = 'Attitude alignment timed out'
                 break
             dt = min(dt, plan['max_alignment_s'] - status['align_elapsed_s'])
+            if turn:
+                dt = min(dt, max(0., current.fuel_kg-floor) / .04)
+            if dt < 1e-9:
+                status['status'] = 'completed'
+                status['reason'] = 'Fuel cutoff reached during alignment'
+                break
             before_fuel = current.fuel_kg
             current = burn_segment(current, dt, mu, {'thrust': False, 'turn': turn,
                                   'stabilize': False, 'gimbal': 0.}, start_s=t, system=system)
@@ -169,8 +175,11 @@ def advance_guided(state: State, start_s: float, at_s: float, mu: float,
         if abs(error) > GIMBAL_MAX - .025 or abs(current.omega) > .24:
             status['status'] = 'aligning'
             continue
+        # RCS steering draws from the *same* tank during ignition.
+        # Include its possible 0.04 kg/s in the floor calculation.
         dt = min(dt, plan['max_ignition_s'] - status['burn_elapsed_s'],
-                 (current.fuel_kg - floor) / ENGINE_FLOW_KG_S)
+                 (current.fuel_kg - floor) /
+                 (ENGINE_FLOW_KG_S + (.04 if turn else 0.)))
         if plan['cutoff'] == 'duration':
             dt = min(dt, plan['duration_s'] - status['burn_elapsed_s'])
         if dt <= 1e-10:
