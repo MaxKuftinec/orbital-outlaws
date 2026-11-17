@@ -2,6 +2,24 @@
 
 A persistent 2D Newtonian orbital combat simulation using **Vue 3 + Vuetify (Options API)**, **FastAPI**, **PostgreSQL** and a bidirectional **WebSocket**.
 
+## Compute Engine deployment and public playtest
+
+**The public browser alpha and persistent game backend are intentionally
+separate until authentication and shared multiplayer are ready.**
+
+The [Compute Engine deployment guide](infra/compute-engine/README.md)
+provides Docker Compose (FastAPI, PostgreSQL 16, Caddy TLS), VM creation,
+private API defaults, static Firebase Hosting setup, and offsite DB backups.
+The [public alpha plan](docs/PUBLIC_ALPHA.md) records the initial 10–30 player
+testing wave, feedback, changelog, and early pioneer recognition direction.
+
+For a **public static preview** set `VITE_PUBLIC_PREVIEW=1` using
+`frontend/.env.alpha.example` as a template before building. That build
+disables anonymous WebSocket persistence and clearly labels gameplay
+as a local, **not-saved** sandbox. A VM alone does not create multiplayer;
+the current server still has isolated pilot sectors, so production
+gameplay routes remain blocked until identity and shared-world work is done.
+
 ## Current architecture
 
 - **Backend authority:** Flight state, RCS/thrust fuel, projectile creation, ammunition, hull damage, NPC target decisions, physically integrated NPC support/tactical thrust (all incoming arrival and insertion burns now use finite thrust), swept projectile/ship collisions, salvage and credits.
