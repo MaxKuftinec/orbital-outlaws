@@ -35,6 +35,28 @@ uvicorn app.main:app --reload --port 8000
 
 The backend keeps **GET `/`** as the health endpoint. `Base.metadata.create_all` creates missing game tables but not the database itself. Existing databases aren't destroyed or automatically reset. Production schema changes should use Alembic migrations.
 
+### Development-only fuel replenishment
+
+For flight experiments, use the backend-only `POST /dev/players/{pilot_id}/refuel`
+route with `ORBITAL_DEV_COMMANDS=1` **in a trusted local environment only**.
+The pilot ID is the existing 32-character lowercase hexadecimal ID.
+An empty request refills the ship's propellant to its **200 kg** capacity;
+`{"kg": 25}` adds up to 25 kg, capped at the remaining tank space.
+
+```powershell
+$pilotId = 'YOUR_32_CHARACTER_LOWERCASE_HEX_ID'
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/dev/players/$pilotId/refuel"
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/dev/players/$pilotId/refuel" -ContentType 'application/json' -Body '{"kg":25}'
+```
+
+The command advances the authoritative simulation first, adds the same
+number of kilograms to both fuel and total spacecraft mass, and records a
+`dev_refuel` history event. A full tank is a successful no-op; a destroyed
+ship must use the separate development respawn endpoint first.
+This route deliberately has **no cockpit control** and is forbidden if
+development commands are disabled. Never enable anonymous development
+commands on a public deployment.
+
 ### Start frontend
 
 ```powershell
