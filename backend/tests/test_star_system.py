@@ -67,7 +67,7 @@ def test_system_ephemeris_has_no_migration_of_legacy_player_coordinates(postgres
     db=WorldStore(postgres_url)
     db.ensure_world()
     info=db.system_view()
-    assert info['star']['name']=='KESTREL PRIMARY'
+    assert info['star']['name']=='VEYRA'
     assert info['planet']['name']=='KESTREL'
     assert info['frame']=='star-centered'
     assert math.hypot(info['planet']['x'],info['planet']['y'])==pytest.approx(ORBIT_RADIUS_KM)

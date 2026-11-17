@@ -329,7 +329,7 @@ class WorldStore:
                     'remaining_fuel_kg': state.fuel_kg}
 
     def respawn_player(self, pilot_id: str) -> dict:
-        """Replace a destroyed ship without resetting the persistent sector or economy."""
+        """Begin a new run from an active or destroyed pilot, preserving the sector."""
         entity_id = 'pilot-' + pilot_id
         with self.sessions() as db:
             if db.get(Entity, entity_id) is None:
@@ -342,9 +342,10 @@ class WorldStore:
             saved = db.scalars(select(EncounterSnapshot).where(
                 EncounterSnapshot.entity_id == entity_id).with_for_update()).one()
             snapshot = copy.deepcopy(saved.snapshot)
-            if snapshot['player']['alive']:
-                raise ValueError('Ship is still alive; respawn only follows destruction')
-
+            # Preserve the previous controllable ship in the immutable event
+            # history; a new run resets only this pilot and its progression.
+            previous_alive=bool(snapshot['player'].get('alive'))
+            previous_state=copy.deepcopy(entity.checkpoint)
             angle = 2 * math.pi * secrets.randbits(53) / 2**53
             # Reuse the NPC's outer launch geometry and independent 360° velocity.
             # Unlike an NPC, a player chooses their own burn/arrival intention.
@@ -384,7 +385,9 @@ class WorldStore:
             progress.upgrades = {}
 
             db.add(Event(world_id='kestrel', entity_id=entity_id,
-                         at_s=now,kind='respawn',payload={'reason':'dev-respawn'},
+                         at_s=now,kind='respawn',payload={
+                           'reason':'dev-abandon' if previous_alive else 'dev-respawn',
+                           'previous_ship':previous_state, 'previous_alive':previous_alive},
                          after=state.as_dict(),
                          idempotency_key='respawn:'+str(__import__('uuid').uuid4())))
             return {
@@ -396,7 +399,9 @@ class WorldStore:
                 'arrival_control':'manual',
                 'progress_preserved':False,
                 'starter_credits':65,
-                'sector_preserved':True
+                'sector_preserved':True,
+                'previous_ship_abandoned':previous_alive,
+                'previous_ship_state':previous_state
             }
 
     def player_fire(self, pilot_id: str, dx: float, dy: float):

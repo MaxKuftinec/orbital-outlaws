@@ -18,9 +18,9 @@ export default defineComponent({
     <div class="metric-row"><span>Range</span><strong id="range-value">{{ targeting.range }}</strong></div>
     <div class="metric-row"><span>Hull</span><strong id="target-hull">{{ targeting.hull }}</strong></div>
     <div class="metric-row"><span>Weapon</span><strong>Ballistic rounds</strong></div>
-    <div class="metric-row"><span>Bullet reaches cursor range in</span><strong id="shot-time">{{ targeting.shotTime }}</strong></div>
+    <div class="metric-row"><span>Bullet arrival estimate</span><strong id="shot-time">{{ targeting.shotTime }}</strong></div>
     <div class="metric-row"><span>Estimated separation at arrival</span><strong id="shot-miss">{{ targeting.shotMiss }}</strong></div>
-    <div class="mini-note">Cyan: projected bullet path. Purple: target future position if trajectory analyzer is installed.</div>
+    <div class="mini-note">Bullet ETA requires Predictive Fire Control. Cyan: projected bullet path. Purple: target's future position requires the trajectory analyzer.</div>
     <button type="button" id="next-target" class="wide-subtle-btn">Next target ↗</button>
   </section>
 </template>

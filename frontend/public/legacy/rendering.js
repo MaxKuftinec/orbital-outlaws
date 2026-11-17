@@ -16,7 +16,10 @@
     const g=ctx.createRadialGradient(W/2,H/2,20,W/2,H/2,Math.max(W,H)*.75);
     g.addColorStop(0,'#11283b');g.addColorStop(.5,'#0a1a2b');g.addColorStop(1,'#060e18');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
     for(const star of starfield){ctx.fillStyle=`rgba(178,209,229,${star.alpha})`;ctx.fillRect(star.x,star.y,star.size,star.size);}
-    ctx.save();ctx.lineWidth=1;const center=toScreen(0,0);const s=scale();
+    ctx.save();ctx.lineWidth=1;
+    const s=scale(),planetCenter=toScreen(0,0);
+    const origin=state.systemView?getSystem().star(state.t):{x:0,y:0};
+    const center=toScreen(origin.x,origin.y);
     // The map uses star-centered coordinates in system mode: Kestrel moves
     // around a fixed primary star and the orbit ring is drawn in that frame.
     if(state.systemView){
@@ -28,11 +31,20 @@
         ctx.setLineDash([]);
       }
     }
-    ctx.strokeStyle='#183149';ctx.setLineDash([3,7]);
-    for(let r=150;r<=1050&&s>.025;r+=100){ctx.beginPath();ctx.ellipse(center.x,center.y,r*s,r*s,0,0,TWO_PI);ctx.stroke();
-      if(r<=550){ctx.fillStyle='#54778e';ctx.font='10px monospace';ctx.fillText(r+'km',center.x+r*s+4,center.y-4);}}
-    ctx.setLineDash([]);ctx.strokeStyle='#25445c';ctx.beginPath();ctx.moveTo(0,center.y);ctx.lineTo(W,center.y);ctx.moveTo(center.x,0);ctx.lineTo(center.x,H);ctx.stroke();ctx.restore();
-    drawCentralBody(center.x,center.y,s);
+    if(state.showAxes!==false){
+      ctx.strokeStyle='#183149';ctx.setLineDash([3,7]);
+      for(let r=150;r<=1050&&s>.025;r+=100){
+        ctx.beginPath();ctx.ellipse(center.x,center.y,r*s,r*s,0,0,TWO_PI);ctx.stroke();
+        if(r<=550){ctx.fillStyle='#54778e';ctx.font='10px monospace';ctx.fillText(r+'km',center.x+r*s+4,center.y-4);}
+      }
+      ctx.setLineDash([]);ctx.strokeStyle='#25445c';ctx.beginPath();
+      ctx.moveTo(0,center.y);ctx.lineTo(W,center.y);
+      ctx.moveTo(center.x,0);ctx.lineTo(center.x,H);ctx.stroke();
+      ctx.fillStyle='#648ba5';ctx.font='10px ui-monospace,monospace';
+      ctx.fillText(state.systemView?'VEYRA · ORIGIN':'KESTREL · ORIGIN',center.x+9,center.y+15);
+    }
+    ctx.restore();
+    drawCentralBody(planetCenter.x,planetCenter.y,s);
     drawParentStar();
   }
   function drawParentStar(){
@@ -55,7 +67,7 @@
     ctx.beginPath();ctx.arc(p.x,p.y,r,0,TWO_PI);ctx.stroke();
     ctx.fillStyle='#ffe4a4';ctx.textAlign='center';
     ctx.font='bold 11px ui-monospace,monospace';
-    ctx.fillText('KESTREL PRIMARY',p.x,p.y+r+19);
+    ctx.fillText('VEYRA',p.x,p.y+r+19);
     ctx.textAlign='left';ctx.restore();
   }
   function drawCentralBody(x,y,s){
@@ -123,6 +135,29 @@
   }
   function drawShots(){for(const s of state.shots){const p=toScreen(s.x,s.y);if(p.x<-90||p.x>W+90||p.y<-90||p.y>H+90)continue;const tail=toScreen(s.x-s.vx*.035,s.y-s.vy*.035);ctx.strokeStyle=s.faction==='ally'?palette.green:s.faction==='player'?palette.cyan:palette.red;ctx.lineWidth=2.6;ctx.beginPath();ctx.moveTo(tail.x,tail.y);ctx.lineTo(p.x,p.y);ctx.stroke();}}
   function drawParticles(){for(const p of state.particles){const q=toScreen(p.x,p.y);ctx.globalAlpha=clamp(p.life/p.maxLife,0,1);ctx.fillStyle=p.color;ctx.fillRect(q.x,q.y,2.2,2.2);}ctx.globalAlpha=1;}
+  function drawMeasurement(){
+    const m=state.measurement;
+    if(!m?.enabled||!m.start)return;
+    const a=toScreen(m.start.x,m.start.y);
+    const b=m.end||m.hover;
+    ctx.save();
+    ctx.strokeStyle='#c9a6f8';ctx.fillStyle='#dbc1ff';
+    ctx.lineWidth=2;ctx.setLineDash([6,4]);
+    if(b){
+      const end=toScreen(b.x,b.y);
+      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(end.x,end.y);ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();ctx.arc(end.x,end.y,4,0,TWO_PI);ctx.fill();
+      const km=Math.hypot(b.x-m.start.x,b.y-m.start.y);
+      const label=km>=1?km.toLocaleString('en-US',{maximumFractionDigits:2})+' km':
+        (km*1000).toFixed(1)+' m';
+      ctx.fillStyle='#0c1b2fe8';ctx.fillRect((a.x+end.x)/2-42,(a.y+end.y)/2-22,Math.max(83,label.length*7+10),19);
+      ctx.fillStyle='#dbc1ff';ctx.font='bold 11px monospace';
+      ctx.fillText(label,(a.x+end.x)/2-37,(a.y+end.y)/2-8);
+    }
+    ctx.setLineDash([]);ctx.beginPath();ctx.arc(a.x,a.y,4,0,TWO_PI);ctx.fill();
+    ctx.restore();
+  }
   function drawAim(){
     const p=state.player,preview=state.ballistic;if(!p.alive||!preview)return;
     const bulletLine=preview.path.map(q=>({x:q.x,y:q.y}));
@@ -133,7 +168,9 @@
       ctx.save();ctx.strokeStyle=preview.status==='reachable'?palette.cyan:palette.yellow;
       ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(q.x,q.y,7,0,TWO_PI);ctx.stroke();
       ctx.fillStyle='#aeddea';ctx.font='bold 10px monospace';
-      const label=preview.arrivalTime!==null?preview.arrivalTime.toFixed(2)+'s':preview.status==='planet'?'PLANET':'PREVIEW LIMIT';
+      const label=preview.arrivalTime!==null?
+        (state.predictive?preview.arrivalTime.toFixed(2)+'s':'ETA LOCKED'):
+        preview.status==='planet'?'PLANET':'PREVIEW LIMIT';
       ctx.fillText(label,q.x+11,q.y-10);ctx.restore();
     }
     if(!state.trajectoryIntel||!preview.targetAtCursor)return;
@@ -237,7 +274,7 @@
     drawShots();for(const e of state.enemies)drawShip(e);drawShip(state.ally);
     for(const ally of state.allies||[])drawShip(ally);
     drawShip(state.player);
-    drawEphemeris();drawAim();drawParticles();drawSelectedContact();
+    drawEphemeris();drawAim();drawParticles();drawMeasurement();drawSelectedContact();
   }
 
       return {draw(){

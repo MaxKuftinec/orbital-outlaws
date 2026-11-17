@@ -94,7 +94,7 @@ def propagate_local(start: State, elapsed_s: float, planet_mu: float,
 def system_info(at_s: float) -> dict:
     planet=planet_ephemeris(at_s)
     return {'frame':'star-centered', 'time_s':at_s, 'star':{
-              'id':'kestrel-primary','name':'KESTREL PRIMARY',
+              'id':'kestrel-primary','name':'VEYRA',
               'mu_km3_s2':STAR_MU,'radius_km':STAR_RADIUS_KM,
               'x':0.,'y':0.,'vx':0.,'vy':0.},
             'planet':{'id':'kestrel','name':'KESTREL',

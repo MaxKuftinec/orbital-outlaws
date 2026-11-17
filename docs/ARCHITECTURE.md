@@ -183,3 +183,21 @@ rendezvous, and must not be used to navigate to the star.
 also has the equivalent deterministic client model, so browser-only
 rendering remains possible. The system map changes only the camera
 coordinate transform, never ship coordinates in the database.
+
+
+## v1.0 cockpit reference-frame policy
+
+The selected display frame affects the **rendered origin and axes**, not
+the authoritative planet-relative storage frame. Both the map scale bar
+and free two-point ruler use the same pixel-to-kilometre camera conversion.
+Distance is a Euclidean 2D separation of the clicked inertial points; it
+is not a computed travel path or fuel cost. Measurement locations remain
+fixed in the Kestrel-relative inertial coordinates where they were clicked.
+Changing frame adds the planet translation to both points so their
+separation remains unchanged.
+
+The dev respawn endpoint now starts a new run regardless of hull status.
+An alive ship's checkpoint is archived in the event `previous_ship`
+payload; previous ship state is replaced for that pilot rather than
+spawning an independent NPC. The encounter's other ships and salvage are
+preserved, progression and active flight leases reset.

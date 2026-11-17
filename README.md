@@ -173,8 +173,11 @@ Retrieve your pilot ID in browser DevTools with:
 localStorage.getItem('orbital-outlaws.pilot.v1')
 ```
 
-The endpoint is dev-only (`ORBITAL_DEV_COMMANDS=1`). It returns **409** when the
-pilot is still alive and **404** for unknown pilot IDs. It restores 100% hull,
+The endpoint is dev-only (`ORBITAL_DEV_COMMANDS=1`). It permits **starting
+a fresh run even when the previous ship is alive**, and returns **404** for
+unknown pilot IDs. It records the abandoned ship's last authoritative
+checkpoint in the immutable respawn event history (the previous vessel is **not**
+kept as an active NPC). It restores 100% hull,
 200 kg fuel, 36 rounds and 10 kg spare parts, resets control leases, and
 resets purchased technology and credits, while preserving sector inhabitants. A replacement ship and
 **new pilot accounts** now spawn beyond 950 km with independently randomized
@@ -377,10 +380,10 @@ limit rather than the previous 1.9 rad/s cap; dynamic rendezvous accuracy
 still depends on trajectory replanning and finite-burn planning.
 
 
-## v0.20 — Kestrel Primary: first star–planet system
+## v0.20 — Veyra: first star–planet system
 
 **✦ System map** above the canvas switches from a planet-relative camera to a
-**star-centered** system view. KESTREL PRIMARY stays fixed on the system map,
+**star-centered** system view. VEYRA stays fixed on the system map,
 while KESTREL moves along a circular, analytically calculated stellar orbit.
 **◎ Planet view** returns to the familiar Kestrel-local encounter. Both objects
 can be selected on the map or in Navigation; **⌖ Focus** and **◎ Follow** work
@@ -396,7 +399,7 @@ Thus all previous player saves and sectors retain their coordinate meanings.
 
 | Star system parameter | Initial value |
 | --- | --- |
-| Parent | KESTREL PRIMARY, gravitational parameter 2.0 × 10⁹ km³/s² |
+| Parent | VEYRA, gravitational parameter 2.0 × 10⁹ km³/s² |
 | Kestrel planet | Gravitational parameter 310,000 km³/s² |
 | Planetary orbit radius | 160,000 km |
 | Planet orbital period | ~8,992 seconds (2.50 hours of game time) |
@@ -421,3 +424,40 @@ selecting it allows inspection/camera tracking, but requesting a
 star/planet transfer reports that interplanetary guidance is unsupported.
 Precise interplanetary transfers and multiple-system sector streaming are
 future work.
+
+
+
+## v1.0 — Veyra and cockpit navigation tools
+
+The parent star has been formally named **Veyra** (replacing the provisional
+Kestrel Primary name). This star–planet simulation is now the first **v1.0**
+version rather than another 0.x prototype milestone; the world/gravity model
+is unchanged from v0.20 apart from the published name.
+
+The top-right **⚙ Settings** opens two categories:
+
+- **⌨ Controls:** the existing remappable hotkeys, still saved per browser.
+- **◎ Frame of reference:** choose **Kestrel** (planet origin) or **Veyra**
+  (star origin), or hide the coordinate axes/origin grid entirely.
+  Both the selected frame and axis visibility are saved locally. The
+  reference axes follow the chosen frame; changing frames does not
+  rotate your ship, alter velocity or consume fuel.
+
+A **live, distance-calibrated scale bar** sits near the bottom right of the
+map, above the SOS control. It changes in a conventional 1–2–5 sequence as
+zoom changes. Press **↔ Ruler**, click a first map point and a second point,
+and read straight-line distance in kilometres (metres at sub-kilometre
+scale). A temporary line previews the measurement as the cursor moves.
+**Clear** removes both points. These map tools are free for every player
+and work in either frame.
+
+**Ballistic ETA** is no longer included in the basic HUD or in the preview
+path label; the numeric arrival time requires the **Predictive Fire Control**
+upgrade. The physical path visualization remains available.
+
+**New ship / new run:** The guarded `POST /dev/players/{pilot_id}/respawn`
+works for living or destroyed pilots. It spawns a new randomized spacecraft,
+resets 65 starter credits and technology ownership, and preserves NPC/salvage
+sector state and event history. The old ship's last checkpoint is archived
+in the respawn event; it is no longer an active controllable vessel.
+It does **not** create a new browser pilot ID or separate login account.

@@ -23,8 +23,10 @@ test('parent star is fixed in star-centered coordinates and planet follows a rea
 });
 
 test('system and planet map controls are mounted and star/planet selectable',()=>{
-  assert.match(app,/id="system-map-btn"/);
-  assert.match(app,/id="planet-map-btn"/);
+  assert.match(app,/id="settings-frame-star"/);
+  assert.match(app,/id="settings-frame-planet"/);
+  assert.doesNotMatch(app,/id="system-map-btn"/);
+  assert.doesNotMatch(app,/id="planet-map-btn"/);
   assert.match(app,/'star-system\.js'/);
   assert.match(game,/if\(key==='star'\)return STAR\.star\(state\.t\)/);
   assert.match(game,/if\(key==='planet'\)return \{id:'kestrel'/);
@@ -35,10 +37,12 @@ test('system and planet map controls are mounted and star/planet selectable',()=
 });
 
 function makeCamera(){
-  const obj={textContent:'',classList:{toggle(){}},setAttribute(){}};
+  const obj={textContent:'',style:{},classList:{toggle(){}},setAttribute(){}};
   const state={systemView:false,t:0,zoom:1,panX:0,panY:0,
                followPlayer:false,followTarget:false,player:{x:100,y:0}};
-  const ctx={state,STAR,W:1000,H:600,clamp:(x,min,max)=>Math.max(min,Math.min(max,x)),
+  const MAP={niceScale:()=>({km:100,pixels:50,label:'100 km'})};
+  const ctx={state,STAR,MAP,FRAME_KEY:'test-frame',localStorage:{setItem(){}},
+    W:1000,H:600,clamp:(x,min,max)=>Math.max(min,Math.min(max,x)),
     logEvent:()=>{},updateHud:()=>{},$:()=>obj,Math};
   vm.createContext(ctx);
   const begin=game.indexOf('  function cameraOffset(){');

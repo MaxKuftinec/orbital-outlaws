@@ -34,13 +34,15 @@ function cameraHarness(){
   const target={id:'wreck-r-26',type:'wreck',alive:true,x:3800,y:-2400,vx:10,vy:15};
   const state={selectedNavKey:'pickup:wreck-r-26',player:ship,panX:0,panY:0,zoom:.5,
                followTarget:false,aimMode:'locked',targetId:'raider-01'};
-  const ctx={state,
+  const MAP={niceScale:()=>({km:100,pixels:100,label:'100 km'}),
+    distance:()=>null,distanceLabel:()=>''};
+  const ctx={state,MAP,
     navTarget:key=>key==='pickup:wreck-r-26'?target:null,
     scale:()=>Math.min(800/700,600/660)*state.zoom,
     clamp:(x,a,b)=>Math.max(a,Math.min(b,x)),
     logEvent:text=>events.push(text),updateHud:()=>{},
     $:()=>({set textContent(value){events.push(value)},
-      classList:{toggle:()=>{}},setAttribute:()=>{}})
+      classList:{toggle:()=>{}},setAttribute:()=>{},style:{}})
   };
   vm.createContext(ctx);
   vm.runInContext(extract(game,'selectedContact','updateTargetOptions'),ctx);

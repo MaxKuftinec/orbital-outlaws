@@ -22,7 +22,7 @@
   function star(t){
     const p=planet(t);
     return {x:-p.x,y:-p.y,vx:-p.vx,vy:-p.vy,
-      id:'kestrel-primary',name:'KESTREL PRIMARY',alive:true,type:'star',
+      id:'kestrel-primary',name:'VEYRA',alive:true,type:'star',
       radius:STAR_RADIUS_KM};
   }
   function tidalAcceleration(x,y,t){

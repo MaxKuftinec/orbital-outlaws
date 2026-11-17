@@ -27,11 +27,11 @@ class StubStore:
         return {'ship': {'id': 'raider-03', 'name': 'RAIDER-03'}, 'intent': 'orbit', 'faction': 'raider', 'ship_count': 3}
 
     def respawn_player(self, pilot_id):
-        if self.hp > 0:
-            raise ValueError('Ship is still alive')
-        self.hp = 100
+        previous=self.hp>0
+        self.hp=100
         self.credits=65;self.upgrades={}
-        return {'pilot_id':pilot_id,'hp':100,'progress_preserved':False}
+        return {'pilot_id':pilot_id,'hp':100,'progress_preserved':False,
+                'previous_ship_abandoned':previous}
 
     def spawn_ally(self, pilot_id):
         return {'ship': {'id': 'ally-02', 'name': 'ALLY-02'}, 'intent': 'flyby', 'faction': 'ally', 'ship_count': 1}
@@ -154,7 +154,7 @@ def test_dev_ally_spawn_is_also_guarded(monkeypatch):
 
 
 
-def test_dev_respawn_requires_flag_and_only_revives_destroyed_ship(monkeypatch):
+def test_dev_respawn_requires_flag_and_replaces_live_ship(monkeypatch):
     import app.main as main
     db=StubStore()
     monkeypatch.setattr(main,'store',lambda:db)
@@ -164,11 +164,14 @@ def test_dev_respawn_requires_flag_and_only_revives_destroyed_ship(monkeypatch):
         assert client.post(url).status_code==403
         monkeypatch.setenv('ORBITAL_DEV_COMMANDS','1')
         assert client.post('/dev/players/wrong/respawn').status_code==400
-        assert client.post(url).status_code==409
+        fresh=client.post(url)
+        assert fresh.status_code==200,fresh.text
+        assert fresh.json()['previous_ship_abandoned'] is True
         db.hp=0
         revived=client.post(url)
         assert revived.status_code==200,revived.text
         assert revived.json()['hp']==100
+        assert revived.json()['previous_ship_abandoned'] is False
         assert revived.json()['progress_preserved'] is False
 
 

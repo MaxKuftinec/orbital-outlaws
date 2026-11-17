@@ -19,12 +19,17 @@
   const ARRIVAL = window.OrbitalArrival;
   const ATTITUDE=window.OrbitalAttitude;
   const STAR=window.OrbitalStarSystem;
-  if(!NAV||!BALL||!COLL||!SAFE||!ARRIVAL||!ATTITUDE||!STAR)throw new Error('Simulation modules missing');
+  const MAP=window.OrbitalMapTools;
+  if(!NAV||!BALL||!COLL||!SAFE||!ARRIVAL||!ATTITUDE||!STAR||!MAP)throw new Error('Simulation modules missing');
   // 1 world distance unit = 1 km; velocities in km/s. Engines are futuristic.
   const ENGINE=Object.freeze({dryKg:900,propellantKg:200,thrustN:1600000,flowKgS:5,rcsN:2500,rcsFlowKgS:.04,leverM:7,shipLengthM:14,gimbalMax:28*Math.PI/180});
   const exhaustKmS=ENGINE.thrustN/ENGINE.flowKgS/1000;
   const REPAIR=Object.freeze({starterKg:10,capacityKg:24,hpPerKg:5,rateHpS:5});
   const RESERVE_KEY='orbital-outlaws.fuel-reserve-kg.v1';
+  const FRAME_KEY='orbital-outlaws.map-frame.v1';
+  const AXES_KEY='orbital-outlaws.show-axes.v1';
+  function storedFrame(){try{return localStorage.getItem(FRAME_KEY)==='star'?'star':'planet';}catch{return 'planet';}}
+  function storedAxes(){try{return localStorage.getItem(AXES_KEY)!=='false';}catch{return true;}}
   function storedReserve(){
     const saved=localStorage.getItem(RESERVE_KEY);
     const value=saved===null?SAFE.reserveKg(ENGINE.propellantKg):Number(saved);
@@ -100,7 +105,8 @@
     state = {t:0, player, ally, allies:[], enemies:[e1,e2], shots:[], pickups:[
       newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30),newPickup(295,1.1,'parts',8)
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
-    orbitVisible:true, ephemerisVisible:true, selectedNavKey:'', systemView:false, followTarget:false, followPlayer:false, predictive:false, trajectoryIntel:false, ephemerisOwned:false, captureOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
+    orbitVisible:true, ephemerisVisible:true, selectedNavKey:'', systemView:false, showAxes:storedAxes(),
+    measurement:{enabled:false,start:null,end:null,hover:null},followTarget:false, followPlayer:false, predictive:false, trajectoryIntel:false, ephemerisOwned:false, captureOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
     collisionCooldown:new Map(), playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false,
     playerReserveKg:storedReserve(),captureTether:null};
     if(oldTech){Object.assign(state,oldTech);player.credits=oldPilot.credits;}
@@ -114,7 +120,7 @@
  
     $('orbit-btn').classList.add('selected');$('orbit-btn').setAttribute('aria-pressed','true');
     $('ephemeris-visibility-btn').classList.remove('selected');
-    updateZoom();
+    updateZoom();updateRulerUI();
     logEvent('Coast is free. Starter grant: 65 ¤ for testing upgrades.','good');
     logEvent('AEGIS-01 friendly escort online. Reinforcements disabled by default.','good');
     logEvent('Two pirate ships detected in sector.','danger');
@@ -155,7 +161,9 @@
     state.playerKills=saved.playerKills||0;
     if(saved.player){
       const p=state.player,info=saved.player;
-      const revived=!p.alive&&info.alive;
+      const replacement=(info.respawnCount||0)>(state.lastRespawnCount||0);
+      const revived=(!p.alive&&info.alive)||replacement;
+      state.lastRespawnCount=info.respawnCount||0;
       p.hp=info.hp;p.ammo=info.ammo;p.repairParts=info.repairParts;p.alive=info.alive;
       p.cargoKg=info.cargoKg||0;
       p.captureHeatMJ=info.captureHeatMJ||0;
@@ -799,7 +807,7 @@
       ...state.enemies.filter(e=>e.alive).map(e=>({key:'enemy:'+e.id,text:e.name+' · hostile'})),
       ...(state.ally.alive?[{key:'ally',text:'AEGIS-01 · friendly escort'}]:[]),
       ...(state.allies||[]).filter(a=>a.alive).map(a=>({key:'ally:'+a.id,text:a.name+' · friendly visitor'})),
-      {key:'star',text:'✦ Kestrel Primary · parent star'},
+      {key:'star',text:'✦ Veyra · parent star'},
       {key:'planet',text:'◎ Kestrel · planet'}];
     if(state.waypoint)entries.unshift({key:'waypoint',text:'Map waypoint (fixed location)'});
     const selected=entries.some(item=>item.key===previous)?previous:entries[0]?.key||'';
@@ -1314,7 +1322,9 @@
       $('trajectory-upgrade-btn').disabled=state.trajectoryIntel||p.credits<25||state.ended;
     }
     const fp=state.ballistic;
-    setLegacyText('shot-time',fp&&fp.arrivalTime!==null?fp.arrivalTime.toFixed(2)+' s':fp&&fp.status==='planet'?'OBSTRUCTED':'OUT OF RANGE');
+    setLegacyText('shot-time',!state.predictive?'Requires predictive fire control':
+      fp&&fp.arrivalTime!==null?fp.arrivalTime.toFixed(2)+' s':
+      fp&&fp.status==='planet'?'OBSTRUCTED':'OUT OF RANGE');
     setLegacyText('shot-miss',!state.trajectoryIntel?'Requires analyzer':fp&&fp.missKm!==null?fp.missKm.toFixed(1)+' km':'—');
     if(document.querySelector('.upgrades') && document.querySelector('.upgrades').dataset.vueManaged!=='true'){
       $('upgrade-btn').textContent=state.predictive?'OWNED':'BUY';
@@ -1362,7 +1372,9 @@
       name:state.aimMode==='manual'?'MANUAL AIM':target?target.name:'NO CONTACT',
       range:target?magnitude(target.x-p.x,target.y-p.y).toFixed(1)+' km':'—',
       hull:target?Math.ceil(target.hp)+' / 66':'—',
-      shotTime:fp&&fp.arrivalTime!==null?fp.arrivalTime.toFixed(2)+' s':fp&&fp.status==='planet'?'OBSTRUCTED':'OUT OF RANGE',
+      shotTime:!state.predictive?'Requires predictive fire control':
+        fp&&fp.arrivalTime!==null?fp.arrivalTime.toFixed(2)+' s':
+        fp&&fp.status==='planet'?'OBSTRUCTED':'OUT OF RANGE',
       shotMiss:!state.trajectoryIntel?'Requires analyzer':fp&&fp.missKm!==null?fp.missKm.toFixed(1)+' km':'—'
     }}));
     window.dispatchEvent(new CustomEvent('orbital-navigation-state',{detail:{
@@ -1418,6 +1430,7 @@
   }
   function showSystemMap(){
     state.systemView=true;
+    try{localStorage.setItem(FRAME_KEY,'star');}catch{}
     const baseScale=Math.min(W/700,H/660);
     state.zoom=clamp(.65*Math.min(W,H)/(STAR.ORBIT_RADIUS_KM*baseScale),.0001,6);
     const planet=STAR.planet(state.t),s=scale();
@@ -1425,10 +1438,11 @@
     state.panX=-planet.x*s/2;state.panY=-planet.y*s/2;
     state.followPlayer=false;state.followTarget=false;
     updateZoom();updateHud();
-    logEvent('System map: KESTREL PRIMARY and orbiting KESTREL. Distances are in km.','good');
+    logEvent('System map: VEYRA and orbiting KESTREL. Distances are in km.','good');
   }
   function showPlanetMap(){
-    state.systemView=false;state.followPlayer=false;state.followTarget=false;
+    state.systemView=false;
+    try{localStorage.setItem(FRAME_KEY,'planet');}catch{}state.followPlayer=false;state.followTarget=false;
     state.zoom=1;state.panX=0;state.panY=0;
     updateZoom();updateHud();
     logEvent('Returned to Kestrel planetary view.','good');
@@ -1438,9 +1452,11 @@
     if(!target){logEvent('Select a live navigation target before focusing the camera.');return;}
     if(target.kind==='star'){
       state.systemView=true;
+      try{localStorage.setItem(FRAME_KEY,'star');}catch{}
       state.zoom=clamp(.65*Math.min(W,H)/(STAR.ORBIT_RADIUS_KM*Math.min(W/700,H/660)),.0001,6);
     }else if(target.kind==='planet'){
       state.systemView=false;state.zoom=1.8;
+      try{localStorage.setItem(FRAME_KEY,'planet');}catch{}
     }else{
       state.zoom=clamp(Math.max(state.zoom,2.8),.0001,6);
     }
@@ -1465,12 +1481,44 @@
     logEvent('Camera centered on KESTREL-7 · tracking your spacecraft. Drag to release camera follow.','good');
     updateHud();
   }
+  function updateMapScale(){
+    if(!state)return;
+    const tick=MAP.niceScale(scale());
+    $('map-scale-label').textContent=tick.label;
+    $('map-scale-bar').style.width=tick.pixels.toFixed(1)+'px';
+  }
+  function updateRulerUI(){
+    const m=state.measurement;
+    $('ruler-toggle').setAttribute('aria-pressed',String(m.enabled));
+    $('ruler-toggle').classList.toggle('selected',m.enabled);
+    $('ruler-clear').disabled=!m.start&&!m.end;
+    const d=MAP.distance(m.start,m.end||m.hover);
+    $('ruler-distance').textContent=!m.enabled?'Ruler off':
+      !m.start?'Click first map point':d===null?'Click second map point':
+      MAP.distanceLabel(d)+(m.end?'':' · preview');
+  }
+  function toggleRuler(){
+    state.measurement.enabled=!state.measurement.enabled;
+    state.measurement.hover=null;
+    updateRulerUI();
+  }
+  function clearRuler(){
+    state.measurement.start=null;state.measurement.end=null;state.measurement.hover=null;
+    updateRulerUI();
+  }
+  function chooseRulerPoint(point){
+    const m=state.measurement;
+    if(!m.start||m.end){m.start={...point};m.end=null;}
+    else m.end={...point};
+    m.hover=null;
+    updateRulerUI();
+  }
   function updateZoom(){
     $('zoom-level').textContent=(state.zoom<.01?state.zoom.toExponential(2):state.zoom.toFixed(2))+'×';
-    $('system-map-btn').classList.toggle('selected',!!state.systemView);
-    $('system-map-btn').setAttribute('aria-pressed',String(!!state.systemView));
-    $('planet-map-btn').classList.toggle('selected',!state.systemView);
-    $('planet-map-btn').setAttribute('aria-pressed',String(!state.systemView));
+    $('settings-frame-star').setAttribute('aria-pressed',String(!!state.systemView));
+    $('settings-frame-planet').setAttribute('aria-pressed',String(!state.systemView));
+    $('settings-show-axes').checked=!!state.showAxes;
+    updateMapScale();
   }
   function zoomAt(factor,px=W/2,py=H/2){
     const world=fromScreen(px,py);
@@ -1488,6 +1536,7 @@
     ctx.setTransform(dpr,0,0,dpr,0,0);
     starfield=[];
     for(let i=0;i<150;i++)starfield.push({x:Math.random()*W,y:Math.random()*H,size:rand(.3,1.3),alpha:rand(.12,.55)});
+    updateMapScale();
   }
   function scale(){return Math.min(W/700,H/660)*state.zoom;}
   function toScreen(x,y){
@@ -1590,7 +1639,21 @@
     hotkeys[capturingAction]=code;saveHotkeys();capturingAction=null;
     $('hotkey-feedback').textContent='Saved: '+keyLabel(code);renderHotkeys();
   }
-  function openSettings(){settingsOpen=true;capturingAction=null;state.down.clear();$('settings-modal').classList.remove('hidden');renderHotkeys();$('hotkey-feedback').textContent='';$('settings-close').focus();}
+  function settingsTab(tab){
+    const controls=tab==='controls';
+    $('settings-controls-pane').classList.toggle('hidden',!controls);
+    $('settings-frame-pane').classList.toggle('hidden',controls);
+    $('settings-tab-controls').setAttribute('aria-selected',String(controls));
+    $('settings-tab-frame').setAttribute('aria-selected',String(!controls));
+    $('settings-tab-controls').classList.toggle('selected',controls);
+    $('settings-tab-frame').classList.toggle('selected',!controls);
+  }
+  function openSettings(){
+    settingsOpen=true;capturingAction=null;state.down.clear();
+    $('settings-modal').classList.remove('hidden');
+    settingsTab('controls');updateZoom();
+    renderHotkeys();$('hotkey-feedback').textContent='';$('settings-close').focus();
+  }
   function closeSettings(){settingsOpen=false;capturingAction=null;$('settings-modal').classList.add('hidden');$('settings-btn').focus();}
   function toggleConsole(which){
     const id=which==='nav'?'nav-command':'telemetry-console';
@@ -1640,8 +1703,8 @@
     document.querySelectorAll('[data-thrust]').forEach(b=>hold(b,b.dataset.thrust));hold($('fire-btn'),'fire');hold($('repair-btn'),'repair');
     $('reset-btn').addEventListener('click',reset);
     $('retry-btn')?.addEventListener('click',reset);
-    $('system-map-btn').addEventListener('click',showSystemMap);
-    $('planet-map-btn').addEventListener('click',showPlanetMap);
+    $('ruler-toggle').addEventListener('click',toggleRuler);
+    $('ruler-clear').addEventListener('click',clearRuler);
     $('orbit-btn').addEventListener('click',()=>{state.orbitVisible=!state.orbitVisible;$('orbit-btn').classList.toggle('selected',state.orbitVisible);$('orbit-btn').setAttribute('aria-pressed',String(state.orbitVisible));});
     $('zoom-in').addEventListener('click',()=>zoomAt(1.25));
     $('zoom-out').addEventListener('click',()=>zoomAt(1/1.25));
@@ -1701,6 +1764,14 @@
     window.addEventListener('orbital-offer-fuel',donateFuelToAlly);
     window.addEventListener('orbital-set-reserve',requestReserveSetting);
     $('settings-btn').addEventListener('click',openSettings);
+    $('settings-tab-controls').addEventListener('click',()=>settingsTab('controls'));
+    $('settings-tab-frame').addEventListener('click',()=>settingsTab('frame'));
+    $('settings-frame-planet').addEventListener('click',showPlanetMap);
+    $('settings-frame-star').addEventListener('click',showSystemMap);
+    $('settings-show-axes').addEventListener('change',e=>{
+      state.showAxes=e.target.checked;
+      try{localStorage.setItem(AXES_KEY,String(state.showAxes));}catch{}
+    });
     $('settings-close').addEventListener('click',closeSettings);
     $('settings-done').addEventListener('click',closeSettings);
     $('settings-modal').addEventListener('click',e=>{if(e.target===$('settings-modal'))closeSettings();});
@@ -1712,6 +1783,9 @@
     canvas.addEventListener('pointermove',e=>{
       const pt=coords(e);
       if(drag&&drag.id===e.pointerId){state.panX+=pt.px-drag.px;state.panY+=pt.py-drag.py;drag.px=pt.px;drag.py=pt.py;return;}
+      if(state.measurement.enabled&&state.measurement.start&&!state.measurement.end){
+        state.measurement.hover=fromScreen(pt.px,pt.py);updateRulerUI();return;
+      }
       state.gimbalTarget=fromScreen(pt.px,pt.py);
       state.lastBallistic=-999;
       if(state.aimMode==='manual')state.mouseTarget=state.gimbalTarget;
@@ -1725,8 +1799,11 @@
         }
         drag={id:e.pointerId,px:pt.px,py:pt.py};canvas.setPointerCapture(e.pointerId);return;
       }
-      if(state.ended||!state.player.alive)return;
       if(e.button!==0)return;
+      if(state.measurement.enabled){
+        e.preventDefault();chooseRulerPoint(p);return;
+      }
+      if(state.ended||!state.player.alive)return;
       if(e.altKey){state.waypoint={x:p.x,y:p.y};updateTargetOptions('waypoint');state.navPlan=null;logEvent('Waypoint plotted at '+p.x.toFixed(0)+', '+p.y.toFixed(0)+' km.');updateHud();return;}
       // Pick celestial bodies with a SCREEN-space hit radius at system scale.
       // Do not let a star-map click accidentally become a gun-aim command.
@@ -1737,7 +1814,7 @@
         const nearPlanet=Math.hypot(pt.px-kestrelPt.x,pt.py-kestrelPt.y)<16;
         if(nearSun||nearPlanet){
           updateTargetOptions(nearSun?'star':'planet');state.navPlan=null;
-          logEvent((nearSun?'KESTREL PRIMARY':'KESTREL')+' selected in the system map.','good');
+          logEvent((nearSun?'VEYRA':'KESTREL')+' selected in the system map.','good');
           updateHud();return;
         }
       }
@@ -1773,7 +1850,9 @@
       }
     });
   }
-  bindControls();updateHotkeyHints();reset();fitCanvas();lastFrameId=requestAnimationFrame(frame);
+  bindControls();updateHotkeyHints();reset();fitCanvas();
+  if(storedFrame()==='star')showSystemMap();
+  lastFrameId=requestAnimationFrame(frame);
   if(window.OrbitalPersistence){
     pilotLink=window.OrbitalPersistence.attach({
       controls:flightControls,

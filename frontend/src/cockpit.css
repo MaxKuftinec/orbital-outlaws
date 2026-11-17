@@ -237,3 +237,46 @@
  .arena-actions{flex-wrap:wrap;row-gap:5px}
  .arena-actions #system-map-btn,.arena-actions #planet-map-btn{font-size:10px}
 }
+
+
+/* v1.0 settings categories (small, accessible, no technology gate). */
+.settings-tabs{display:flex;gap:8px;margin:16px 0 14px;flex-wrap:wrap}
+.settings-tabs button,.settings-frame-choice button{
+  border:1px solid #40627a;border-radius:8px;background:#102638;color:#b5d6e9;
+  cursor:pointer;padding:10px 13px;font:inherit
+}
+.settings-tabs button.selected,.settings-tabs button[aria-selected="true"],
+.settings-frame-choice button[aria-pressed="true"]{
+  border-color:#8bccdc;background:#173e53;color:#e7f7ff
+}
+.settings-frame-choice{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
+.settings-frame-choice button{display:flex;flex-direction:column;gap:5px;align-items:flex-start;text-align:left}
+.settings-frame-choice button small{color:#9cb3c5}
+.settings-axis-switch{display:flex;gap:10px;align-items:center;padding:12px;
+  border:1px solid #2d4d62;background:#0a1b2b;border-radius:8px;cursor:pointer}
+.settings-axis-switch input{accent-color:#70d9ed;width:17px;height:17px}
+#settings-controls-pane #hotkey-reset{margin-top:14px}
+
+/* Map tools float independently of ship HUD. The scale stays truthful on zoom. */
+#canvas-workspace .map-measure-tools{
+  position:absolute;right:14px;bottom:72px;z-index:9;min-width:132px;max-width:45%;
+  padding:9px 11px;border-radius:9px;border:1px solid #365a72;
+  background:#071827eb;backdrop-filter:blur(6px);box-shadow:0 6px 18px #0008;
+  color:#d3eefa;font-size:11px;pointer-events:auto
+}
+.map-ruler-controls{display:flex;gap:7px;align-items:center;justify-content:flex-end}
+.map-ruler-controls button{padding:5px 9px;border-radius:6px;background:#163449;
+  border:1px solid #42697e;color:#d6edfa;cursor:pointer;font:inherit}
+.map-ruler-controls button.selected,.map-ruler-controls button[aria-pressed="true"]{
+  border-color:#c9a6f8;background:#392959;color:#efdcff}
+.map-ruler-controls button:disabled{opacity:.4;cursor:not-allowed}
+.map-ruler-distance{text-align:right;color:#bcbbe7;padding-top:6px;min-height:21px}
+.map-scale-readout{display:flex;flex-direction:column;align-items:flex-end;gap:4px;
+  margin-top:4px;padding-top:6px;border-top:1px solid #355168}
+#map-scale-label{font-weight:750;font-variant-numeric:tabular-nums;color:#c8efff}
+#map-scale-bar{height:7px;min-width:1px;border:solid #abddf5;border-width:0 2px 2px 2px;
+  max-width:130px}
+@media(max-width:600px){
+ #canvas-workspace .map-measure-tools{right:7px;bottom:63px;max-width:54%;min-width:120px;padding:7px}
+ .settings-frame-choice{grid-template-columns:1fr}
+}
