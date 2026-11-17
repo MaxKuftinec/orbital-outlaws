@@ -18,5 +18,5 @@ export interface NavigationView {
   engageText: string; engageDisabled: boolean; abortDisabled: boolean; donateDisabled: boolean
   requestAllyDisabled: boolean; requestDonorDisabled: boolean
   requestDonorText: string; allyInfo: string; assistInfo: string
-  selected: string; reserveKg: number
+  selected: string; reserveKg: number; focusDisabled: boolean; followTarget: boolean
 }

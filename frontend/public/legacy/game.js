@@ -79,7 +79,7 @@
   function escapeHtml(str) { return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
   function reset() {
     if(persistentFlight&&state){
-      state.panX=0;state.panY=0;state.zoom=1;updateZoom();
+      state.followTarget=false;state.panX=0;state.panY=0;state.zoom=1;updateZoom();
       logEvent('View recentered; live encounter and pilot remain unchanged.','good');
       return;
     }
@@ -97,7 +97,7 @@
     state = {t:0, player, ally, allies:[], enemies:[e1,e2], shots:[], pickups:[
       newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30),newPickup(295,1.1,'parts',8)
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
-    orbitVisible:true, ephemerisVisible:true, selectedNavKey:'', predictive:false, trajectoryIntel:false, ephemerisOwned:false, captureOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
+    orbitVisible:true, ephemerisVisible:true, selectedNavKey:'', followTarget:false, predictive:false, trajectoryIntel:false, ephemerisOwned:false, captureOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
     collisionCooldown:new Map(), playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false,
     playerReserveKg:storedReserve(),captureTether:null};
     if(oldTech){Object.assign(state,oldTech);player.credits=oldPilot.credits;}
@@ -779,6 +779,15 @@
     if(key?.startsWith('ally:'))return (state.allies||[]).find(a=>a.id===key.slice(5)&&a.alive)||null;
     return null;
   }
+  function selectedContact(){
+    const key=state.selectedNavKey,target=navTarget(key);
+    if(!target)return null;
+    const kind=key==='waypoint'?'waypoint':key.startsWith('pickup:')?'salvage':
+      key.startsWith('enemy:')?'enemy':'ally';
+    const label=kind==='waypoint'?'WAYPOINT':target.name||
+      ((target.type==='wreck'?'WRECK':String(target.type||'SALVAGE').toUpperCase())+' · '+target.id);
+    return {x:target.x,y:target.y,kind,label,id:target.id||key};
+  }
   function updateTargetOptions(preferred){
     const select=$('nav-target');const previous=preferred||state.selectedNavKey||select.value;
     const entries=[...state.pickups.filter(p=>p.alive).map(p=>({key:'pickup:'+p.id,text:(p.type==='wreck'?'Wreck':'Salvage '+p.type)+' · '+p.id.slice(-4)})),
@@ -1243,6 +1252,14 @@
     setLegacyText('range-value',target?magnitude(target.x-p.x,target.y-p.y).toFixed(1)+' km':'—');
     setLegacyText('target-hull',target?Math.ceil(target.hp)+' / 66':'—');
     $('target-indicator').textContent=state.aimMode==='manual'?'AIM MODE: MANUAL':target?'TRACKING: '+target.name:'NO TARGET';
+    const selected=selectedContact();
+    const currentDistance=selected?magnitude(selected.x-p.x,selected.y-p.y):0;
+    $('nav-selected-contact').textContent=selected?
+      'NAV TARGET: '+selected.label+' · '+currentDistance.toFixed(1)+' km':'NAV TARGET: NONE';
+    $('focus-target-btn').disabled=!selected;
+    $('follow-target-btn').disabled=!selected;
+    $('follow-target-btn').classList.toggle('selected',!!selected&&state.followTarget);
+    $('follow-target-btn').setAttribute('aria-pressed',String(!!selected&&state.followTarget));
     const liveHostiles=state.enemies.filter(ship=>ship.alive).length;
     const activeAllies=(state.ally.alive?1:0)+(state.allies||[]).filter(ally=>ally.alive).length;
     $('mission-status').textContent=liveHostiles+' hostile'+(liveHostiles!==1?'s':'')+' · '+activeAllies+' active allies';
@@ -1338,6 +1355,7 @@
     }}));
     window.dispatchEvent(new CustomEvent('orbital-navigation-state',{detail:{
       locked:!state.navOwned,phase:state.autopilot?.phase||'IDLE',reserveKg:state.playerReserveKg,
+      focusDisabled:!selected,followTarget:!!selected&&state.followTarget,
       deltaV:state.navPlan?state.navPlan.dv.toFixed(2)+' km/s':'—',
       eta:state.navPlan?state.navPlan.eta.toFixed(0)+' s':'—',
       fuel:state.navPlan?SAFE.requiredFuel(mass(p),state.navPlan.dv,exhaustKmS).toFixed(1)+' kg (ideal)':'—',
@@ -1378,6 +1396,26 @@
       }
     }}));
   }
+  function centerCameraOn(target){
+    state.panX=-target.x*scale();
+    state.panY=-target.y*scale();
+  }
+  function focusSelectedTarget(follow=false){
+    const target=selectedContact();
+    if(!target){logEvent('Select a live navigation target before focusing the camera.');return;}
+    state.zoom=clamp(Math.max(state.zoom,2.8),.35,6);
+    state.followTarget=follow;
+    centerCameraOn(target);updateZoom();
+    logEvent((follow?'Camera following ':'Camera focused on ')+target.label+
+      '. Ship flight and weapon lock unchanged.','good');
+    updateHud();
+  }
+  function toggleFollowTarget(){
+    if(state.followTarget){
+      state.followTarget=false;
+      logEvent('Camera follow disengaged.');updateHud();
+    }else focusSelectedTarget(true);
+  }
   function updateZoom(){$('zoom-level').textContent=state.zoom.toFixed(2)+'×';}
   function zoomAt(factor,px=W/2,py=H/2){
     const world=fromScreen(px,py);
@@ -1401,9 +1439,17 @@
   const renderer=window.OrbitalRenderer.create({
     ctx,WORLD,ENGINE,palette,NAV,getState:()=>state,
     getViewport:()=>({W,H,dpr,starfield,encounterReady}),
-    toScreen,scale,clamp,getEphemerisTarget:()=>navTarget(state.selectedNavKey)
+    toScreen,scale,clamp,getEphemerisTarget:()=>navTarget(state.selectedNavKey),
+    getSelectedContact:selectedContact
   });
-  function draw(){renderer.draw();}
+  function draw(){
+    if(state.followTarget){
+      const target=selectedContact();
+      if(target)centerCameraOn(target);
+      else state.followTarget=false;
+    }
+    renderer.draw();
+  }
   function frame(now){
     const realDelta=Math.min(Math.max((now-lastFrame)/1000,0),.06);
     lastFrame=now;
@@ -1533,6 +1579,8 @@
     $('orbit-btn').addEventListener('click',()=>{state.orbitVisible=!state.orbitVisible;$('orbit-btn').classList.toggle('selected',state.orbitVisible);$('orbit-btn').setAttribute('aria-pressed',String(state.orbitVisible));});
     $('zoom-in').addEventListener('click',()=>zoomAt(1.25));
     $('zoom-out').addEventListener('click',()=>zoomAt(1/1.25));
+    $('focus-target-btn').addEventListener('click',()=>focusSelectedTarget(false));
+    $('follow-target-btn').addEventListener('click',toggleFollowTarget);
     $('next-target').addEventListener('click',selectNextTarget);
     $('lock-btn').addEventListener('click',lockNearest);
     const technologies={
@@ -1581,6 +1629,8 @@
     });
     window.addEventListener('orbital-request-ally-assistance',requestSelectedAllyAssistance);
     window.addEventListener('orbital-request-selected-donor',requestSelectedDonor);
+    window.addEventListener('orbital-focus-target',()=>focusSelectedTarget(false));
+    window.addEventListener('orbital-follow-target',toggleFollowTarget);
     window.addEventListener('orbital-offer-fuel',donateFuelToAlly);
     window.addEventListener('orbital-set-reserve',requestReserveSetting);
     $('settings-btn').addEventListener('click',openSettings);
@@ -1601,7 +1651,11 @@
     });
     canvas.addEventListener('pointerdown',e=>{
       const pt=coords(e),p=fromScreen(pt.px,pt.py);
-      if(e.button===1||e.button===2||e.shiftKey){e.preventDefault();drag={id:e.pointerId,px:pt.px,py:pt.py};canvas.setPointerCapture(e.pointerId);return;}
+      if(e.button===1||e.button===2||e.shiftKey){
+        e.preventDefault();
+        if(state.followTarget){state.followTarget=false;updateHud();}
+        drag={id:e.pointerId,px:pt.px,py:pt.py};canvas.setPointerCapture(e.pointerId);return;
+      }
       if(state.ended||!state.player.alive)return;
       if(e.button!==0)return;
       if(e.altKey){state.waypoint={x:p.x,y:p.y};updateTargetOptions('waypoint');state.navPlan=null;logEvent('Waypoint plotted at '+p.x.toFixed(0)+', '+p.y.toFixed(0)+' km.');updateHud();return;}
