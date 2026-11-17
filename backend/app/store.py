@@ -61,6 +61,13 @@ class WorldStore:
         return {'thrust':flight.thrust,'turn':flight.turn,
                 'stabilize':flight.stabilize,'gimbal':flight.gimbal}
 
+    @staticmethod
+    def _auto_event_payload(db, entity_id: str):
+        active = db.get(AutoBurn, entity_id)
+        if active and active.progress['status'] in ACTIVE_STATES:
+            return {'auto_plan':active.plan, 'auto_progress':active.progress}
+        return {}
+
     def _settle_auto(self, db, entity: Entity, world: World, at_s: float):
         """Atomically checkpoint guidance before any change to the spacecraft.
 
@@ -270,7 +277,8 @@ class WorldStore:
                     entity.version += 1
                     db.add(Event(world_id='kestrel', entity_id=entity_id,
                                  at_s=current_world_s, kind='sector_interaction',
-                                 payload=effects, after=new_state.as_dict(),
+                                 payload={**effects, **self._auto_event_payload(db,entity_id)},
+                                 after=new_state.as_dict(),
                                  idempotency_key='sector:'+str(__import__('uuid').uuid4())))
                 saved.snapshot = snapshot
                 saved.saved_at_utc = now
@@ -416,7 +424,11 @@ class WorldStore:
                          if a['id'] == target_id and a.get('alive', True)), None)
             if not ally: raise ValueError('Select an active allied craft')
             now = self.now(world)
-            _, _, _, current = self._at(db, 'kestrel', entity_id, now)
+            active_auto = db.get(AutoBurn, entity_id)
+            if active_auto and active_auto.progress['status'] in ACTIVE_STATES:
+                current = self._settle_auto(db, entity, world, now)
+            else:
+                _, _, _, current = self._at(db, 'kestrel', entity_id, now)
             separation = math.hypot(current.x-ally['x'], current.y-ally['y'])
             relative = math.hypot(current.vx-ally['vx'], current.vy-ally['vy'])
             if separation > 18 or relative >= 2.5:
@@ -452,7 +464,8 @@ class WorldStore:
             db.add(Event(world_id='kestrel', entity_id=entity_id, at_s=now,
                          kind='fuel_transfer', payload={'target': target_id, 'kg': moved,
                                  'recipient_dvx':dvx,'recipient_dvy':dvy,
-                                 'thermal_mj':thermal_mj},
+                                 'thermal_mj':thermal_mj,
+                                  **self._auto_event_payload(db,entity_id)},
                          after=state.as_dict(),
                          idempotency_key='fuel:'+str(__import__('uuid').uuid4())))
             return {'target': target_id, 'transferred_kg': moved,
@@ -485,9 +498,13 @@ class WorldStore:
                 raise ValueError('Destroyed pilot ship must respawn before refueling')
             flight = db.get(FlightControl, entity_id)
             at = max(self.now(world), entity.checkpoint_s)
-            current = advance(State(**entity.checkpoint), entity.checkpoint_s, at,
-                              world.mu, self._controls(flight), flight.expires_s,
-                              system=True)
+            active_auto = db.get(AutoBurn, entity_id)
+            if active_auto and active_auto.progress['status'] in ACTIVE_STATES:
+                current = self._settle_auto(db, entity, world, at)
+            else:
+                current = advance(State(**entity.checkpoint), entity.checkpoint_s, at,
+                                  world.mu, self._controls(flight), flight.expires_s,
+                                  system=True)
             capacity_kg = 200.0
             room_kg = max(0.0, capacity_kg - current.fuel_kg)
             added_kg = min(room_kg, requested_kg) if requested_kg is not None else room_kg
@@ -507,7 +524,8 @@ class WorldStore:
             db.add(Event(world_id='kestrel', entity_id=entity_id, at_s=at,
                          kind='dev_refuel',
                          payload={'added_kg': added_kg, 'control': self._controls(flight),
-                                  'expires_s': flight.expires_s},
+                                  'expires_s': flight.expires_s,
+                                   **self._auto_event_payload(db,entity_id)},
                          after=refueled.as_dict(),
                          idempotency_key='dev-refuel:' + secrets.token_hex(16)))
             return {'pilot_id': pilot_id, 'added_kg': added_kg,
