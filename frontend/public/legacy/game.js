@@ -1,9 +1,9 @@
 /**
- * ORBITAL OUTLAWS 0.6
- * One central body, Newtonian inverse-square gravity, kick-drift-kick (velocity Verlet).
- * World distances and seconds are intentionally game-scaled to keep orbits playable.
- * All ships, floating salvage and ballistic projectiles share the same gravity solver.
- * No propulsion is needed to remain in a stable orbit.
+ * ORBITAL OUTLAWS v1.0
+ * Veyra–Kestrel restricted three-body system. Gameplay coordinates remain
+ * Kestrel-relative; a differential stellar tide adds Veyra's gravity while
+ * planetary and star frames share fixed inertial axes.
+ * All spacecraft and projectiles inherit the same local gravity model.
  */
 (() => {
   'use strict';
