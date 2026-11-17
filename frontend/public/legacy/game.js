@@ -109,7 +109,7 @@
       newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30),newPickup(295,1.1,'parts',8)
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
     orbitVisible:true, ephemerisVisible:true, selectedNavKey:'', systemView:false, showAxes:storedAxes(),
-    measurement:{enabled:false,start:null,end:null,hover:null},followTarget:false, followPlayer:false, predictive:false, trajectoryIntel:false, ephemerisOwned:false, captureOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
+    measurement:{enabled:false,tool:'ruler',start:null,end:null,hover:null},followTarget:false, followPlayer:false, predictive:false, trajectoryIntel:false, ephemerisOwned:false, captureOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
     collisionCooldown:new Map(), playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false,
     playerReserveKg:storedReserve(),captureTether:null};
     if(oldTech){Object.assign(state,oldTech);player.credits=oldPilot.credits;}
@@ -1494,19 +1494,66 @@
     $('map-scale-label').textContent=tick.label;
     $('map-scale-bar').style.width=tick.pixels.toFixed(1)+'px';
   }
+  function measurementObjects(){
+    const ships=[state.player,state.ally,...state.enemies,...(state.allies||[]),...state.pickups];
+    const objects={};
+    for(const body of ships)if(body?.id&&body.alive!==false)
+      objects['ship:'+body.id]=body;
+    return objects;
+  }
+  function getMeasurementPoint(anchor){
+    if(!anchor)return null;
+    // Legacy free points remain displayable; all *new* points use inertial
+    // Veyra-centered coordinates or explicit object anchors.
+    if(!anchor.object&&anchor.frame!=='star')return anchor;
+    return MAP.anchorAt(anchor,STAR.planet(state.t),measurementObjects());
+  }
+  function measurementAnchor(pt,local){
+    const planet=STAR.planet(state.t);
+    const candidates=[
+      {key:'veyra',label:'Veyra',local:STAR.star(state.t),
+        hit:Math.max(8,Math.min(72,STAR.STAR_RADIUS_KM*scale()))},
+      {key:'kestrel',label:'Kestrel',local:{x:0,y:0},
+        hit:Math.max(8,Math.min(72,WORLD.radius*scale()))}
+    ];
+    for(const [key,body] of Object.entries(measurementObjects()))
+      candidates.push({key,label:body.name||body.id||key,local:body,hit:13});
+    let nearest=null,nearestPx=Infinity;
+    for(const candidate of candidates){
+      const p=toScreen(candidate.local.x,candidate.local.y);
+      const d=Math.hypot(p.x-pt.px,p.y-pt.py);
+      if(d<=candidate.hit&&d<nearestPx){nearest=candidate;nearestPx=d;}
+    }
+    return nearest?{object:nearest.key,label:nearest.label}:
+      {frame:'star',x:local.x+planet.x,y:local.y+planet.y};
+  }
   function updateRulerUI(){
     const m=state.measurement;
-    $('ruler-toggle').setAttribute('aria-pressed',String(m.enabled));
-    $('ruler-toggle').classList.toggle('selected',m.enabled);
+    const compass=m.tool==='compass';
+    $('ruler-toggle').setAttribute('aria-pressed',String(m.enabled&&!compass));
+    $('ruler-toggle').classList.toggle('selected',m.enabled&&!compass);
+    $('compass-toggle')?.setAttribute('aria-pressed',String(m.enabled&&compass));
+    $('compass-toggle')?.classList.toggle('selected',m.enabled&&compass);
     $('ruler-clear').disabled=!m.start&&!m.end;
-    const d=MAP.distance(m.start,m.end||m.hover);
-    $('ruler-distance').textContent=!m.enabled?'Ruler off':
-      !m.start?'Click first map point':d===null?'Click second map point':
-      MAP.distanceLabel(d)+(m.end?'':' · preview');
+    const a=getMeasurementPoint(m.start),b=getMeasurementPoint(m.end||m.hover);
+    const distance=MAP.distance(a,b);
+    const measure=compass?MAP.bearingLabel(MAP.bearing(a,b)):MAP.distanceLabel(distance);
+    const anchorNames=m.start?.object||m.end?.object?
+      [m.start?.label||'Point A',m.end?.label||'Point B'].join(' → ')+' · ':'';
+    const label=!m.enabled?'Tools off':!m.start?'Pick origin · snap to a body':
+      distance===null?'Pick destination':anchorNames+measure+(m.end?'':' · preview');
+    if($('ruler-distance').textContent!==label)$('ruler-distance').textContent=label;
   }
   function toggleRuler(){
-    state.measurement.enabled=!state.measurement.enabled;
-    state.measurement.hover=null;
+    const m=state.measurement;
+    m.enabled=m.tool!=='ruler'||!m.enabled;
+    m.tool='ruler';m.hover=null;
+    updateRulerUI();
+  }
+  function toggleCompass(){
+    const m=state.measurement;
+    m.enabled=m.tool!=='compass'||!m.enabled;
+    m.tool='compass';m.hover=null;
     updateRulerUI();
   }
   function clearRuler(){
@@ -1558,6 +1605,7 @@
     ctx,WORLD,ENGINE,palette,NAV,getState:()=>state,
     getViewport:()=>({W,H,dpr,starfield,encounterReady}),
     toScreen,scale,clamp,getSystem:()=>STAR,getVisuals:()=>VIS,
+    getMeasurementPoint,
     getFrameSample:point=>FRAMES.mapSample(point,state.t,!!state.systemView,STAR.planet),
     getEphemerisTarget:()=>navTarget(state.selectedNavKey),
     getSelectedContact:selectedContact
@@ -1713,6 +1761,7 @@
     $('reset-btn').addEventListener('click',reset);
     $('retry-btn')?.addEventListener('click',reset);
     $('ruler-toggle').addEventListener('click',toggleRuler);
+    $('compass-toggle').addEventListener('click',toggleCompass);
     $('ruler-clear').addEventListener('click',clearRuler);
     $('orbit-btn').addEventListener('click',()=>{state.orbitVisible=!state.orbitVisible;$('orbit-btn').classList.toggle('selected',state.orbitVisible);$('orbit-btn').setAttribute('aria-pressed',String(state.orbitVisible));});
     $('zoom-in').addEventListener('click',()=>zoomAt(1.25));
@@ -1793,7 +1842,7 @@
       const pt=coords(e);
       if(drag&&drag.id===e.pointerId){state.panX+=pt.px-drag.px;state.panY+=pt.py-drag.py;drag.px=pt.px;drag.py=pt.py;return;}
       if(state.measurement.enabled&&state.measurement.start&&!state.measurement.end){
-        state.measurement.hover=fromScreen(pt.px,pt.py);updateRulerUI();return;
+        state.measurement.hover=measurementAnchor(pt,fromScreen(pt.px,pt.py));updateRulerUI();return;
       }
       state.gimbalTarget=fromScreen(pt.px,pt.py);
       state.lastBallistic=-999;
@@ -1810,7 +1859,7 @@
       }
       if(e.button!==0)return;
       if(state.measurement.enabled){
-        e.preventDefault();chooseRulerPoint(p);return;
+        e.preventDefault();chooseRulerPoint(measurementAnchor(pt,p));return;
       }
       if(state.ended||!state.player.alive)return;
       if(e.altKey){state.waypoint={x:p.x,y:p.y};updateTargetOptions('waypoint');state.navPlan=null;logEvent('Waypoint plotted at '+p.x.toFixed(0)+', '+p.y.toFixed(0)+' km.');updateHud();return;}
