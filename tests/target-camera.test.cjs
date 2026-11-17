@@ -39,7 +39,8 @@ function cameraHarness(){
     scale:()=>Math.min(800/700,600/660)*state.zoom,
     clamp:(x,a,b)=>Math.max(a,Math.min(b,x)),
     logEvent:text=>events.push(text),updateHud:()=>{},
-    $:()=>({set textContent(value){events.push(value)}})
+    $:()=>({set textContent(value){events.push(value)},
+      classList:{toggle:()=>{}},setAttribute:()=>{}})
   };
   vm.createContext(ctx);
   vm.runInContext(extract(game,'selectedContact','updateTargetOptions'),ctx);
