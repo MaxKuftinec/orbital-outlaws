@@ -43,6 +43,7 @@
   let W = 840, H = 550, dpr = 1;
   let state;
   let persistentFlight = false, flightOnline = false, pilotLink = null;
+  let serverBurn = null;
   let encounterReady = !window.OrbitalPersistence;
   let flightHistory = [], correction = null;
   let lastFrame = performance.now(), accumulator = 0, nextHud = 0;
@@ -913,6 +914,35 @@
     const ally=state.ally;
     if(ally.fuel<rescueFuelFloor()+24){startRescueLeg('scavenge');return;}
     startRescueLeg('deliver');
+  }
+  function dispatchBurnState(){
+    if(!state?.player)return;
+    window.dispatchEvent(new CustomEvent('orbital-auto-burn-state',{
+      detail:{online:flightOnline,alive:!!state.player.alive,
+        fuel:state.player.fuel,mass:mass(state.player),
+        reserve:state.playerReserveKg,burn:serverBurn}
+    }));
+  }
+  function requestAutoBurn(event){
+    if(!persistentFlight||!flightOnline||!state.player.alive){
+      window.dispatchEvent(new CustomEvent('orbital-auto-burn-error',{
+        detail:{message:'A live controllable spacecraft is required.'}}));
+      return;
+    }
+    if(state.autopilot)abortNav('Rendezvous guidance replaced by automated thrust.');
+    state.down.clear();state.pointerThrust=false;
+    if(!pilotLink?.startBurn(event.detail)){
+      window.dispatchEvent(new CustomEvent('orbital-auto-burn-error',{
+        detail:{message:'Could not send burn command. Reconnect and retry.'}}));
+    }else{
+      logEvent('Automated burn transmitted to the authoritative flight computer.','good');
+    }
+  }
+  function abortAutoBurn(){
+    if(!pilotLink?.abortBurn()){
+      window.dispatchEvent(new CustomEvent('orbital-auto-burn-error',{
+        detail:{message:'Flight server unavailable. Burn cutoff remains under server authority.'}}));
+    }
   }
   function requestSelectedDonor(){
     if(!persistentFlight||!flightOnline){
@@ -1832,6 +1862,8 @@
     window.addEventListener('orbital-center-ship',centerOnMyShip);
     window.addEventListener('orbital-offer-fuel',donateFuelToAlly);
     window.addEventListener('orbital-set-reserve',requestReserveSetting);
+    window.addEventListener('orbital-auto-burn-engage',requestAutoBurn);
+    window.addEventListener('orbital-auto-burn-abort',abortAutoBurn);
     $('settings-btn').addEventListener('click',openSettings);
     $('settings-tab-controls').addEventListener('click',()=>settingsTab('controls'));
     $('settings-tab-frame').addEventListener('click',()=>settingsTab('frame'));
@@ -1928,7 +1960,9 @@
       onEncounter:checkpoint=>{restoreEncounter(checkpoint);encounterReady=true;},
       onState:result=>{
         const p=state.player;
+        serverBurn=result.auto_burn||null;
         reconcileFlight(p,result.state,result.clientSampleMs||performance.now());
+        dispatchBurnState();
         if(!persistentFlight && Math.hypot(p.x,p.y)>850){
           // On a first connection, include the outer launch region in the viewport.
           state.zoom=.55;state.panX=-p.x*scale()*.55;state.panY=-p.y*scale()*.55;
@@ -1953,6 +1987,16 @@
         if(!previous.captureOwned&&state.captureOwned)logEvent('Salvage Capture Rig installed · capture tolerance now 8 km/s.','good');
         state.lastBallistic=-999;updateHud();
       },
+      onBurn:result=>{
+        if(result?.auto_burn){
+          serverBurn=result.auto_burn;
+          dispatchBurnState();
+          if(result.auto_burn.status==='aligning')
+            logEvent('Server accepted burn plan · RCS alignment in progress.','good');
+          else if(result.auto_burn.status==='aborted')
+            logEvent('Server confirmed automatic burn abort.','good');
+        }
+      },
       onAssistance:result=>{
         if(result?.status==='queued')logEvent(
           result.donor?'Server assigned '+result.donor+' to deliver fuel to '+result.recipient+'.':
@@ -1961,7 +2005,9 @@
           logEvent('Transfer complete: '+result.transferred_kg.toFixed(1)+' kg sent to '+result.target+'.','good');
         updateHud();
       },
-      onError:message=>{encounterReady=true;logEvent('Flight server: '+message.slice(0,110),'danger');},
+      onError:message=>{encounterReady=true;logEvent('Flight server: '+message.slice(0,110),'danger');
+        window.dispatchEvent(new CustomEvent('orbital-auto-burn-error',{detail:{message}}));
+      },
       onConnected:online=>{
         flightOnline=online;
         if(online){
@@ -1978,6 +2024,7 @@
           logEvent('Flight server disconnected. Inputs suspended; orbit will resume from server.','danger');
         }
         window.dispatchEvent(new CustomEvent('orbital-persistence',{detail:{online}}));
+        dispatchBurnState();
       }
     });
   }
