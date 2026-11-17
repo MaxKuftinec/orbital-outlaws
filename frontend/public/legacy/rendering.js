@@ -2,7 +2,7 @@
 (function(root){
   'use strict';
   root.OrbitalRenderer={
-    create({ctx,WORLD,ENGINE,palette,NAV,getState,getViewport,toScreen,scale,clamp,getEphemerisTarget}){
+    create({ctx,WORLD,ENGINE,palette,NAV,getState,getViewport,toScreen,scale,clamp,getEphemerisTarget,getSelectedContact}){
       const TWO_PI=Math.PI*2;
       let state,W,H,dpr,starfield,encounterReady;
   function pathWorld(points,stroke,lineWidth=1,dash=[]) {
@@ -141,6 +141,54 @@
     });
     ctx.restore();
   }
+  function drawSelectedContact(){
+    const selected=getSelectedContact?.();
+    if(!selected||!Number.isFinite(selected.x)||!Number.isFinite(selected.y))return;
+    const raw=toScreen(selected.x,selected.y),margin=38;
+    const inside=raw.x>=margin&&raw.x<=W-margin&&raw.y>=margin&&raw.y<=H-margin;
+    let cx=raw.x,cy=raw.y;
+    if(!inside){
+      // Point toward objects far beyond the camera, using the screen edge.
+      const dx=raw.x-W/2,dy=raw.y-H/2;
+      const factor=Math.min((W/2-margin)/Math.max(1e-9,Math.abs(dx)),
+                            (H/2-margin)/Math.max(1e-9,Math.abs(dy)));
+      cx=W/2+dx*factor;cy=H/2+dy*factor;
+    }
+    const stroke=selected.kind==='enemy'?palette.red:selected.kind==='ally'?palette.green:
+      selected.kind==='salvage'?palette.yellow:palette.cyan;
+    ctx.save();
+    ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.shadowColor=stroke;ctx.shadowBlur=7;
+    // Unique in-game reticle: circular sight, cross ticks and four corners.
+    ctx.beginPath();ctx.arc(cx,cy,21,0,TWO_PI);
+    ctx.moveTo(cx-29,cy);ctx.lineTo(cx-17,cy);
+    ctx.moveTo(cx+17,cy);ctx.lineTo(cx+29,cy);
+    ctx.moveTo(cx,cy-29);ctx.lineTo(cx,cy-17);
+    ctx.moveTo(cx,cy+17);ctx.lineTo(cx,cy+29);
+    for(const signX of [-1,1])for(const signY of [-1,1]){
+      const x=cx+signX*34,y=cy+signY*34;
+      ctx.moveTo(x-signX*12,y);ctx.lineTo(x,y);ctx.lineTo(x,y-signY*12);
+    }
+    ctx.stroke();ctx.shadowBlur=0;
+    ctx.beginPath();ctx.arc(cx,cy,5,0,TWO_PI);ctx.stroke();
+    if(!inside){
+      const dir=Math.atan2(raw.y-H/2,raw.x-W/2);
+      ctx.translate(cx,cy);ctx.rotate(dir);ctx.fillStyle=stroke;
+      ctx.beginPath();ctx.moveTo(23,0);ctx.lineTo(10,-6);ctx.lineTo(10,6);
+      ctx.closePath();ctx.fill();
+      // Reset the arrow-local transform before positioning the text.
+      ctx.rotate(-dir);ctx.translate(-cx,-cy);
+    }
+    const range=Math.hypot(selected.x-state.player.x,selected.y-state.player.y);
+    const text=String(selected.label).slice(0,36)+' · '+range.toFixed(1)+' km'+(inside?'':' · OFFSCREEN');
+    ctx.font='bold 10px ui-monospace,monospace';ctx.textAlign='left';
+    const width=Math.min(W-16,ctx.measureText(text).width+18);
+    const labelX=clamp(cx+39,8,Math.max(8,W-width-8));
+    const labelY=clamp(cy-48,8,Math.max(8,H-25));
+    ctx.fillStyle='rgba(5,20,34,.94)';ctx.fillRect(labelX,labelY,width,22);
+    ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.strokeRect(labelX,labelY,width,22);
+    ctx.fillStyle=stroke;ctx.fillText(text,labelX+8,labelY+15,Math.max(0,width-14));
+    ctx.restore();
+  }
   function draw(){
     if(!state)return;
     ctx.setTransform(dpr,0,0,dpr,0,0);drawBackground();
@@ -154,7 +202,7 @@
     drawShots();for(const e of state.enemies)drawShip(e);drawShip(state.ally);
     for(const ally of state.allies||[])drawShip(ally);
     drawShip(state.player);
-    drawEphemeris();drawAim();drawParticles();
+    drawEphemeris();drawAim();drawParticles();drawSelectedContact();
   }
 
       return {draw(){

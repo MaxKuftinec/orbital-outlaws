@@ -5,7 +5,7 @@ const EMPTY:NavigationView = {
   locked:true,phase:'LOCKED',deltaV:'—',eta:'—',fuel:'—',status:'No plan',quick:'COMPUTER LOCKED',
   metrics:'Pick a contact · press C to calculate',engageText:'BUY NAV 60¤',
   engageDisabled:false,abortDisabled:true,donateDisabled:true,requestAllyDisabled:true,
-  requestDonorDisabled:true,requestDonorText:'Select an ally to request fuel',allyInfo:'Select a friendly spacecraft',assistInfo:'No active transfers',selected:'',reserveKg:36
+  requestDonorDisabled:true,requestDonorText:'Select an ally to request fuel',allyInfo:'Select a friendly spacecraft',assistInfo:'No active transfers',selected:'',reserveKg:36,focusDisabled:true,followTarget:false
 }
 export default defineComponent({
   name:'NavigationPanel',
@@ -39,6 +39,8 @@ export default defineComponent({
     offerFuel(){window.dispatchEvent(new CustomEvent('orbital-offer-fuel'))},
     requestAllyAssistance(){window.dispatchEvent(new CustomEvent('orbital-request-ally-assistance'))},
     requestSelectedDonor(){window.dispatchEvent(new CustomEvent('orbital-request-selected-donor'))},
+    focusTarget(){window.dispatchEvent(new CustomEvent('orbital-focus-target'))},
+    followTarget(){window.dispatchEvent(new CustomEvent('orbital-follow-target'))},
     beginReserveEdit(){this.editingReserve=true},
     editReserve(e:Event){this.reserveDraft=(e.target as HTMLInputElement).value},
     finishReserveEdit(){
@@ -79,6 +81,13 @@ export default defineComponent({
         <button type="button" id="nav-abort" class="small-btn" :disabled="navigation.abortDisabled">ABORT</button>
       </div>
       <div class="nav-command-readout" id="nav-quick-metrics" aria-live="polite">{{ navigation.metrics }}</div>
+      <div class="nav-command-camera-actions">
+        <button type="button" class="small-btn" id="nav-focus-target"
+                :disabled="navigation.focusDisabled" @click="focusTarget" title="Center and zoom onto this target">⌖ Focus selected</button>
+        <button type="button" class="small-btn" id="nav-follow-target"
+                :disabled="navigation.focusDisabled" :aria-pressed="navigation.followTarget"
+                @click="followTarget" title="Toggle camera tracking for the selected moving target">◎ {{ navigation.followTarget?'Unfollow':'Follow' }}</button>
+      </div>
       <div class="nav-console-reserve reserve-setting">
         <label for="nav-console-fuel-reserve-kg">Protected fuel reserve</label>
         <div><input id="nav-console-fuel-reserve-kg" type="number" min="0" max="200" step="1"
@@ -100,6 +109,14 @@ export default defineComponent({
       <span id="autopilot-chip" class="status-pill">{{ navigation.locked?'LOCKED':'ONLINE' }}</span>
     </div>
     <div class="mini-note">The computer searches departure and arrival windows while protecting a fuel reserve. Opposite-sense transfers can be expensive.</div>
+    <div class="nav-command-camera-actions">
+      <button type="button" class="small-btn" :disabled="navigation.focusDisabled"
+              @click="focusTarget" title="Recenter and zoom to selected contact">⌖ Focus selected</button>
+      <button type="button" class="small-btn" :disabled="navigation.focusDisabled"
+              :aria-pressed="navigation.followTarget" @click="followTarget">
+        ◎ {{ navigation.followTarget?'Unfollow':'Follow' }}
+      </button>
+    </div>
     <div class="metric-row"><span>Estimated total Δv</span><strong id="nav-dv">{{ navigation.deltaV }}</strong></div>
     <div class="metric-row"><span>Arrival in</span><strong id="nav-eta">{{ navigation.eta }}</strong></div>
     <div class="metric-row"><span>Propellant estimate</span><strong id="nav-fuel">{{ navigation.fuel }}</strong></div>

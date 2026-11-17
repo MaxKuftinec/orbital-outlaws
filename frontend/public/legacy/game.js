@@ -1338,6 +1338,7 @@
     }}));
     window.dispatchEvent(new CustomEvent('orbital-navigation-state',{detail:{
       locked:!state.navOwned,phase:state.autopilot?.phase||'IDLE',reserveKg:state.playerReserveKg,
+      focusDisabled:!selected,followTarget:!!selected&&state.followTarget,
       deltaV:state.navPlan?state.navPlan.dv.toFixed(2)+' km/s':'—',
       eta:state.navPlan?state.navPlan.eta.toFixed(0)+' s':'—',
       fuel:state.navPlan?SAFE.requiredFuel(mass(p),state.navPlan.dv,exhaustKmS).toFixed(1)+' kg (ideal)':'—',
@@ -1581,6 +1582,8 @@
     });
     window.addEventListener('orbital-request-ally-assistance',requestSelectedAllyAssistance);
     window.addEventListener('orbital-request-selected-donor',requestSelectedDonor);
+    window.addEventListener('orbital-focus-target',()=>focusSelectedTarget(false));
+    window.addEventListener('orbital-follow-target',toggleFollowTarget);
     window.addEventListener('orbital-offer-fuel',donateFuelToAlly);
     window.addEventListener('orbital-set-reserve',requestReserveSetting);
     $('settings-btn').addEventListener('click',openSettings);

@@ -341,3 +341,21 @@ log for the specific server error.
 The large **REQUEST FUEL ASSISTANCE** button (H) remains automatic:
 the server chooses an available donor and may ask another available ally
 for follow-up fuel if your ship is still short.
+
+
+### Focus and follow distant objects (camera-only controls)
+
+Choose a wreck, salvage parcel, hostile, friendly or waypoint in Navigation
+(or click one on the orbital map). **⌖ Focus** in the map toolbar or
+**⌖ Focus selected** inside the Navigation console centers the camera on
+that contact and zooms to at least 2.8×. **◎ Follow** continuously follows
+a moving selection until toggled off, the target disappears, or you begin
+dragging the map. Zoom buttons and wheel continue to work independently.
+A colored round/corner targeting scope marks the selected navigation contact
+on the canvas; when it is outside the visible map, an edge reticle points
+toward its direction and reports its current distance from KESTREL-7.
+The map also displays a NAV TARGET label separately from the weapon
+TARGET LOCK readout.
+
+These camera controls do not require a paid technology, move spacecraft,
+use propellant, engage autopilot, or change weapon targeting.
