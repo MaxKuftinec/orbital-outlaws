@@ -104,6 +104,7 @@ export default defineComponent({
       const detail = (event as CustomEvent<GuidanceEvent>).detail
       if (!detail) return
       this.online = detail.online
+      if (!detail.online) this.pending = false
       this.alive = detail.alive
       if (finite(detail.fuel)) this.fuel = detail.fuel
       if (finite(detail.mass)) this.mass = detail.mass
@@ -126,6 +127,7 @@ export default defineComponent({
       this.feedback = ''
     },
     onServerError(event: Event) {
+      if (!this.pending) return
       this.feedback = String((event as CustomEvent<{message?:string}>).detail?.message || 'Flight command rejected.')
       this.pending = false
     },
