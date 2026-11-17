@@ -146,3 +146,40 @@ sector stores the grapple, heat, motor work, and failure events. The cockpit
 and local fallback show the reel progressing in time, instead of granting
 instant salvage. Rope length, braking distance, thermal capacity, accumulated
 fatigue and a final low-speed capture condition determine success and failure.
+
+
+## Star–planet frame / first multi-body implementation (v0.20)
+
+The canonical persistence frame remains **planet-relative with nonrotating
+axes**, so existing players, NPCs and loot keep their stored coordinates.
+`backend/app/star_system.py` provides the primary star's gravitational
+parameter and Kestrel's circular analytic orbit. A position in the
+star-centered visual frame is
+
+```
+r_star_centered = r_planet_relative + R_Kestrel(t)
+```
+
+The restricted three-body acceleration in planet-relative coordinates is
+
+```
+a(r,t) = -mu_Kestrel*r/|r|^3
+         -mu_Primary*(r-S(t))/|r-S(t)|^3
+         -mu_Primary*S(t)/|S(t)|^3
+S(t) = -R_Kestrel(t)  (star expressed relative to planet)
+```
+
+The last term subtracts the star's acceleration on Kestrel. It is
+essential: without it, normal local orbits would be destroyed by the
+large common-mode stellar acceleration. For performance the server uses
+a symmetric stellar-tide kick around its preexisting exact Kepler drift
+and thrust integrators; direct finite player burns incorporate the tide
+inside the substep force evaluation. The frontend applies the same
+differential acceleration in its Verlet predictor. Existing
+planet-only transfer solvers do NOT yet solve a general three-body
+rendezvous, and must not be used to navigate to the star.
+
+`GET /system` provides live star-centered ephemeris and constants; UI
+also has the equivalent deterministic client model, so browser-only
+rendering remains possible. The system map changes only the camera
+coordinate transform, never ship coordinates in the database.

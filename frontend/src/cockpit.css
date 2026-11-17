@@ -224,3 +224,16 @@
   border:1px solid #376c8c;background:#11344b;color:#a7e9fa;font-weight:800;letter-spacing:.25px}
 .ship-center-btn[aria-pressed="true"]{color:#b4f7e5;background:#10433a;border-color:#4cb6a5}
 .ship-center-btn:hover{background:#1b516e}
+
+/* Star-system map: compact controls are visible without purchasing upgrades. */
+.arena-actions #system-map-btn,.arena-actions #planet-map-btn{
+  white-space:nowrap;letter-spacing:.01em
+}
+.arena-actions #system-map-btn[aria-pressed="true"],
+.arena-actions #planet-map-btn[aria-pressed="true"]{
+  border-color:#e5bd6d;color:#ffe2a5;background:#45331f
+}
+@media(max-width:800px){
+ .arena-actions{flex-wrap:wrap;row-gap:5px}
+ .arena-actions #system-map-btn,.arena-actions #planet-map-btn{font-size:10px}
+}

@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from .models import Base, World, Entity, Event, FlightControl, PlayerProgress, PlayerSettings, SalvageClaim, EncounterSnapshot
 from .physics import State, propagate, orbital_envelope, apply_impulse
 from .flight import advance, LEASE_S
+from .star_system import propagate_local, system_info
 from .universe import new_sector, advance_sector, player_fire as fire_projectile, incoming_ship, event as sector_event
 from .arrival_guidance import ACTIVE_ARRIVAL
 
@@ -30,6 +31,13 @@ class WorldStore:
 
     def now(self,world: World) -> float:
         return max(0.,time.time()-world.epoch_utc)
+
+    def system_view(self):
+        """Live primary-star and planet ephemeris in star-centered coordinates."""
+        with self.sessions() as db:
+            world=db.get(World,'kestrel')
+            if not world:raise LookupError('World not found')
+            return system_info(self.now(world))
 
     def seed_entity(self,world_id: str,entity_id: str,state: State,kind: str='ship'):
         with self.sessions.begin() as db:
@@ -492,7 +500,7 @@ class WorldStore:
             flight = db.get(FlightControl,entity_id)
             now = max(self.now(world),entity.checkpoint_s)
             current = advance(State(**entity.checkpoint),entity.checkpoint_s,now,
-                              world.mu,self._controls(flight),flight.expires_s)
+                              world.mu,self._controls(flight),flight.expires_s,system=True)
             peri,apo = orbital_envelope(current,world.mu)
             entity.checkpoint_s=now
             entity.checkpoint=current.as_dict()
@@ -527,7 +535,8 @@ class WorldStore:
             base=State(**event.after);base_t=event.at_s
             control=event.payload.get('control')
             expires=event.payload.get('expires_s',0)
-        return world,entity,at,advance(base,base_t,at,world.mu,control,expires)
+        return world,entity,at,advance(base,base_t,at,world.mu,control,expires,
+                                       system=world_id=='kestrel')
 
     def get_entity(self,world_id: str,entity_id: str,at_s: float|None=None):
         with self.sessions() as db:
@@ -575,7 +584,9 @@ class WorldStore:
             entity=db.scalars(select(Entity).where(and_(Entity.id==entity_id,Entity.world_id==world_id)).with_for_update()).first()
             if not entity:raise LookupError('Entity not found')
             at=max(self.now(world),entity.checkpoint_s)
-            before=propagate(State(**entity.checkpoint),at-entity.checkpoint_s,world.mu)
+            before=(propagate_local(State(**entity.checkpoint),at-entity.checkpoint_s,
+                                     world.mu,entity.checkpoint_s) if world_id=='kestrel' else
+                    propagate(State(**entity.checkpoint),at-entity.checkpoint_s,world.mu))
             after=apply_impulse(before,dvx,dvy,320.,reserve_kg)
             peri,apo=orbital_envelope(after,world.mu)
             entity.checkpoint_s=at

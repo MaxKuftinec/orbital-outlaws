@@ -178,6 +178,12 @@ def respawn_dev_pilot(pilot_id: str):
         raise HTTPException(409, str(exc)) from exc
 
 
+@app.get('/system')
+def system_view():
+    """Read-only star-centered ephemeris for the system map."""
+    return store().system_view()
+
+
 @app.get('/')
 def health():
     return {'status':'ok','architecture':'lazy-orbits','authority':'sector-authoritative'}

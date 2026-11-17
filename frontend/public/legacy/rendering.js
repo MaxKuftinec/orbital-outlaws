@@ -2,7 +2,7 @@
 (function(root){
   'use strict';
   root.OrbitalRenderer={
-    create({ctx,WORLD,ENGINE,palette,NAV,getState,getViewport,toScreen,scale,clamp,getEphemerisTarget,getSelectedContact}){
+    create({ctx,WORLD,ENGINE,palette,NAV,getState,getViewport,toScreen,scale,clamp,getEphemerisTarget,getSelectedContact,getSystem}){
       const TWO_PI=Math.PI*2;
       let state,W,H,dpr,starfield,encounterReady;
   function pathWorld(points,stroke,lineWidth=1,dash=[]) {
@@ -17,14 +17,49 @@
     g.addColorStop(0,'#11283b');g.addColorStop(.5,'#0a1a2b');g.addColorStop(1,'#060e18');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
     for(const star of starfield){ctx.fillStyle=`rgba(178,209,229,${star.alpha})`;ctx.fillRect(star.x,star.y,star.size,star.size);}
     ctx.save();ctx.lineWidth=1;const center=toScreen(0,0);const s=scale();
+    // The map uses star-centered coordinates in system mode: Kestrel moves
+    // around a fixed primary star and the orbit ring is drawn in that frame.
+    if(state.systemView){
+      const star=getSystem().star(state.t),focus=toScreen(star.x,star.y);
+      const ring=getSystem().ORBIT_RADIUS_KM*s;
+      if(ring<Math.max(W,H)*3){
+        ctx.setLineDash([5,8]);ctx.lineWidth=1.5;ctx.strokeStyle='#4f759399';
+        ctx.beginPath();ctx.arc(focus.x,focus.y,ring,0,TWO_PI);ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
     ctx.strokeStyle='#183149';ctx.setLineDash([3,7]);
-    for(let r=150;r<=1050;r+=100){ctx.beginPath();ctx.ellipse(center.x,center.y,r*s,r*s,0,0,TWO_PI);ctx.stroke();
+    for(let r=150;r<=1050&&s>.025;r+=100){ctx.beginPath();ctx.ellipse(center.x,center.y,r*s,r*s,0,0,TWO_PI);ctx.stroke();
       if(r<=550){ctx.fillStyle='#54778e';ctx.font='10px monospace';ctx.fillText(r+'km',center.x+r*s+4,center.y-4);}}
     ctx.setLineDash([]);ctx.strokeStyle='#25445c';ctx.beginPath();ctx.moveTo(0,center.y);ctx.lineTo(W,center.y);ctx.moveTo(center.x,0);ctx.lineTo(center.x,H);ctx.stroke();ctx.restore();
     drawCentralBody(center.x,center.y,s);
+    drawParentStar();
+  }
+  function drawParentStar(){
+    const system=getSystem();
+    if(!system)return;
+    const sun=system.star(state.t);
+    const p=toScreen(sun.x,sun.y),r=Math.max(5,system.STAR_RADIUS_KM*scale());
+    if(p.x< -r*3||p.x>W+r*3||p.y< -r*3||p.y>H+r*3)return;
+    ctx.save();
+    const glow=ctx.createRadialGradient(p.x,p.y,r*.5,p.x,p.y,r*3);
+    glow.addColorStop(0,'rgba(255,205,103,.68)');
+    glow.addColorStop(.5,'rgba(255,169,58,.19)');
+    glow.addColorStop(1,'rgba(255,130,55,0)');
+    ctx.fillStyle=glow;ctx.beginPath();ctx.arc(p.x,p.y,r*3,0,TWO_PI);ctx.fill();
+    const core=ctx.createRadialGradient(p.x-r*.35,p.y-r*.32,r*.07,p.x,p.y,r);
+    core.addColorStop(0,'#fff5c6');core.addColorStop(.48,'#ffdf7f');
+    core.addColorStop(.82,'#ffa63f');core.addColorStop(1,'#d76532');
+    ctx.fillStyle=core;ctx.beginPath();ctx.arc(p.x,p.y,r,0,TWO_PI);ctx.fill();
+    ctx.strokeStyle='#fff0b388';ctx.lineWidth=1;
+    ctx.beginPath();ctx.arc(p.x,p.y,r,0,TWO_PI);ctx.stroke();
+    ctx.fillStyle='#ffe4a4';ctx.textAlign='center';
+    ctx.font='bold 11px ui-monospace,monospace';
+    ctx.fillText('KESTREL PRIMARY',p.x,p.y+r+19);
+    ctx.textAlign='left';ctx.restore();
   }
   function drawCentralBody(x,y,s){
-    const R=WORLD.radius*s;
+    const R=Math.max(state.systemView?3:0,WORLD.radius*s);
     ctx.save();
     let halo=ctx.createRadialGradient(x,y,R*.1,x,y,R*2.65);
     halo.addColorStop(0,'rgba(255,173,87,.35)');halo.addColorStop(.55,'rgba(250,142,64,.10)');halo.addColorStop(1,'rgba(250,142,64,0)');
@@ -119,7 +154,7 @@
   function drawEphemeris(){
     if(!state.ephemerisOwned||!state.ephemerisVisible)return;
     const target=getEphemerisTarget();
-    if(!target?.alive)return;
+    if(!target?.alive||target.type==='star'||target.type==='planet')return;
     const now=performance.now();
     if(!state.ephemerisCache||state.ephemerisCache.key!==target.id||
        now-state.ephemerisCache.ms>500){
@@ -155,7 +190,7 @@
       cx=W/2+dx*factor;cy=H/2+dy*factor;
     }
     const stroke=selected.kind==='enemy'?palette.red:selected.kind==='ally'?palette.green:
-      selected.kind==='salvage'?palette.yellow:palette.cyan;
+      selected.kind==='salvage'||selected.kind==='star'?palette.yellow:palette.cyan;
     ctx.save();
     ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.shadowColor=stroke;ctx.shadowBlur=7;
     // Unique in-game reticle: circular sight, cross ticks and four corners.

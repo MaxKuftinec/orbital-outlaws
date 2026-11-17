@@ -18,7 +18,8 @@
   const SAFE = window.OrbitalSafety;
   const ARRIVAL = window.OrbitalArrival;
   const ATTITUDE=window.OrbitalAttitude;
-  if(!NAV||!BALL||!COLL||!SAFE||!ARRIVAL||!ATTITUDE)throw new Error('Simulation modules missing');
+  const STAR=window.OrbitalStarSystem;
+  if(!NAV||!BALL||!COLL||!SAFE||!ARRIVAL||!ATTITUDE||!STAR)throw new Error('Simulation modules missing');
   // 1 world distance unit = 1 km; velocities in km/s. Engines are futuristic.
   const ENGINE=Object.freeze({dryKg:900,propellantKg:200,thrustN:1600000,flowKgS:5,rcsN:2500,rcsFlowKgS:.04,leverM:7,shipLengthM:14,gimbalMax:28*Math.PI/180});
   const exhaustKmS=ENGINE.thrustN/ENGINE.flowKgS/1000;
@@ -80,7 +81,8 @@
   function escapeHtml(str) { return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
   function reset() {
     if(persistentFlight&&state){
-      state.followTarget=false;state.followPlayer=false;state.panX=0;state.panY=0;state.zoom=1;updateZoom();
+      state.followTarget=false;state.followPlayer=false;state.systemView=false;
+      state.panX=0;state.panY=0;state.zoom=1;updateZoom();
       logEvent('View recentered; live encounter and pilot remain unchanged.','good');
       return;
     }
@@ -98,7 +100,7 @@
     state = {t:0, player, ally, allies:[], enemies:[e1,e2], shots:[], pickups:[
       newPickup(260,-0.42,'fuel',28), newPickup(250,-1.20,'credits',24), newPickup(330,-2.42,'ammo',16),newPickup(312,0.75,'fuel',32),newPickup(365,1.7,'credits',30),newPickup(295,1.1,'parts',8)
     ], particles:[], events:[], down:new Set(), mouseTarget:null, targetId:e1.id, aimMode:'locked', zoom:1,
-    orbitVisible:true, ephemerisVisible:true, selectedNavKey:'', followTarget:false, followPlayer:false, predictive:false, trajectoryIntel:false, ephemerisOwned:false, captureOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
+    orbitVisible:true, ephemerisVisible:true, selectedNavKey:'', systemView:false, followTarget:false, followPlayer:false, predictive:false, trajectoryIntel:false, ephemerisOwned:false, captureOwned:false, ballistic:null, lastBallistic:-999, reinforcements:false, navOwned:false, navPlan:null, autopilot:null, rescue:null, waypoint:null, panX:0,panY:0, pointerThrust:false, repairing:false, ended:false, speed:1, nextEnemySpawn:75,
     collisionCooldown:new Map(), playerKills:0, recordSurvival:0, predicted:[], lastPrediction:-999, dangerPrediction:false,
     playerReserveKg:storedReserve(),captureTether:null};
     if(oldTech){Object.assign(state,oldTech);player.credits=oldPilot.credits;}
@@ -222,17 +224,15 @@
     state.particles=state.particles.filter(p=>p.life>0);
   }
 
-  function accel(x,y) {
-    const r2 = Math.max(x*x+y*y, 10);
-    const f = -WORLD.mu / (r2 * Math.sqrt(r2));
-    return {x:x*f,y:y*f};
+  function accel(x,y,at=state.t) {
+    return STAR.acceleration(x,y,at);
   }
   function stepBody(body, dt, extra=null) {
-    const a = accel(body.x,body.y);
+    const a = accel(body.x,body.y,state.t-dt);
     const ax = a.x + (extra?.x || 0), ay = a.y + (extra?.y || 0);
     const halfVx = body.vx + .5*dt*ax, halfVy = body.vy + .5*dt*ay;
     body.x += halfVx*dt; body.y += halfVy*dt;
-    const a2 = accel(body.x,body.y);
+    const a2 = accel(body.x,body.y,state.t);
     body.vx = halfVx + .5*dt*(a2.x + (extra?.x || 0));
     body.vy = halfVy + .5*dt*(a2.y + (extra?.y || 0));
   }
@@ -764,6 +764,7 @@
     else logEvent('No living targets in range.');
   }
   function navKeyExists(key){
+    if(key==='star'||key==='planet')return true;
     if(key==='waypoint')return !!state.waypoint;
     if(key?.startsWith('pickup:'))return state.pickups.some(p=>p.id===key.slice(7)&&p.alive);
     if(key?.startsWith('enemy:'))return state.enemies.some(p=>p.id===key.slice(6)&&p.alive);
@@ -772,6 +773,9 @@
     return false;
   }
   function navTarget(key){
+    if(key==='star')return STAR.star(state.t);
+    if(key==='planet')return {id:'kestrel',name:'KESTREL',type:'planet',
+      alive:true,x:0,y:0,vx:0,vy:0,fixed:true};
     if(key==='waypoint'&&state.waypoint)return {...state.waypoint,fixed:true,orbitSign:state.player.x*state.player.vy-state.player.y*state.player.vx>=0?1:-1};
     if(key?.startsWith('pickup:'))return state.pickups.find(p=>p.id===key.slice(7)&&p.alive)||null;
     if(key?.startsWith('enemy:'))return state.enemies.find(p=>p.id===key.slice(6)&&p.alive)||null;
@@ -782,7 +786,8 @@
   function selectedContact(){
     const key=state.selectedNavKey,target=navTarget(key);
     if(!target)return null;
-    const kind=key==='waypoint'?'waypoint':key.startsWith('pickup:')?'salvage':
+    const kind=key==='star'?'star':key==='planet'?'planet':
+      key==='waypoint'?'waypoint':key.startsWith('pickup:')?'salvage':
       key.startsWith('enemy:')?'enemy':'ally';
     const label=kind==='waypoint'?'WAYPOINT':target.name||
       ((target.type==='wreck'?'WRECK':String(target.type||'SALVAGE').toUpperCase())+' · '+target.id);
@@ -793,7 +798,9 @@
     const entries=[...state.pickups.filter(p=>p.alive).map(p=>({key:'pickup:'+p.id,text:(p.type==='wreck'?'Wreck':'Salvage '+p.type)+' · '+p.id.slice(-4)})),
       ...state.enemies.filter(e=>e.alive).map(e=>({key:'enemy:'+e.id,text:e.name+' · hostile'})),
       ...(state.ally.alive?[{key:'ally',text:'AEGIS-01 · friendly escort'}]:[]),
-      ...(state.allies||[]).filter(a=>a.alive).map(a=>({key:'ally:'+a.id,text:a.name+' · friendly visitor'}))];
+      ...(state.allies||[]).filter(a=>a.alive).map(a=>({key:'ally:'+a.id,text:a.name+' · friendly visitor'})),
+      {key:'star',text:'✦ Kestrel Primary · parent star'},
+      {key:'planet',text:'◎ Kestrel · planet'}];
     if(state.waypoint)entries.unshift({key:'waypoint',text:'Map waypoint (fixed location)'});
     const selected=entries.some(item=>item.key===previous)?previous:entries[0]?.key||'';
     state.selectedNavKey=selected;
@@ -1004,6 +1011,10 @@
     if(state.ended)return null;
     const key=state.selectedNavKey,target=navTarget(key);
     if(!target){state.navPlan=null;logEvent('Select a valid target before planning.');return null;}
+    if(key==='star'||key==='planet'){
+      state.navPlan=null;state.navFailure='Interplanetary guidance is not yet supported. System map and manual flight are available.';
+      logEvent(state.navFailure,'danger');updateHud();return null;
+    }
     const reserve=state.playerReserveKg;
     const usableFuel=Math.max(0,state.player.fuel-reserve);
     let diagnostics=null;
@@ -1397,14 +1408,42 @@
       }
     }}));
   }
+  function cameraOffset(){
+    return state.systemView?STAR.planet(state.t):{x:0,y:0};
+  }
   function centerCameraOn(target){
-    state.panX=-target.x*scale();
-    state.panY=-target.y*scale();
+    const o=cameraOffset(),s=scale();
+    state.panX=-(target.x+o.x)*s;
+    state.panY=-(target.y+o.y)*s;
+  }
+  function showSystemMap(){
+    state.systemView=true;
+    const baseScale=Math.min(W/700,H/660);
+    state.zoom=clamp(.65*Math.min(W,H)/(STAR.ORBIT_RADIUS_KM*baseScale),.0001,6);
+    const planet=STAR.planet(state.t),s=scale();
+    // Center the initial system view between its star and planet.
+    state.panX=-planet.x*s/2;state.panY=-planet.y*s/2;
+    state.followPlayer=false;state.followTarget=false;
+    updateZoom();updateHud();
+    logEvent('System map: KESTREL PRIMARY and orbiting KESTREL. Distances are in km.','good');
+  }
+  function showPlanetMap(){
+    state.systemView=false;state.followPlayer=false;state.followTarget=false;
+    state.zoom=1;state.panX=0;state.panY=0;
+    updateZoom();updateHud();
+    logEvent('Returned to Kestrel planetary view.','good');
   }
   function focusSelectedTarget(follow=false){
     const target=selectedContact();
     if(!target){logEvent('Select a live navigation target before focusing the camera.');return;}
-    state.zoom=clamp(Math.max(state.zoom,2.8),.35,6);
+    if(target.kind==='star'){
+      state.systemView=true;
+      state.zoom=clamp(.65*Math.min(W,H)/(STAR.ORBIT_RADIUS_KM*Math.min(W/700,H/660)),.0001,6);
+    }else if(target.kind==='planet'){
+      state.systemView=false;state.zoom=1.8;
+    }else{
+      state.zoom=clamp(Math.max(state.zoom,2.8),.0001,6);
+    }
     state.followTarget=follow;state.followPlayer=false;
     centerCameraOn(target);updateZoom();
     logEvent((follow?'Camera following ':'Camera focused on ')+target.label+
@@ -1426,12 +1465,19 @@
     logEvent('Camera centered on KESTREL-7 · tracking your spacecraft. Drag to release camera follow.','good');
     updateHud();
   }
-  function updateZoom(){$('zoom-level').textContent=state.zoom.toFixed(2)+'×';}
+  function updateZoom(){
+    $('zoom-level').textContent=(state.zoom<.01?state.zoom.toExponential(2):state.zoom.toFixed(2))+'×';
+    $('system-map-btn').classList.toggle('selected',!!state.systemView);
+    $('system-map-btn').setAttribute('aria-pressed',String(!!state.systemView));
+    $('planet-map-btn').classList.toggle('selected',!state.systemView);
+    $('planet-map-btn').setAttribute('aria-pressed',String(!state.systemView));
+  }
   function zoomAt(factor,px=W/2,py=H/2){
     const world=fromScreen(px,py);
-    state.zoom=clamp(state.zoom*factor,.35,6);
-    state.panX=px-W/2-world.x*scale();
-    state.panY=py-H/2-world.y*scale();
+    state.zoom=clamp(state.zoom*factor,.0001,6);
+    const offset=cameraOffset();
+    state.panX=px-W/2-(world.x+offset.x)*scale();
+    state.panY=py-H/2-(world.y+offset.y)*scale();
     updateZoom();
   }
   function fitCanvas(){
@@ -1444,12 +1490,18 @@
     for(let i=0;i<150;i++)starfield.push({x:Math.random()*W,y:Math.random()*H,size:rand(.3,1.3),alpha:rand(.12,.55)});
   }
   function scale(){return Math.min(W/700,H/660)*state.zoom;}
-  function toScreen(x,y){const s=scale();return {x:W/2 + state.panX+x*s,y:H/2+state.panY+y*s};}
-  function fromScreen(x,y){const s=scale();return {x:(x-W/2-state.panX)/s,y:(y-H/2-state.panY)/s};}
+  function toScreen(x,y){
+    const s=scale(),offset=cameraOffset();
+    return {x:W/2+state.panX+(x+offset.x)*s,y:H/2+state.panY+(y+offset.y)*s};
+  }
+  function fromScreen(x,y){
+    const s=scale(),offset=cameraOffset();
+    return {x:(x-W/2-state.panX)/s-offset.x,y:(y-H/2-state.panY)/s-offset.y};
+  }
   const renderer=window.OrbitalRenderer.create({
     ctx,WORLD,ENGINE,palette,NAV,getState:()=>state,
     getViewport:()=>({W,H,dpr,starfield,encounterReady}),
-    toScreen,scale,clamp,getEphemerisTarget:()=>navTarget(state.selectedNavKey),
+    toScreen,scale,clamp,getSystem:()=>STAR,getEphemerisTarget:()=>navTarget(state.selectedNavKey),
     getSelectedContact:selectedContact
   });
   function draw(){
@@ -1588,6 +1640,8 @@
     document.querySelectorAll('[data-thrust]').forEach(b=>hold(b,b.dataset.thrust));hold($('fire-btn'),'fire');hold($('repair-btn'),'repair');
     $('reset-btn').addEventListener('click',reset);
     $('retry-btn')?.addEventListener('click',reset);
+    $('system-map-btn').addEventListener('click',showSystemMap);
+    $('planet-map-btn').addEventListener('click',showPlanetMap);
     $('orbit-btn').addEventListener('click',()=>{state.orbitVisible=!state.orbitVisible;$('orbit-btn').classList.toggle('selected',state.orbitVisible);$('orbit-btn').setAttribute('aria-pressed',String(state.orbitVisible));});
     $('zoom-in').addEventListener('click',()=>zoomAt(1.25));
     $('zoom-out').addEventListener('click',()=>zoomAt(1/1.25));
@@ -1691,7 +1745,20 @@
         updateHud();return;
       }
       for(const pickup of state.pickups)if(pickup.alive){const d=magnitude(p.x-pickup.x,p.y-pickup.y);if(d<Math.max(17,19/scale())&&d<dist){dist=d;candidate=pickup;}}
-      if(candidate&&candidate.type){updateTargetOptions('pickup:'+candidate.id);state.navPlan=null;logEvent('Navigation target selected: '+candidate.type+'.');return;}
+      if(candidate&&candidate.type){updateTargetOptions('pickup:'+candidate.id);state.navPlan=null;logEvent('Navigation target selected: '+candidate.type+'.');updateHud();return;}
+      // Pick celestial bodies with a SCREEN-space hit radius at system scale.
+      // Do not let a star-map click accidentally become a gun-aim command.
+      if(state.systemView){
+        const sun=STAR.star(state.t),sunPt=toScreen(sun.x,sun.y);
+        const kestrelPt=toScreen(0,0);
+        const nearSun=Math.hypot(pt.px-sunPt.x,pt.py-sunPt.y)<Math.max(20,STAR.STAR_RADIUS_KM*scale());
+        const nearPlanet=Math.hypot(pt.px-kestrelPt.x,pt.py-kestrelPt.y)<16;
+        if(nearSun||nearPlanet){
+          updateTargetOptions(nearSun?'star':'planet');state.navPlan=null;
+          logEvent((nearSun?'KESTREL PRIMARY':'KESTREL')+' selected in the system map.','good');
+          updateHud();return;
+        }
+      }
       e.preventDefault();state.aimMode='manual';state.mouseTarget=p;state.gimbalTarget=p;state.lastBallistic=-999;logEvent('Manual gun aim: curved shot path shown. Hold SPACE to fire.');updateHud();
     });
     function endPointer(e){if(drag&&drag.id===e.pointerId)drag=null;if(state.pointerThrust){state.pointerThrust=false;state.down.delete('main');}}

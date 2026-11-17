@@ -375,3 +375,49 @@ released. Autopilot now uses a common braking-aware angular-rate controller
 for both local movement and server flight commands, with a 0.55 rad/s speed
 limit rather than the previous 1.9 rad/s cap; dynamic rendezvous accuracy
 still depends on trajectory replanning and finite-burn planning.
+
+
+## v0.20 — Kestrel Primary: first star–planet system
+
+**✦ System map** above the canvas switches from a planet-relative camera to a
+**star-centered** system view. KESTREL PRIMARY stays fixed on the system map,
+while KESTREL moves along a circular, analytically calculated stellar orbit.
+**◎ Planet view** returns to the familiar Kestrel-local encounter. Both objects
+can be selected on the map or in Navigation; **⌖ Focus** and **◎ Follow** work
+with these celestial contacts, while the existing **CENTER ON MY SHIP** works
+from either frame. Zooming and panning never spend fuel or change velocity.
+
+This is not a background-only star. Both authoritative backend and the browser
+simulate the primary's **differential gravitational acceleration** on spacecraft,
+NPCs, salvage and projectiles. Kestrel itself follows a circular Keplerian
+ephemeris; the existing ship coordinates are **Kestrel-relative inertial
+coordinates** with star gravity minus the planet's common star acceleration.
+Thus all previous player saves and sectors retain their coordinate meanings.
+
+| Star system parameter | Initial value |
+| --- | --- |
+| Parent | KESTREL PRIMARY, gravitational parameter 2.0 × 10⁹ km³/s² |
+| Kestrel planet | Gravitational parameter 310,000 km³/s² |
+| Planetary orbit radius | 160,000 km |
+| Planet orbital period | ~8,992 seconds (2.50 hours of game time) |
+| Planetary Hill radius, approximate | ~5,959 km |
+| Star radius (game scale) | 4,500 km |
+
+The backend exposes **GET `/system`** with the current star-centered
+positions/velocities, orbit period and approximate Hill radius. There is no
+schema migration or player-save reset. Local flight and live server flight
+share the same star/gravity constants.
+
+**Scope / realism:** This first version is a planar *restricted three-body*
+model: the star does not wobble around the system barycenter, the planet
+follows a prescribed circular Kepler orbit, and there is no orbit
+precession caused by the spacecraft's negligible mass. The authoritative
+stellar tide is split around existing planet-centric integrations; very
+long offline catch-up is approximate. Existing rendezvous and NPC orbital
+planners still use **planet-only Kepler** projections, so their transfer
+predictions grow unreliable near/outside Kestrel's Hill sphere. A celestial
+body is deliberately **not** an autopilot rendezvous destination yet:
+selecting it allows inspection/camera tracking, but requesting a
+star/planet transfer reports that interplanetary guidance is unsupported.
+Precise interplanetary transfers and multiple-system sector streaming are
+future work.

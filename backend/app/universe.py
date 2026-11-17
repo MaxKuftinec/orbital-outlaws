@@ -6,6 +6,8 @@ they never submit NPC positions, damage or rewards.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
+from .star_system import stellar_tide, star_collision
 import secrets
 from .physics import State, propagate, apply_impulse, orbital_envelope
 from .npc_guidance import plan_transfer, queue_burn, move_with_burn
@@ -120,16 +122,25 @@ def state_of(body: dict) -> State:
                  body.get('heading', 0), body.get('omega', 0))
 
 
-def move(body: dict, dt: float, mu: float):
+def move(body: dict, dt: float, mu: float, when: float | None = None):
     if not body.get('alive', True):
         return
     try:
+        # Kestrel-relative inertial frame: stellar tidal kicks around the
+        # established planet-Kepler drift and finite-thrust integrator.
+        if when is not None:
+            tx,ty=stellar_tide(body['x'],body['y'],when-dt)
+            body['vx'] += tx*dt/2
+            body['vy'] += ty*dt/2
         result = move_with_burn(body, dt, mu)
+        if when is not None:
+            tx,ty=stellar_tide(result.x,result.y,when)
+            result=replace(result,vx=result.vx+tx*dt/2,vy=result.vy+ty*dt/2)
         for field in ('x', 'y', 'vx', 'vy', 'heading', 'omega'):
             body[field] = getattr(result, field)
         if 'fuel' in body:
             body['fuel'] = result.fuel_kg
-        if math.hypot(result.x, result.y) < BODY_RADIUS:
+        if math.hypot(result.x, result.y) < BODY_RADIUS or (when is not None and star_collision(result.x,result.y,when)):
             body['alive'] = False
     except (ValueError, OverflowError):
         body['alive'] = False
@@ -537,20 +548,20 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
             if not body.get('alive',True):
                 continue
             was_alive=body['alive']
-            move(body,dt,mu)
+            move(body,dt,mu,when)
             if was_alive and not body.get('alive',True):
                 body['hp']=0
-                event(sector,when,body['name']+' impacted Kestrel.','danger')
+                event(sector,when,body['name']+' impacted a celestial body.','danger')
             if body.get('alive',True) and body.get('arrivalPhase') in ACTIVE_ARRIVAL:
                 resolve_arrival(sector,body,mu,when)
         for pickup in sector['pickups']:
-            move(pickup,dt,mu)
+            move(pickup,dt,mu,when)
 
         for index,shot in enumerate(sector['shots']):
             if not shot.get('alive',True):
                 continue
             previous.setdefault('shot-'+str(index),{k:shot[k] for k in ('x','y')})
-            move(shot,dt,mu)
+            move(shot,dt,mu,when)
             if not shot['alive'] or when-shot['born'] > 30:
                 shot['alive']=False
                 continue
