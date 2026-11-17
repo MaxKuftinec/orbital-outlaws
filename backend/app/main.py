@@ -26,6 +26,18 @@ async def lifespan(_app: FastAPI):
 
 app=FastAPI(title='Orbital Outlaws',version='1.1.0',lifespan=lifespan)
 
+# Public accounts are disabled unless AUTH_ENABLED=1 and all secrets are set.
+# Browser origin allow-list is explicit; never use wildcard CORS for credentials.
+from fastapi.middleware.cors import CORSMiddleware
+from .accounts import router as accounts_router
+approved_origins=[origin.strip() for origin in os.getenv('AUTH_ORIGINS','').split(',') if origin.strip()]
+if approved_origins:
+    app.add_middleware(CORSMiddleware,allow_origins=approved_origins,
+                       allow_methods=['GET','POST','PATCH'],
+                       allow_headers=['Authorization','Content-Type'])
+app.include_router(accounts_router)
+
+
 
 def require_dev_commands():
     if os.getenv('ORBITAL_DEV_COMMANDS', '0') != '1':
