@@ -157,3 +157,34 @@ def test_dev_only_rest_endpoint_rejects_public_and_invalid_orders(monkeypatch, p
         assert stop.status_code==200,stop.text
         assert stop.json()['auto_burn']['status']=='aborted'
     main.store.cache_clear()
+
+
+def test_dev_refuel_during_guidance_preserves_history_and_continues_burn(postgres_url):
+    """Unrelated checkpoints must never reset or silently cancel the burn."""
+    import time
+    store=WorldStore(postgres_url)
+    store.ensure_world()
+    pilot=uuid4().hex
+    eid='pilot-'+pilot
+    store.connect_player(pilot)
+    store.player_auto_start(pilot,direction='heading',reference='kestrel',
+                            cutoff='duration',duration_s=3.)
+    time.sleep(.16)
+    refill=store.refuel_player(pilot, requested_kg=5.)
+    assert refill['added_kg'] > 0.
+    with store.sessions() as db:
+        event=db.query(Event).filter(Event.entity_id==eid,
+                                    Event.kind=='dev_refuel').order_by(Event.id.desc()).first()
+        assert event is not None
+        assert event.payload['auto_plan']['cutoff']=='duration'
+        assert event.payload['auto_progress']['status']=='burning'
+        refuel_at=event.at_s
+        tank_after=event.after['fuel_kg']
+    with store.sessions.begin() as db:
+        ent=db.get(Entity,eid)
+        world=db.get(World,'kestrel')
+        store._settle_auto(db,ent,world,refuel_at+.3)
+    with store.sessions() as db:
+        _,_,_,historic=store._at(db,'kestrel',eid,refuel_at+.1)
+        assert historic.fuel_kg < tank_after-.35
+        assert historic.fuel_kg > tank_after-.65
