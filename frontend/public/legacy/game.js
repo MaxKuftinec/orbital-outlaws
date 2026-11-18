@@ -164,7 +164,10 @@
     state.allies=mergeLiveBodies(state.allies||[],saved.allies||[]);
     state.pickups=mergeLiveBodies(state.pickups,saved.pickups);
     state.shots=mergeLiveBodies(state.shots,(saved.shots||[]).map((shot,i)=>({id:shot.id||'shot-'+i,...shot})));
-    state.t=Math.max(state.t,saved.t||0);
+    // A persistent session follows the authoritative world clock, even
+    // after a backend restart. Never preserve a stale client-predicted time.
+    state.t=(persistentFlight||flightOnline)&&Number.isFinite(saved.t)
+      ? saved.t : Math.max(state.t,saved.t||0);
     state.reinforcements=!!saved.reinforcements;
     state.nextEnemySpawn=saved.nextEnemySpawn||state.t+60;
     state.serverAssistance=saved.assistance||[];
@@ -199,14 +202,13 @@
       const key=e.t+':'+e.message;
       if(seenSectorEvents.has(key))continue;
       seenSectorEvents.add(key);
-      // The backend's event.t and snapshot.t share the same world clock.
-      // saved_at_utc anchors that clock to real UTC at the snapshot time.
+      // The backend maps simulation timestamps to their actual live-server
+      // segments. Once downtime freezes world time there is no single global
+      // wall-time epoch, so do NOT infer past UTC from the latest snapshot.
       const eventT=Number(e.t);
-      const snapshotT=Number(saved.t);
-      const savedUtc=Number(checkpoint.saved_at_utc);
-      const eventUtc=Number.isFinite(eventT)&&Number.isFinite(snapshotT)&&
-        Number.isFinite(savedUtc) && savedUtc>1e9
-          ? savedUtc-(snapshotT-eventT) : null;
+      const eventUtc=typeof e.occurred_at_utc==='number'&&
+        Number.isFinite(e.occurred_at_utc)&&e.occurred_at_utc>1e9
+          ? e.occurred_at_utc : null;
       logEvent(e.message,e.category||'neutral',
         Number.isFinite(eventT)?eventT:state.t,eventUtc);
     }
@@ -506,6 +508,9 @@
   }
   function step(dt) {
     if(state.ended)return;
+    // Freeze the entire rendered sector on lost backend authority. No
+    // speculative orbit advancement while the authoritative clock is stopped.
+    if(persistentFlight&&!flightOnline)return;
     state.t+=dt;
     const initial=new Map([state.player,state.ally,...state.enemies].filter(s=>s.alive).map(s=>[s.id,{x:s.x,y:s.y}]));
     const player=state.player;
