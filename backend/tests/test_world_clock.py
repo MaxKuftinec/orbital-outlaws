@@ -92,3 +92,23 @@ def test_one_authoritative_writer_per_database(postgres_url):
         first.clock.release_ownership()
     second.clock.acquire_ownership()
     second.clock.release_ownership()
+
+
+def test_migrating_legacy_world_does_not_replay_old_wall_epoch(postgres_url):
+    """Even an old database's FIRST start recovers durable state, not downtime."""
+    from app.physics import orbital_envelope
+    world_id='clock-'+uuid4().hex[:12]
+    store=WorldStore(postgres_url)
+    body=State(260,0,0,34.525,1110,200)
+    peri,apo=orbital_envelope(body,310000.)
+    with store.sessions.begin() as db:
+        db.add(World(id=world_id,mu=310000.,
+                     epoch_utc=time.time()-86400.))  # Legacy clock 1 day old
+        db.flush()
+        db.add(Entity(id='legacy-'+uuid4().hex[:12],world_id=world_id,
+                      kind='ship',checkpoint_s=345.25,checkpoint=body.as_dict(),
+                      periapsis_km=peri,apoapsis_km=apo,version=0))
+    world=store.ensure_world(world_id)
+    assert 345.25 <= world['simulation_time_s'] < 346.25
+    assert world['clock_mode']=='server-uptime'
+    store.stop_clock()
