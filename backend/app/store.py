@@ -15,6 +15,7 @@ from .auto_burn import (advance_guided, validate_plan, initial_progress,
 from .star_system import propagate_local, system_info
 from .universe import new_sector, advance_sector, player_fire as fire_projectile, incoming_ship, event as sector_event
 from .arrival_guidance import ACTIVE_ARRIVAL
+from .world_clock import ServerClock
 
 
 class WorldStore:
@@ -22,6 +23,7 @@ class WorldStore:
         self.engine=create_engine(database_url)
         self.sessions=sessionmaker(self.engine,expire_on_commit=False)
         Base.metadata.create_all(self.engine)
+        self.clock = ServerClock(self.engine, self.sessions)
 
     def ensure_world(self,world_id: str='kestrel',mu: float=310000):
         with self.sessions.begin() as db:
@@ -29,10 +31,21 @@ class WorldStore:
             if not world:
                 world=World(id=world_id,mu=mu,epoch_utc=time.time())
                 db.add(world)
-            return {'id':world.id,'mu':world.mu,'epoch_utc':world.epoch_utc}
+            result={'id':world.id,'mu':world.mu,'epoch_utc':world.epoch_utc}
+        # Arming a world always reuses the *persisted* elapsed clock; it
+        # never adds the wall-time interval since the previous server stopped.
+        self.clock.start(world_id)
+        return {**result,'simulation_time_s':self.clock.now(world_id),
+                'clock_mode':'server-uptime'}
 
     def now(self,world: World) -> float:
-        return max(0.,time.time()-world.epoch_utc)
+        return self.clock.now(world.id)
+
+    def checkpoint_clock(self):
+        self.clock.checkpoint()
+
+    def stop_clock(self):
+        self.clock.stop()
 
     def system_view(self):
         """Live primary-star and planet ephemeris in star-centered coordinates."""
@@ -224,7 +237,7 @@ class WorldStore:
             saved = db.scalars(select(EncounterSnapshot).where(
                 EncounterSnapshot.entity_id == entity_id).with_for_update()).first()
             now = time.time()
-            current_world_s = max(0., now - world.epoch_utc)
+            current_world_s = self.now(world)
             if not saved:
                 saved = EncounterSnapshot(entity_id=entity_id, saved_at_utc=now,
                                           snapshot=new_sector(current_world_s, world.mu))
@@ -241,9 +254,11 @@ class WorldStore:
                 new['playerKills'] = old.get('playerKills', 0)
                 saved.snapshot = new
                 saved.saved_at_utc = now
-            elapsed = max(0., now - saved.saved_at_utc)
+            # Simulate only *server uptime*. saved_at_utc is for auditing,
+            # never authoritative simulation elapsed time after downtime.
+            elapsed = max(0., current_world_s - float(saved.snapshot.get('t', current_world_s)))
             if elapsed >= .05:
-                start_s = max(0., saved.saved_at_utc - world.epoch_utc)
+                start_s = float(saved.snapshot['t'])
                 _, _, _, start_player = self._at(db, 'kestrel', entity_id, start_s)
                 snapshot, effects = advance_sector(
                     copy.deepcopy(saved.snapshot), elapsed, start_player, world.mu,
@@ -288,8 +303,16 @@ class WorldStore:
             auto = db.get(AutoBurn, entity_id)
             if auto and auto.progress['status'] in ACTIVE_STATES:
                 self._settle_auto(db, entity, world, current_world_s)
+            # Bind historical events to their actual server-runtime segment,
+            # rather than presenting an old collision at reconnect time.
+            snapshot_with_times = copy.deepcopy(saved.snapshot)
+            for item in snapshot_with_times.get('events', []):
+                if 'occurred_at_utc' not in item and isinstance(item.get('t'), (int, float)):
+                    item['occurred_at_utc'] = self.clock.event_utc(db, world, float(item['t']))
+            if snapshot_with_times != saved.snapshot:
+                saved.snapshot = snapshot_with_times
             return {'saved_at_utc':saved.saved_at_utc,
-                    'snapshot':copy.deepcopy(saved.snapshot)}
+                    'snapshot':copy.deepcopy(snapshot_with_times)}
 
 
     def spawn_ship(self, pilot_id: str, faction: str) -> dict:

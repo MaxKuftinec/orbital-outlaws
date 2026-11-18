@@ -12,6 +12,16 @@ class StubStore:
         self.ammo = 36
         self.hp = 85
         self.reserve_kg = 36.
+        self.clock = self
+
+    def acquire_ownership(self):
+        pass
+
+    def checkpoint_clock(self):
+        pass
+
+    def stop_clock(self):
+        pass
 
     def ensure_world(self):
         return {'id': 'kestrel'}

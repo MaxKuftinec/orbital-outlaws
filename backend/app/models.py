@@ -15,6 +15,25 @@ class World(Base):
     epoch_utc: Mapped[float]=mapped_column(Float,nullable=False)
 
 
+class WorldClock(Base):
+    """Durable logical simulation clock; wall-clock downtime never advances it."""
+    __tablename__ = 'world_clocks'
+    world_id: Mapped[str] = mapped_column(ForeignKey('worlds.id'), primary_key=True)
+    elapsed_s: Mapped[float] = mapped_column(Float, nullable=False)
+    updated_at_utc: Mapped[float] = mapped_column(Float, nullable=False)
+
+
+class WorldClockSession(Base):
+    """Wall-time mapping for events produced in each authoritative server run."""
+    __tablename__ = 'world_clock_sessions'
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    world_id: Mapped[str] = mapped_column(ForeignKey('worlds.id'), index=True)
+    started_s: Mapped[float] = mapped_column(Float, nullable=False)
+    ended_s: Mapped[float] = mapped_column(Float, nullable=False)
+    started_at_utc: Mapped[float] = mapped_column(Float, nullable=False)
+    ended_at_utc: Mapped[float] = mapped_column(Float, nullable=False)
+
+
 class Entity(Base):
     __tablename__='entities'
     id: Mapped[str]=mapped_column(String(80),primary_key=True)

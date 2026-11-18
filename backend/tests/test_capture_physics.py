@@ -109,8 +109,9 @@ def test_captured_cargo_persists_as_mass_in_authoritative_player_checkpoint(post
         saved=db.get(EncounterSnapshot,eid)
         state=State(300.,0.,0.,velocity,1000.,100.)
         peri,apo=orbital_envelope(state,world.mu)
-        checkpoint_timestamp=time.time()-.25
-        ship.checkpoint_s=max(0.,checkpoint_timestamp-world.epoch_utc)
+        # Deliberately position the authoritative checkpoint 0.25
+        # simulation-seconds behind the RUNNING server clock.
+        ship.checkpoint_s=max(0.,store.now(world)-.25)
         ship.checkpoint=state.as_dict()
         ship.periapsis_km,ship.apoapsis_km=peri,apo
         sector=copy.deepcopy(saved.snapshot)
@@ -119,8 +120,9 @@ def test_captured_cargo_persists_as_mass_in_authoritative_player_checkpoint(post
         sector['pickups']=[{
             'id':'cargo-token','type':'credits','amount':24.,
             'alive':True,'phase':0.,'x':300.,'y':0.,'vx':0.,'vy':velocity}]
+        sector['t']=ship.checkpoint_s
         saved.snapshot=sector
-        saved.saved_at_utc=checkpoint_timestamp
+        saved.saved_at_utc=time.time()
     result=store.player_encounter(pilot)
     actual=store.get_entity('kestrel',eid)['state']
     assert actual['mass_kg']==pytest.approx(1002.,abs=1e-3)

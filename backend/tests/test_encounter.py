@@ -4,7 +4,7 @@ import pytest
 from app.store import WorldStore
 
 
-def test_server_owns_encounter_and_catches_up_after_disconnect(postgres_url):
+def test_server_simulates_live_time_but_not_downtime(postgres_url):
     store=WorldStore(postgres_url)
     store.ensure_world()
     pilot=uuid4().hex
@@ -15,7 +15,13 @@ def test_server_owns_encounter_and_catches_up_after_disconnect(postgres_url):
     with pytest.raises(ValueError,match='disabled'):
         store.save_encounter(pilot,{'enemies':[]})
     time.sleep(.15)
-    resumed=WorldStore(postgres_url).player_encounter(pilot)
-    assert resumed['snapshot']['t']>original['snapshot']['t']
+    during_live=store.player_encounter(pilot)
+    assert during_live['snapshot']['t']>original['snapshot']['t']
+    assert during_live['saved_at_utc']>original['saved_at_utc']
+    stop_t=during_live['snapshot']['t']
+    store.stop_clock()
+    time.sleep(.16)  # The server is DOWN, so sim time cannot advance.
+    restarted=WorldStore(postgres_url)
+    resumed=restarted.player_encounter(pilot)
+    assert resumed['snapshot']['t']==pytest.approx(stop_t,abs=.04)
     assert len(resumed['snapshot']['enemies'])==2
-    assert resumed['saved_at_utc']>original['saved_at_utc']
