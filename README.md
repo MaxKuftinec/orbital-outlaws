@@ -53,12 +53,37 @@ These routes are still **dev-only** under the existing
 `ORBITAL_DEV_COMMANDS=1` guard; they must not be exposed publicly.
 See [Automated thrust guide](docs/AUTO_THRUST_UI_CONCEPT.md).
 
+## Simulation clock and technology eras
+
+**The persistent universe freezes when the backend is stopped.** FastAPI
+owns one monotonic runtime clock per world and checkpoints it to PostgreSQL
+every second, plus on graceful shutdown. On restart it resumes from the
+durable simulated second instead of using the elapsed internet/wall-clock
+time. Combat, planet orbits, NPC decisions, and finite automated burns
+advance only while the server clock runs. On an unclean crash, clock
+recovery also respects the most advanced durable entity, event and sector
+checkpoint. The browser freezes disconnected persistent sessions instead
+of independently simulating the supposedly authoritative world.
+
+Historical combat events retain the wall-clock date/time of the original
+server-runtime segment. **The local single-player preview remains an
+independent, browser-simulated sandbox**, so the above is specifically a
+promise for persistent server-controlled play.
+
+For all proposed technology, first classify **access** (BASIC, UNLOCKABLE,
+or SCENARIO-ONLY), **era** (I–V), and **scientific basis** independently.
+Era V — **Transcendent / Cosmic engineering** — permits spectacular cosmic
+capabilities implemented as technology with declared fictional rules,
+costs and counterplay, not unconstrained individual magic. Releases are
+not required to add technologies in era order. See
+[technology classification and design contract](docs/TECHNOLOGY_TAXONOMY.md).
+
 ## Current architecture
 
 - **Backend authority:** Flight state, RCS/thrust fuel, projectile creation, ammunition, hull damage, NPC target decisions, physically integrated NPC support/tactical thrust (all incoming arrival and insertion burns now use finite thrust), swept projectile/ship collisions, salvage and credits.
-- **Offline time:** The universe clock uses real wall-clock time. A pilot-sector checkpoint is **caught up by FastAPI on the next connection/query**. NPC decisions and collisions are resolved during the catch-up even if nobody kept a browser open. This is lazy offline simulation, not a dedicated continuously running background worker per pilot.
+- **Offline time:** The universe progresses during server **uptime**, even if no browser is connected, and freezes during backend downtime. Lazy sector updates resolve elapsed *simulation seconds* on the next request (including player-free server uptime), never the stopped wall-clock interval. Clock state, historical runtime segments and last known world time survive restarts in PostgreSQL.
 - **Frontend prediction:** Browser renders player controls immediately at ~60 FPS and interpolates authoritative NPC positions. The client never submits NPC positions, kills or credit claims.
-- **Still limited:** Sectors are **per pilot**, not yet shared multiplayer space. Long-disconnect catch-up uses adaptive numerical timesteps and is a gameplay approximation, not an exact global causal event queue. There is no player authentication yet. These endpoints are development-only.
+- **Still limited:** Sectors are **per pilot**, not yet shared multiplayer space. Long-disconnect catch-up uses adaptive numerical timesteps and is a gameplay approximation, not an exact global causal event queue. Email-verified account profiles exist, but they are not yet bound to pilot ownership. Live-pilot endpoints remain development-only.
 
 ### Start backend
 
