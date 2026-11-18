@@ -52,7 +52,8 @@ def test_event_wall_times_remain_tied_to_original_runtime_segment(postgres_url):
         world = db.get(World, world_id)
         original_wall = restarted.clock.event_utc(db, world, at)
         segments = db.scalars(select(WorldClockSession).where(
-            WorldClockSession.world_id == world_id)).all()
+            WorldClockSession.world_id == world_id).order_by(
+            WorldClockSession.started_at_utc)).all()
         assert len(segments) == 2
         assert segments[1].started_s >= segments[0].ended_s
         assert segments[1].started_at_utc - segments[0].ended_at_utc >= .10
