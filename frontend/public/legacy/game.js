@@ -74,8 +74,10 @@
     return {...circularPosition(r,angle), id:'pod-'+Math.random().toString(36).slice(2,8), type, amount,
       phase:rand(0,TWO_PI), alive:true};
   }
-  function logEvent(message, category='neutral') {
-    state.events.unshift({t:state.t, message, category});
+  function logEvent(message, category='neutral', occurredAt=state.t, occurredAtUtc=null) {
+    // Server encounter events retain their original simulation timestamp.
+    // A reconnect may deliver hours of historical events in one snapshot.
+    state.events.unshift({t:occurredAt, occurredAtUtc, message, category});
     if(state.events.length>7) state.events.length=7;
     window.dispatchEvent(new CustomEvent('orbital-comms', {
       detail: {events: state.events.map(e=>({...e}))}
@@ -84,7 +86,12 @@
     if(legacyFeed && legacyFeed.dataset.vueManaged!=='true')legacyFeed.innerHTML = state.events.map(e => {
       const min = Math.floor(e.t/60).toString().padStart(2,'0');
       const sec = Math.floor(e.t%60).toString().padStart(2,'0');
-      return `<div class="event-entry ${e.category}"><time>${min}:${sec}</time><span>${escapeHtml(e.message)}</span></div>`;
+      const timestamp = Number.isFinite(e.occurredAtUtc)
+        ? new Date(e.occurredAtUtc*1000).toLocaleString(undefined,{
+            month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
+          })
+        : min+':'+sec;
+      return `<div class="event-entry ${e.category}"><time>${escapeHtml(timestamp)}</time><span>${escapeHtml(e.message)}</span></div>`;
     }).join('');
   }
   function escapeHtml(str) { return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
@@ -192,7 +199,16 @@
       const key=e.t+':'+e.message;
       if(seenSectorEvents.has(key))continue;
       seenSectorEvents.add(key);
-      logEvent(e.message,e.category||'neutral');
+      // The backend's event.t and snapshot.t share the same world clock.
+      // saved_at_utc anchors that clock to real UTC at the snapshot time.
+      const eventT=Number(e.t);
+      const snapshotT=Number(saved.t);
+      const savedUtc=Number(checkpoint.saved_at_utc);
+      const eventUtc=Number.isFinite(eventT)&&Number.isFinite(snapshotT)&&
+        Number.isFinite(savedUtc) && savedUtc>1e9
+          ? savedUtc-(snapshotT-eventT) : null;
+      logEvent(e.message,e.category||'neutral',
+        Number.isFinite(eventT)?eventT:state.t,eventUtc);
     }
     if(seenSectorEvents.size>150)seenSectorEvents.clear();
     if(previous!==JSON.stringify([state.enemies.map(e=>[e.id,e.alive]),state.ally.id+':'+state.ally.alive,(state.allies||[]).map(a=>[a.id,a.alive]),state.pickups.map(p=>[p.id,p.alive])]))updateTargetOptions();
