@@ -88,11 +88,10 @@ class ServerClock:
                     raise LookupError('Unknown world')
                 row = db.scalars(select(WorldClock).where(
                     WorldClock.world_id == world_id).with_for_update()).first()
-                # Initial migration uses the old live clock just once.
-                # All subsequent starts use durable simulation seconds only.
-                migrated = row is None
-                persisted_s = (max(0., time.time() - world.epoch_utc)
-                               if migrated else row.elapsed_s)
+                # Even the FIRST migration must not replay historical
+                # downtime: recover from the newest DURABLE gameplay
+                # checkpoint, never from the old wall-clock world epoch.
+                persisted_s = 0. if row is None else row.elapsed_s
                 resumed_s = max(persisted_s, self._seed_from_checkpoints(db, world))
                 wall_start = time.time()
                 mono_start = time.monotonic()
