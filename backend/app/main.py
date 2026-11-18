@@ -2,7 +2,8 @@ from __future__ import annotations
 import os
 import asyncio
 from dotenv import load_dotenv
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+import logging
 from functools import lru_cache
 from typing import Literal
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -19,10 +20,33 @@ def store() -> WorldStore:
     return WorldStore(os.environ['DATABASE_URL'])
 
 
+async def _heartbeat_world_clock(database: WorldStore):
+    """Persist simulation seconds even if nobody is playing or making API calls."""
+    while True:
+        await asyncio.sleep(1.)
+        try:
+            await run_in_threadpool(database.checkpoint_clock)
+        except Exception:
+            logging.exception('World-clock heartbeat failed; check PostgreSQL availability')
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    store().ensure_world()
-    yield
+    database = store()
+    # One authoritative world owner per PostgreSQL database. A second API
+    # worker must not independently run the same simulation clock.
+    await run_in_threadpool(database.clock.acquire_ownership)
+    heartbeat = None
+    try:
+        await run_in_threadpool(database.ensure_world)
+        heartbeat = asyncio.create_task(_heartbeat_world_clock(database))
+        yield
+    finally:
+        if heartbeat is not None:
+            heartbeat.cancel()
+            with suppress(asyncio.CancelledError):
+                await heartbeat
+        await run_in_threadpool(database.stop_clock)
 
 
 app=FastAPI(title='Orbital Outlaws',version='1.1.0',lifespan=lifespan)
