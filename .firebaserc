@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "axore": "axore-456421"
+  },
+  "targets": {
+    "axore-456421": {
+      "hosting": {
+        "orbital-outlaws": [
+          "orbital-outlaws"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

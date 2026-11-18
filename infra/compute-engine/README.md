@@ -51,23 +51,18 @@ gcloud compute instances create "$VM" \
   --address "$STATIC_IP" \
   --tags orbital-outlaws-web
 
-# Adjust --network if you use a custom VPC.
+# Adjust --network if you use a custom VPC
 gcloud compute firewall-rules create orbital-outlaws-https \
   --network default --direction INGRESS --action ALLOW \
   --rules tcp:80,tcp:443 --source-ranges 0.0.0.0/0 \
   --target-tags orbital-outlaws-web
 ```
 
-Point the `api.example.com` DNS A record to `$STATIC_IP`. Do not configure
-a DNS record for a name you don't control. Firebase's frontend domain is
-separate; connect it following Firebase Hosting's domain wizard.
+Point the `api.example.com` DNS A record to `$STATIC_IP`. Do not configure a DNS record for a name you don't control. Firebase's frontend domain is separate; connect it following Firebase Hosting's domain wizard
 
-Securely connect with `gcloud compute ssh "$VM" --zone "$ZONE" --tunnel-through-iap`
-after enabling OS Login/IAP and the appropriate IAP SSH firewall rule, or
-use an already authorized console SSH connection. Do not open SSH globally.
+Securely connect with `gcloud compute ssh "$VM" --zone "$ZONE" --tunnel-through-iap` after enabling OS Login/IAP and the appropriate IAP SSH firewall rule, or use an already authorized console SSH connection. Do not open SSH globally
 
-On the VM, install Docker Engine + Compose plugin using the
-[official Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/).
+On the VM, install Docker Engine + Compose plugin using the [official Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/)  
 Then:
 
 ```bash
@@ -85,19 +80,14 @@ curl -fsS "https://YOUR_API_DOMAIN/"
 curl -fsS "https://YOUR_API_DOMAIN/system"
 ```
 
-The password must be a secret hexadecimal string, not the example placeholder.
-Do not publish `.env`. Before inviting players, configure log rotation,
-Cloud Monitoring alerts, disk-space thresholds and regular backups. For VM
-operational updates, `git pull --ff-only` followed by
-`docker compose ... up -d --build` updates the API without dropping the named
-PostgreSQL volume; still take a backup before migrations.
+The password must be a secret hexadecimal string, not the example placeholder. Do not publish `.env`. Before inviting players, configure log rotation, Cloud Monitoring alerts, disk-space thresholds and regular backups. For VM operational updates, `git pull --ff-only` followed by `docker compose ... up -d --build` updates the API without dropping the named PostgreSQL volume; still take a backup before migrations
 
 ## Publish the initial browser sandbox with Firebase
 
 ```bash
 cp frontend/.env.alpha.example frontend/.env.production.local
-# Set VITE_API_BASE_URL to the actual public HTTPS API domain.
-# VITE_PUBLIC_PREVIEW=1 intentionally avoids persistent pilot API access.
+# Set VITE_API_BASE_URL to the actual public HTTPS API domain
+# VITE_PUBLIC_PREVIEW=1 intentionally avoids persistent pilot API access
 cd frontend
 npm ci
 npm run build
