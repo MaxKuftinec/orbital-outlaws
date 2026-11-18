@@ -3,6 +3,7 @@ export const COMMS_EVENT = 'orbital-comms'
 
 export interface CommsEntry {
   t: number
+  occurredAtUtc?: number | null
   message: string
   category: string
 }
