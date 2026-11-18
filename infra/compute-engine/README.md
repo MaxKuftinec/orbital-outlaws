@@ -66,17 +66,53 @@ Securely connect with `gcloud compute ssh "$VM" --zone "$ZONE" --tunnel-through-
 after enabling OS Login/IAP and the appropriate IAP SSH firewall rule, or
 use an already authorized console SSH connection. Do not open SSH globally.
 
-On the VM, install Docker Engine + Compose plugin using the
-[official Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/).
-Then:
+On the **Ubuntu Compute Engine VM**, install Docker Engine + Compose plugin
+using the [official Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/).
+These commands are intended for the **VM's SSH terminal**, not PowerShell
+on your Windows development machine unless you are explicitly setting up
+a local Docker deployment.
+
+### Step 1 — clone and configure
+
+From the **VM shell prompt**:
 
 ```bash
 git clone https://github.com/MaxKuftinec/orbital-outlaws.git
 cd orbital-outlaws
 cp infra/compute-engine/.env.example infra/compute-engine/.env
-# Edit API_DOMAIN to your real DNS name. Generate a URL-safe DB password:
+
+# Generate a private URL-safe database password; copy its output.
 openssl rand -hex 24
+
+# Open the .env configuration file in Nano:
 nano infra/compute-engine/.env
+```
+
+**Nano is a text editor**. You should edit text such as:
+
+```dotenv
+API_DOMAIN=api.your-real-domain.com
+POSTGRES_DB=orbital_outlaws
+POSTGRES_USER=orbital
+POSTGRES_PASSWORD=PASTE_YOUR_RANDOM_PASSWORD_HERE
+```
+
+Use a hostname you own that points at the VM's **static IP**. For
+`API_DOMAIN`, enter only the hostname (no `https://` prefix). The
+random password output from `openssl rand -hex 24` replaces the entire
+`POSTGRES_PASSWORD=` value. Keep it secret and never commit the resulting
+`.env` to Git. For the initial non-public preview, leave
+`AUTH_ENABLED=0`; the SMTP/account settings are configured separately
+before account registration is publicly enabled.
+
+To save and exit Nano, press **Ctrl+O**, **Enter**, then **Ctrl+X**.
+**Do not paste Docker commands inside Nano or the .env file.**
+
+### Step 2 — launch containers
+
+Back at the regular VM shell prompt, run:
+
+```bash
 docker compose --env-file infra/compute-engine/.env \
   -f infra/compute-engine/compose.yaml up -d --build
 docker compose --env-file infra/compute-engine/.env \
@@ -86,11 +122,27 @@ curl -fsS "https://YOUR_API_DOMAIN/system"
 ```
 
 The password must be a secret hexadecimal string, not the example placeholder.
+The final `curl` checks require DNS for `API_DOMAIN` to resolve to the VM
+and Caddy to obtain its TLS certificate; a browser or shell on the VM can
+also perform the checks. A healthy API does **not** yet mean multiplayer
+gameplay is safe to expose publicly.
 Do not publish `.env`. Before inviting players, configure log rotation,
 Cloud Monitoring alerts, disk-space thresholds and regular backups. For VM
 operational updates, `git pull --ff-only` followed by
-`docker compose ... up -d --build` updates the API without dropping the named
-PostgreSQL volume; still take a backup before migrations.
+`docker compose ... up -d --build api` replaces only the API container
+without dropping the named PostgreSQL volume; still take a backup before
+migrations. Active WebSocket connections disconnect and must reconnect.
+
+**Simulation time freezes during planned or unplanned API downtime.**
+The FastAPI startup lifecycle holds a PostgreSQL advisory lock so only
+**one API process** is authoritative for the clock. It checkpoints elapsed
+monotonic uptime every second and at graceful shutdown. On reboot it
+resumes from that last durable simulated second, with no wall-time catchup.
+An abrupt crash may lose up to roughly one heartbeat of unsaved time;
+durably committed player/event state is used to prevent rewinding progress.
+Keep PostgreSQL and its named volume persistent and backed up. Do not
+scale `api` to multiple replicas with this architecture; build a separate
+shared simulation-worker design before horizontal scaling.
 
 ## Publish the initial browser sandbox with Firebase
 
