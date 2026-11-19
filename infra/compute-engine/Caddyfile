@@ -1,11 +1,16 @@
-# Public PREVIEW gate. Gameplay and admin routes are CLOSED until
-# authenticated player ownership and live multiplayer security are built
-# Caddy provisions TLS for API_DOMAIN once DNS points at the VM
 {$API_DOMAIN} {
     encode zstd gzip
 
-    @restricted path /dev /dev/* /players /players/* /worlds /worlds/* /docs /redoc /openapi.json
+    # Block unfinished gameplay and developer endpoints
+    @restricted path /dev /dev/* /players /players/* /worlds /worlds/*
     respond @restricted "Persistent gameplay API is not yet publicly available" 403
 
+    # Require a username and password for API documentation
+    @swagger path /docs /docs/* /redoc /openapi.json
+    basic_auth @swagger {
+        admin $2a$14$nyg40.Om7YmmQ2FWQ09CeuHXaj1bQoSxvqprVfnCkuihBtjk9e8dy
+    }
+
+    # Forward permitted requests to FastAPI
     reverse_proxy api:8000
 }
