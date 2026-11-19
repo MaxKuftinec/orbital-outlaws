@@ -1,10 +1,6 @@
 {$API_DOMAIN} {
     encode zstd gzip
 
-    # Block unfinished gameplay and developer endpoints
-    @restricted path /dev /dev/* /players /players/* /worlds /worlds/*
-    respond @restricted "Persistent gameplay API is not yet publicly available" 403
-
     # Require a username and password for API documentation
     @swagger path /docs /docs/* /redoc /openapi.json
     basic_auth @swagger {
