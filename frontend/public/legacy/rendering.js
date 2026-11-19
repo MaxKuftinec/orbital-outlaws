@@ -282,14 +282,29 @@
     }
     const path=state.ephemerisCache;
     if(path.points.length<2)return;
-    pathWorld(path.points,'rgba(237,190,107,.82)',2,[7,5]);
+    const frames=root.OrbitalFrameConfig;
+    const frame=frames?.getFrame('ephemeris')||'planet';
+    // The source trajectory is Kestrel-relative in either mode. For Veyra,
+    // translate EVERY predicted point by Kestrel's displacement at its own
+    // future epoch; the existing canvas conversion then places that inertial
+    // curve correctly whether the canvas is Kestrel- or Veyra-centered.
+    const displayed=frames?frames.projectTrace(path.points,state.t,frame,getSystem().planet):path.points;
+    pathWorld(displayed,'rgba(237,190,107,.82)',2,[7,5]);
     ctx.save();ctx.fillStyle='#edbe6b';ctx.font='bold 11px monospace';
     path.markers.forEach((m,i)=>{
       if(!m?.safe)return;
-      const pixel=toScreen(m.x,m.y);
+      const marker=frames?frames.projectPoint(m,(i+1)*60,state.t,frame,getSystem().planet):m;
+      if(!marker)return;
+      const pixel=toScreen(marker.x,marker.y);
       ctx.beginPath();ctx.arc(pixel.x,pixel.y,4,0,TWO_PI);ctx.fill();
       ctx.fillText('T+'+(i+1)*60+'s',pixel.x+9,pixel.y-8);
     });
+    if(displayed.length){
+      const first=toScreen(displayed[0].x,displayed[0].y);
+      ctx.fillStyle='#e6c985';
+      ctx.font='bold 9px ui-monospace,monospace';
+      ctx.fillText('EPHEMERIS / '+(frame==='star'?'VEYRA':'KESTREL'),first.x+8,first.y+18);
+    }
     ctx.restore();
   }
   function drawSelectedContact(){
