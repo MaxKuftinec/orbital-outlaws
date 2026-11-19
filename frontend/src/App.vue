@@ -37,6 +37,7 @@ export default defineComponent({
     window.addEventListener('orbital-persistence', this.updatePersistence as EventListener)
     window.addEventListener('orbital-auth', this.updateAuth as EventListener)
     window.addEventListener('hashchange', this.onHashChange as EventListener)
+    window.addEventListener('keydown', this.onMobileKeydown as EventListener)
     ;(window as typeof window & { ORBITAL_API_BASE_URL?: string }).ORBITAL_API_BASE_URL =
       import.meta.env.VITE_API_BASE_URL ?? ''
     setupPreferenceSync()
@@ -49,8 +50,18 @@ export default defineComponent({
     window.removeEventListener('orbital-persistence', this.updatePersistence as EventListener)
     window.removeEventListener('orbital-auth', this.updateAuth as EventListener)
     window.removeEventListener('hashchange', this.onHashChange as EventListener)
+    window.removeEventListener('keydown', this.onMobileKeydown as EventListener)
+    document.body.classList.remove('orbital-mobile-instruments-open')
+  },
+  watch: {
+    mobileInstrumentsOpen(open: boolean) {
+      document.body.classList.toggle('orbital-mobile-instruments-open', open)
+    }
   },
   methods: {
+    onMobileKeydown(event: Event) {
+      if ((event as KeyboardEvent).key === 'Escape') this.mobileInstrumentsOpen = false
+    },
     openProfile() {
       this.mobileInstrumentsOpen = false;
       (this.$refs.pilotProfile as { show: () => void } | undefined)?.show()
@@ -151,7 +162,7 @@ export default defineComponent({
     </header>
 
     <nav class="mobile-navigation" aria-label="Mobile cockpit navigation">
-      <button type="button" aria-controls="mobile-instruments" :aria-expanded="mobileInstrumentsOpen" @click="toggleMobileInstruments">☷ Instruments</button>
+      <button type="button" ref="mobileInstrumentsToggle" aria-controls="mobile-instruments" :aria-expanded="mobileInstrumentsOpen" @click="toggleMobileInstruments">☷ Instruments</button>
       <button type="button" @click="openAtlas">◈ System atlas</button>
       <button type="button" @click="openProfile">✧ Profile</button>
       <button type="button" @click="openMobileSettings">⚙ Settings</button>
@@ -216,7 +227,7 @@ export default defineComponent({
       </section>
 
       <button v-if="mobileInstrumentsOpen" type="button" class="mobile-instruments-backdrop" aria-label="Close instruments" @click="mobileInstrumentsOpen=false"></button>
-      <aside id="mobile-instruments" class="sidebar" :class="{'mobile-instruments-open': mobileInstrumentsOpen}" aria-label="Spacecraft instruments">
+      <aside id="mobile-instruments" class="sidebar" :class="{'mobile-instruments-open': mobileInstrumentsOpen}" :role="mobileInstrumentsOpen ? 'dialog' : undefined" :aria-modal="mobileInstrumentsOpen ? 'true' : undefined" aria-label="Spacecraft instruments">
         <div class="mobile-instruments-heading"><div><span>ORBITAL OUTLAWS / SYSTEMS</span><strong>Instruments</strong></div><button type="button" aria-label="Close instrument drawer" @click="mobileInstrumentsOpen=false">✕</button></div>
 
         <section class="panel propulsion">
