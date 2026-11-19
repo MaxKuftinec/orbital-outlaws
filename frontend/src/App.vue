@@ -52,7 +52,7 @@ export default defineComponent({
   },
   methods: {
     openProfile() {
-      this.mobileInstrumentsOpen = false
+      this.mobileInstrumentsOpen = false;
       (this.$refs.pilotProfile as { show: () => void } | undefined)?.show()
     },
     toggleMobileInstruments() {
