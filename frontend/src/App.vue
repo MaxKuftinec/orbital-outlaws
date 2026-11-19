@@ -11,6 +11,7 @@ import PilotProfile from './components/PilotProfile.vue'
 import AutoBurnPanel from './components/AutoBurnPanel.vue'
 
 const publicPreview = import.meta.env.VITE_PUBLIC_PREVIEW === '1'
+const tokenKey = 'orbital-outlaws.account.session.v1'
 
 const legacyFiles = [
   'map-tools.js', 'map-visuals.js', 'star-system.js', 'reference-frames.js', 'autopilot-attitude.js', 'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
@@ -23,6 +24,7 @@ export default defineComponent({
   data() {
     return {
       publicPreview,
+      authenticated: Boolean(sessionStorage.getItem(tokenKey)),
       backendOnline: false,
       persistentOnline: false,
       startupError: '',
@@ -31,13 +33,18 @@ export default defineComponent({
   },
   mounted() {
     window.addEventListener('orbital-persistence', this.updatePersistence as EventListener)
+    window.addEventListener('orbital-auth', this.updateAuth as EventListener)
     window.addEventListener('hashchange', this.onHashChange as EventListener)
     ;(window as typeof window & { ORBITAL_API_BASE_URL?: string }).ORBITAL_API_BASE_URL =
       import.meta.env.VITE_API_BASE_URL ?? ''
     this.startCockpit()
+    if (!this.publicPreview && !this.authenticated) {
+      this.$nextTick(() => this.openProfile())
+    }
   },
   beforeUnmount() {
     window.removeEventListener('orbital-persistence', this.updatePersistence as EventListener)
+    window.removeEventListener('orbital-auth', this.updateAuth as EventListener)
     window.removeEventListener('hashchange', this.onHashChange as EventListener)
   },
   methods: {
@@ -67,6 +74,9 @@ export default defineComponent({
         }))
         window.dispatchEvent(new CustomEvent('orbital-focus-target'))
       })
+    },
+    updateAuth() {
+      this.authenticated = Boolean(sessionStorage.getItem(tokenKey))
     },
     updatePersistence(event: Event) {
       this.persistentOnline = Boolean((event as CustomEvent).detail?.online)
@@ -115,7 +125,7 @@ export default defineComponent({
         <div class="brand-mark" aria-hidden="true"><span>◎</span></div>
         <div><div class="eyebrow">VERSION 1.1</div><h1>ORBITAL <span>OUTLAWS</span></h1></div>
       </div>
-      <div class="top-actions"><v-chip v-if="publicPreview" color="info" size="x-small" variant="outlined">PUBLIC ALPHA · LOCAL SANDBOX · NOT SAVED</v-chip><v-chip v-else :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Live · flight and upgrades saved' : backendOnline ? 'Backend online · connecting flight' : 'Local gameplay · backend offline' }}</v-chip>
+      <div class="top-actions"><v-chip v-if="publicPreview" color="info" size="x-small" variant="outlined">PUBLIC ALPHA · LOCAL SANDBOX · NOT SAVED</v-chip><v-chip v-else :color="persistentOnline || backendOnline ? 'success' : 'warning'" size="x-small" variant="outlined">{{ persistentOnline ? 'Live · flight and upgrades saved' : !authenticated ? 'Sign in for persistent flight' : backendOnline ? 'Backend online · connecting flight' : 'Flight server unavailable' }}</v-chip>
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">ENCOUNTER TIME</span><strong id="sim-clock">00:00</strong></div></div>
         
         <v-btn density="compact" variant="tonal" class="pilot-registry-nav" title="Register, verify or sign in to your pilot profile" @click="openProfile">✧ Pilot Profile</v-btn>
