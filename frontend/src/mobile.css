@@ -1,0 +1,147 @@
+/* Orbital Outlaws — touch-first mobile cockpit.
+   Wide desktop retains the original full instrument grid. */
+.mobile-navigation,.mobile-flight-pad,.mobile-instruments-heading{display:none}
+.mobile-instruments-backdrop{display:none}
+@media (max-width:780px), (pointer:coarse) and (max-width:1100px){
+  html,body,#app{min-width:0;max-width:100%}
+  body{overflow-x:hidden;overscroll-behavior-x:none}
+  .orbital-vuetify .app-shell{padding:8px 8px max(18px,env(safe-area-inset-bottom))!important}
+  .app-shell .topbar{flex-wrap:wrap;align-items:center;gap:7px;margin:0 0 8px;padding:4px 2px}
+  .app-shell .identity{gap:7px;min-width:0}
+  .app-shell .identity .brand-mark{transform:scale(.83);transform-origin:left center}
+  .app-shell .identity h1{font-size:clamp(17px,4.4vw,25px);white-space:nowrap;line-height:1.1}
+  .app-shell .identity .eyebrow{font-size:9px}
+  .app-shell .top-actions{flex:1 1 auto;justify-content:flex-end;gap:5px;min-width:0}
+  .app-shell .top-actions>.v-btn{display:none!important}
+  .app-shell .top-actions .v-chip{margin:0!important;max-width:min(60vw,245px);height:auto;min-height:24px;
+    white-space:normal;font-size:9px;line-height:1.3;padding:2px 5px}
+  .app-shell .sim-clock{padding:2px 4px}
+  .app-shell .sim-clock strong{font-size:12px}
+  .app-shell .sim-clock .quiet-label{font-size:8px}
+  .mobile-navigation{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;
+    position:relative;z-index:15;margin:0 0 10px}
+  .mobile-navigation button{display:grid;place-items:center;min-width:0;min-height:43px;
+    padding:7px 4px;border:1px solid #2d5169;background:#102b3e;color:#d0e7f1;
+    border-radius:9px;font:700 10px/1.3 ui-sans-serif,system-ui;white-space:nowrap}
+  .mobile-navigation button:active,.mobile-navigation button[aria-expanded="true"]{
+    background:#1c4960;border-color:#66b6d5;color:#f4fcff}
+  .app-shell .game-layout{gap:10px}
+  .app-shell .arena-shell{min-width:0}
+  .app-shell .arena-head{align-items:stretch;flex-direction:column;gap:8px;padding:11px 10px}
+  .app-shell .arena-title{font-size:12px;line-height:1.35}
+  .app-shell .arena-actions{display:flex;flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;
+    gap:5px;padding:2px 0 6px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+  .app-shell .arena-actions .v-btn{flex:0 0 auto;min-width:40px}
+  #canvas-workspace{width:100%;overflow:hidden;min-height:0}
+  #canvas-workspace #orbit-canvas{display:block;width:100%;height:clamp(420px,68dvh,740px)!important;
+    min-height:0;touch-action:none;-webkit-user-select:none;user-select:none}
+  #canvas-workspace:fullscreen #orbit-canvas{height:100%!important;max-height:none!important}
+  #canvas-workspace .mobile-flight-pad{position:absolute;display:block;left:7px;right:7px;
+    bottom:calc(9px + env(safe-area-inset-bottom));z-index:65;
+    padding:8px 8px 9px;border-radius:13px;border:1px solid #41657c;
+    background:linear-gradient(180deg,#0c2337e9,#091827f5);
+    box-shadow:0 10px 28px #000b;backdrop-filter:blur(10px);
+    pointer-events:auto;max-width:720px;margin-inline:auto}
+  #canvas-workspace .mobile-gesture-hint{color:#9bbccd;text-align:center;
+    font:700 9px/1.4 ui-monospace,monospace;letter-spacing:.04em;margin:0 0 7px}
+  #canvas-workspace .mobile-gesture-hint span{color:#55778d;padding:0 3px}
+  #canvas-workspace .mobile-pad-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+  #canvas-workspace .mobile-helm-button{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:3px;min-width:0;min-height:61px;padding:8px 2px;color:#d9ebf4;background:#143045;
+    border:1px solid #40637a;border-radius:10px;touch-action:none;user-select:none;
+    -webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+  #canvas-workspace .mobile-helm-button strong{font-size:25px;line-height:1;font-weight:750}
+  #canvas-workspace .mobile-helm-button span{font:800 8px/1 ui-monospace,monospace;letter-spacing:.04em;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+  #canvas-workspace .mobile-helm-engine{border-color:#4c9d92;color:#b8f6dc;
+    background:linear-gradient(#174b48,#103433)}
+  #canvas-workspace .mobile-helm-fire{border-color:#bd6971;color:#ffd1d7;
+    background:linear-gradient(#5b2734,#3a1e2b)}
+  #canvas-workspace .mobile-helm-button.pressed,
+  #canvas-workspace .mobile-helm-button:active{background:#38738b;border-color:#adf1ff;
+    color:white;transform:translateY(1px);box-shadow:inset 0 1px 13px #020d19}
+  #canvas-workspace .mobile-helm-fire.pressed{background:#98354c}
+  #canvas-workspace .mobile-helm-engine.pressed{background:#246e58}
+  .app-shell .flight-controls{padding:10px!important}
+  .app-shell .flight-controls>.control-grid,
+  .app-shell .flight-controls>.control-description,
+  .app-shell .flight-controls>.control-note{display:none!important}
+  .app-shell .mission-strip{flex-wrap:wrap;gap:6px;padding:9px 11px;font-size:10px}
+  .app-shell .mission-strip .mission-right{margin-left:auto}
+  #canvas-workspace .hud-toolbar{top:7px;left:7px;right:7px;gap:5px;justify-content:flex-end}
+  #canvas-workspace .hud-toolbar .hud-picker:not(.map-tools-trigger){display:none}
+  #canvas-workspace .hud-toolbar .fullscreen-btn,
+  #canvas-workspace .hud-toolbar .map-tools-trigger{min-height:38px;padding:8px 10px;font-size:11px}
+  #canvas-workspace .hud-toolbar .map-tools-popover{right:0;min-width:0;
+    max-width:min(300px,calc(100vw - 30px))}
+  #canvas-workspace .selected-target-caption{top:56px;left:8px;right:8px;
+    max-width:calc(100% - 16px);width:max-content;font-size:9px}
+  #canvas-workspace #map-scale-overlay{bottom:131px;right:10px}
+  #canvas-workspace .canvas-overlay.bottom-left{display:none}
+  #canvas-workspace .hud-panel .hud-tool,
+  #canvas-workspace .hud-panel .panel-drag-handle{display:none}
+  .mobile-instruments-backdrop{display:block;position:fixed;inset:0;z-index:109;
+    background:#010811bb;border:0;padding:0;cursor:pointer}
+  .app-shell .sidebar{display:grid!important;grid-template-columns:minmax(0,1fr)!important;
+    grid-auto-rows:max-content;align-items:start;gap:9px;
+    position:fixed!important;left:0;right:0;bottom:0;top:auto;z-index:110;
+    width:100%;height:min(88dvh,900px);max-height:88dvh;min-width:0;
+    overflow-y:auto;overscroll-behavior:contain;
+    padding:12px 12px calc(20px + env(safe-area-inset-bottom));
+    border:1px solid #3a6175;border-bottom:0;border-radius:19px 19px 0 0;
+    background:#091a2a;box-shadow:0 -18px 60px #000b;
+    transform:translateY(105%);visibility:hidden;pointer-events:none;
+    transition:transform .2s ease,visibility .2s}
+  .app-shell .sidebar.mobile-instruments-open{transform:translateY(0);visibility:visible;pointer-events:auto}
+  .sidebar .mobile-instruments-heading{display:flex;position:sticky;top:-12px;z-index:4;
+    margin:-12px -12px 4px;padding:15px 15px 12px;
+    align-items:center;justify-content:space-between;gap:10px;
+    background:#102a3d;border-bottom:1px solid #355b70}
+  .mobile-instruments-heading div{display:grid;gap:3px}
+  .mobile-instruments-heading span{color:#88aec1;font:700 9px/1.3 ui-monospace,monospace;letter-spacing:.1em}
+  .mobile-instruments-heading strong{color:#f0f8fc;font-size:19px}
+  .mobile-instruments-heading button{display:grid;place-items:center;width:43px;height:43px;
+    border:1px solid #53768a;background:#1b3d50;color:#e5f3f8;border-radius:9px;font-size:20px}
+  .sidebar .panel,.sidebar>.hud-panel{min-width:0;width:100%;max-width:100%}
+  .sidebar .hud-panel .hud-tool,.sidebar .hud-panel .panel-drag-handle{display:none!important}
+  .sidebar .hud-panel .hud-collapse-title{min-height:30px}
+  .app-shell .footer-note{padding:14px 6px;font-size:9px;line-height:1.5}
+  .settings-backdrop{padding:8px;align-items:flex-end}
+  .settings-backdrop .settings-panel{width:100%;max-height:91dvh;padding:14px;border-radius:16px 16px 0 0;
+    padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+  .settings-panel button{min-height:40px}
+  .settings-panel input[type="text"],.settings-panel input[type="number"]{font-size:16px}
+  .pilot-profile-dialog{max-width:100vw!important;margin:8px!important}
+  .pilot-account{max-height:calc(100dvh - 16px);border-radius:13px}
+  .pilot-account-header{padding:14px 15px}
+  .pilot-account-content{grid-template-columns:minmax(0,1fr);min-height:0}
+  .pilot-account:not(.pilot-signed-in) .pilot-art-gallery{display:none}
+  .pilot-art-gallery{padding:10px 14px}
+  .pilot-featured{height:138px}
+  .pilot-portrait-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .pilot-avatar-option img{height:54px}
+  .pilot-avatar-option span{font-size:8px}
+  .pilot-form-panel{padding:17px 15px;min-width:0}
+  .pilot-form input{font-size:16px}
+  .pilot-profile-tabs button{min-height:42px}
+}
+@media (max-width:390px){
+  .mobile-navigation button{font-size:9px;letter-spacing:-.02em}
+  #canvas-workspace .mobile-flight-pad{left:4px;right:4px;padding:7px 5px}
+  #canvas-workspace .mobile-pad-grid{gap:4px}
+  #canvas-workspace .mobile-helm-button{min-height:56px;padding-inline:1px}
+  #canvas-workspace .mobile-helm-button strong{font-size:23px}
+  #canvas-workspace .mobile-helm-button span{font-size:7px}
+  .app-shell .top-actions .v-chip{max-width:170px}
+}
+@media (pointer:coarse) and (max-height:560px) and (orientation:landscape){
+  #canvas-workspace #orbit-canvas{height:max(290px,calc(100dvh - 165px))!important}
+  #canvas-workspace .mobile-flight-pad{bottom:4px;padding:5px 8px}
+  #canvas-workspace .mobile-gesture-hint{display:none}
+  #canvas-workspace .mobile-helm-button{min-height:48px;gap:2px;padding:4px 2px}
+  #canvas-workspace .mobile-helm-button strong{font-size:19px}
+  #canvas-workspace #map-scale-overlay{bottom:82px}
+}
+@media (prefers-reduced-motion:reduce){
+  .app-shell .sidebar{transition:none!important}
+}
