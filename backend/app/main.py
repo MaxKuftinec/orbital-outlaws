@@ -1,12 +1,14 @@
 from __future__ import annotations
 import os
 import asyncio
+import time
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager, suppress
 import logging
 from functools import lru_cache
 from typing import Literal
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.concurrency import run_in_threadpool
 from pydantic import ValidationError
 from pydantic import BaseModel, Field
@@ -54,7 +56,7 @@ app=FastAPI(title='Orbital Outlaws',version='1.1.0',lifespan=lifespan)
 # Public accounts are disabled unless AUTH_ENABLED=1 and all secrets are set.
 # Browser origin allow-list is explicit; never use wildcard CORS for credentials.
 from fastapi.middleware.cors import CORSMiddleware
-from .accounts import router as accounts_router
+from .accounts import router as accounts_router, profile_for_token
 approved_origins=[origin.strip() for origin in os.getenv('AUTH_ORIGINS','').split(',') if origin.strip()]
 if approved_origins:
     app.add_middleware(CORSMiddleware,allow_origins=approved_origins,
@@ -64,10 +66,36 @@ app.include_router(accounts_router)
 
 
 
-def require_dev_commands():
-    if os.getenv('ORBITAL_DEV_COMMANDS', '0') != '1':
-        raise HTTPException(403,'Development commands disabled; enable ORBITAL_DEV_COMMANDS=1 in a trusted local environment')
+# Swagger exposes a Bearer authorization control for private game/admin routes.
+bearer_scheme = HTTPBearer(auto_error=False)
 
+
+def _request_profile(credentials: HTTPAuthorizationCredentials | None):
+    # Preserve anonymous tooling solely for explicitly enabled LOCAL development.
+    if os.getenv('ORBITAL_DEV_COMMANDS') == '1' and os.getenv('AUTH_ENABLED') != '1':
+        return None
+    if credentials is None or credentials.scheme.lower() != 'bearer':
+        raise HTTPException(401, 'Sign in with a Bearer token')
+    return profile_for_token(credentials.credentials)
+
+
+def require_owned_pilot(pilot_id: str,
+                        credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)):
+    if len(pilot_id) != 32 or any(c not in '0123456789abcdef' for c in pilot_id):
+        raise HTTPException(400, 'Expected a 32-character pilot ID')
+    profile = _request_profile(credentials)
+    if profile is not None and profile['id'] != pilot_id:
+        raise HTTPException(403, 'You may only control your own pilot')
+    return profile
+
+
+def require_admin(credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)):
+    profile = _request_profile(credentials)
+    if profile is not None:
+        admin_email = os.getenv('AUTH_ADMIN_EMAIL', '').strip().casefold()
+        if not admin_email or profile['email'].casefold() != admin_email:
+            raise HTTPException(403, 'Pilot administrator permission required')
+    return profile
 
 
 class PlayerInput(BaseModel):
@@ -95,12 +123,34 @@ class AutoBurnCommand(BaseModel):
 
 @app.websocket('/players/{pilot_id}/live')
 async def pilot_live(ws: WebSocket,pilot_id: str):
-    # Anonymous pilot IDs are permitted ONLY in trusted local development.
-    if os.getenv('ORBITAL_DEV_COMMANDS')!='1' or len(pilot_id)!=32 or any(c not in '0123456789abcdef' for c in pilot_id):
+    # Authenticate BEFORE accepting the socket. No bearer secrets in URLs.
+    # Pilot ownership is derived from a verified account, never a browser-chosen ID.
+    is_local_dev = os.getenv('ORBITAL_DEV_COMMANDS') == '1' and os.getenv('AUTH_ENABLED') != '1'
+    protocol = None
+    auth_token = None
+    if len(pilot_id) != 32 or any(c not in '0123456789abcdef' for c in pilot_id):
         await ws.close(code=1008)
         return
-    await ws.accept()
+    if not is_local_dev:
+        origins = {origin.strip() for origin in os.getenv('AUTH_ORIGINS', '').split(',') if origin.strip()}
+        offered = [part.strip() for part in ws.headers.get('sec-websocket-protocol', '').split(',')]
+        tokens = [part[5:] for part in offered if part.startswith('auth.')]
+        if ws.headers.get('origin') not in origins or 'orbital-v1' not in offered or len(tokens) != 1:
+            await ws.close(code=1008)
+            return
+        auth_token = tokens[0]
+        try:
+            profile = await run_in_threadpool(profile_for_token, auth_token)
+        except HTTPException:
+            await ws.close(code=1008)
+            return
+        if profile['id'] != pilot_id:
+            await ws.close(code=1008)
+            return
+        protocol = 'orbital-v1'
+    await ws.accept(subprotocol=protocol)
     database=store()
+    next_auth_check = time.monotonic() + 30
     try:
         await run_in_threadpool(database.connect_player,pilot_id)
         encounter=await run_in_threadpool(database.player_encounter,pilot_id)
@@ -109,6 +159,13 @@ async def pilot_live(ws: WebSocket,pilot_id: str):
         await ws.send_json({'type':'welcome','flight':flight,'progress':progress,
                             'encounter':encounter})
         while True:
+            if auth_token and time.monotonic() >= next_auth_check:
+                try:
+                    await run_in_threadpool(profile_for_token, auth_token)
+                except HTTPException:
+                    await ws.close(code=1008)
+                    return
+                next_auth_check = time.monotonic() + 30
             try:
                 message=await asyncio.wait_for(ws.receive_json(),timeout=.25)
             except asyncio.TimeoutError:
@@ -181,22 +238,19 @@ async def pilot_live(ws: WebSocket,pilot_id: str):
 
 
 @app.post('/players/{pilot_id}')
-def connect_player(pilot_id: str):
-    require_dev_commands()
+def connect_player(pilot_id: str, _owner=Depends(require_owned_pilot)):
     if len(pilot_id)!=32 or any(c not in '0123456789abcdef' for c in pilot_id):
         raise HTTPException(400,'Expected 32-character pilot ID')
     return store().connect_player(pilot_id)
 
 
 @app.get('/players/{pilot_id}')
-def player_state(pilot_id: str):
-    require_dev_commands()
+def player_state(pilot_id: str, _owner=Depends(require_owned_pilot)):
     return store().get_entity('kestrel','pilot-'+pilot_id)
 
 
 @app.post('/players/{pilot_id}/input')
-def player_input(pilot_id: str, command: PlayerInput):
-    require_dev_commands()
+def player_input(pilot_id: str, command: PlayerInput, _owner=Depends(require_owned_pilot)):
     try:
         return store().player_input(pilot_id,command.thrust,command.turn,
                                     command.stabilize,command.gimbal)
@@ -206,9 +260,8 @@ def player_input(pilot_id: str, command: PlayerInput):
 
 
 @app.post('/players/{pilot_id}/auto-burn')
-def start_auto_burn(pilot_id: str, command: AutoBurnCommand):
+def start_auto_burn(pilot_id: str, command: AutoBurnCommand, _owner=Depends(require_owned_pilot)):
     """Development-only REST alternative to the cockpit's WebSocket command."""
-    require_dev_commands()
     if len(pilot_id)!=32 or any(c not in '0123456789abcdef' for c in pilot_id):
         raise HTTPException(400, 'Expected 32-character pilot ID')
     try:
@@ -223,8 +276,7 @@ def start_auto_burn(pilot_id: str, command: AutoBurnCommand):
 
 
 @app.post('/players/{pilot_id}/auto-burn/abort')
-def abort_auto_burn(pilot_id: str):
-    require_dev_commands()
+def abort_auto_burn(pilot_id: str, _owner=Depends(require_owned_pilot)):
     if len(pilot_id)!=32 or any(c not in '0123456789abcdef' for c in pilot_id):
         raise HTTPException(400, 'Expected 32-character pilot ID')
     try:
@@ -236,9 +288,8 @@ def abort_auto_burn(pilot_id: str):
 
 
 @app.post('/dev/players/{pilot_id}/raiders', status_code=201)
-def spawn_dev_raider(pilot_id: str):
+def spawn_dev_raider(pilot_id: str, _admin=Depends(require_admin)):
     """Explicit dev-only enemy spawn. Intentionally absent from the game UI."""
-    require_dev_commands()
     if len(pilot_id) != 32 or any(ch not in '0123456789abcdef' for ch in pilot_id):
         raise HTTPException(400, 'Expected 32-character pilot ID')
     try:
@@ -249,9 +300,8 @@ def spawn_dev_raider(pilot_id: str):
 
 
 @app.post('/dev/players/{pilot_id}/allies', status_code=201)
-def spawn_dev_ally(pilot_id: str):
+def spawn_dev_ally(pilot_id: str, _admin=Depends(require_admin)):
     """Create one incoming allied spacecraft; no player-facing spawn control."""
-    require_dev_commands()
     if len(pilot_id) != 32 or any(ch not in '0123456789abcdef' for ch in pilot_id):
         raise HTTPException(400, 'Expected 32-character pilot ID')
     try:
@@ -261,9 +311,8 @@ def spawn_dev_ally(pilot_id: str):
 
 
 @app.post('/dev/players/{pilot_id}/respawn')
-def respawn_dev_pilot(pilot_id: str):
+def respawn_dev_pilot(pilot_id: str, _admin=Depends(require_admin)):
     """Create a new pilot spacecraft even if still alive; reset progression."""
-    require_dev_commands()
     if len(pilot_id) != 32 or any(ch not in '0123456789abcdef' for ch in pilot_id):
         raise HTTPException(400, 'Expected 32-character pilot ID')
     try:
@@ -280,9 +329,8 @@ class DevRefuelBody(BaseModel):
 
 
 @app.post('/dev/players/{pilot_id}/refuel')
-def refuel_dev_pilot(pilot_id: str, body: DevRefuelBody | None = None):
+def refuel_dev_pilot(pilot_id: str, body: DevRefuelBody | None = None, _admin=Depends(require_admin)):
     """Development-only propellant refill; never exposed as a cockpit control."""
-    require_dev_commands()
     if len(pilot_id) != 32 or any(ch not in '0123456789abcdef' for ch in pilot_id):
         raise HTTPException(400, 'Expected 32-character pilot ID')
     try:
@@ -309,8 +357,7 @@ class ReserveConfig(BaseModel):
 
 
 @app.post('/players/{pilot_id}/reserve')
-def set_reserve(pilot_id: str, config: ReserveConfig):
-    require_dev_commands()
+def set_reserve(pilot_id: str, config: ReserveConfig, _owner=Depends(require_owned_pilot)):
     try:
         return store().set_player_reserve(pilot_id, config.kg)
     except LookupError as exc:
@@ -330,8 +377,7 @@ class FuelOffer(BaseModel):
 
 
 @app.post('/players/{pilot_id}/request-assistance')
-def request_assistance(pilot_id: str, body: FuelRequest):
-    require_dev_commands()
+def request_assistance(pilot_id: str, body: FuelRequest, _owner=Depends(require_owned_pilot)):
     try:
         return store().request_assistance(pilot_id, body.recipient, body.donor)
     except ValueError as exc:
@@ -339,8 +385,7 @@ def request_assistance(pilot_id: str, body: FuelRequest):
 
 
 @app.post('/players/{pilot_id}/offer-fuel')
-def offer_fuel(pilot_id: str, body: FuelOffer):
-    require_dev_commands()
+def offer_fuel(pilot_id: str, body: FuelOffer, _owner=Depends(require_owned_pilot)):
     try:
         return store().offer_fuel(pilot_id, body.target, body.kg)
     except ValueError as exc:
@@ -366,14 +411,13 @@ class ImpulseBody(BaseModel):
 
 
 @app.get('/worlds/{world_id}')
-def world(world_id: str):
+def world(world_id: str, _admin=Depends(require_admin)):
     if world_id!='kestrel':raise HTTPException(404,'Unknown world')
     return store().ensure_world(world_id)
 
 
 @app.post('/worlds/{world_id}/entities',status_code=201)
-def spawn(world_id: str,body: SpawnBody):
-    require_dev_commands()
+def spawn(world_id: str,body: SpawnBody, _admin=Depends(require_admin)):
     try:
         if body.fuel_kg>body.mass_kg:raise ValueError('Propellant cannot exceed mass')
         if (body.x**2+body.y**2)**.5<91:raise ValueError('Inside central body')
@@ -384,22 +428,21 @@ def spawn(world_id: str,body: SpawnBody):
 
 
 @app.get('/worlds/{world_id}/entities/{entity_id}')
-def get_entity(world_id: str,entity_id: str,at_s: float|None=None):
+def get_entity(world_id: str,entity_id: str,at_s: float|None=None, _admin=Depends(require_admin)):
     try:return store().get_entity(world_id,entity_id,at_s)
     except LookupError as exc:raise HTTPException(404,str(exc)) from exc
     except ValueError as exc:raise HTTPException(400,str(exc)) from exc
 
 
 @app.get('/worlds/{world_id}/viewport')
-def viewport(world_id: str,cx: float=0,cy: float=0,radius_km:float=Query(700,gt=0,le=100000),at_s:float|None=None):
+def viewport(world_id: str,cx: float=0,cy: float=0,radius_km:float=Query(700,gt=0,le=100000),at_s:float|None=None, _admin=Depends(require_admin)):
     try:return store().viewport(world_id,cx,cy,radius_km,at_s)
     except LookupError as exc:raise HTTPException(404,str(exc)) from exc
     except ValueError as exc:raise HTTPException(400,str(exc)) from exc
 
 
 @app.post('/worlds/{world_id}/entities/{entity_id}/impulses')
-def impulse(world_id: str,entity_id: str,body: ImpulseBody):
-    require_dev_commands()
+def impulse(world_id: str,entity_id: str,body: ImpulseBody, _admin=Depends(require_admin)):
     try:return store().apply_impulse(world_id,entity_id,body.dvx,body.dvy,body.idempotency_key,body.reserve_kg)
     except LookupError as exc:raise HTTPException(404,str(exc)) from exc
     except ValueError as exc:raise HTTPException(400,str(exc)) from exc
