@@ -7,8 +7,14 @@
   if(!workspace||!sidebar||!fullscreen)return;
 
   const storageKey='orbital-outlaws.hud-layout.v2';
-  const layout=JSON.parse(localStorage.getItem(storageKey)||'{}');
-  const save=()=>localStorage.setItem(storageKey,JSON.stringify(layout));
+  const mobileViewport=()=>window.matchMedia?.('(max-width: 780px), (pointer: coarse) and (max-width: 1100px)').matches||false;
+  let initial={};
+  try{initial=JSON.parse(localStorage.getItem(storageKey)||'{}');}catch{}
+  const layout=initial&&typeof initial==='object'&&!Array.isArray(initial)?initial:{};
+  const save=()=>{
+    localStorage.setItem(storageKey,JSON.stringify(layout));
+    window.dispatchEvent(new Event('orbital-preferences-changed'));
+  };
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
   const panels=[
     {id:'nav-command',title:'Navigation',inside:true},
@@ -55,15 +61,14 @@
           panel.id==='telemetry-console'||panel.id==='ship-panel'?14:20+index*20;
         const y=panel.id==='nav-command'?96:panel.id==='telemetry-console'?14:
           panel.id==='ship-panel'?limits(panel).y-14:65+index*28;
-        moveTo(panel,x,y,true);
+        moveTo(panel,x,y,persist);
       }else restorePosition(panel);
     }else{
       sidebar.appendChild(panel);
       for(const prop of ['top','left','right','bottom','zIndex'])
         panel.style[prop]='';
     }
-    layout[panel.id]={...layout[panel.id],inside};
-    if(persist)save();
+    if(persist){layout[panel.id]={...layout[panel.id],inside};save();}
     refreshButtons(panel);
   }
   function setCollapsed(panel,collapsed,persist=true){
@@ -76,8 +81,7 @@
       const arrow=document.getElementById('telemetry-toggle-arrow');
       if(arrow)arrow.textContent=collapsed?'▾':'▴';
     }
-    layout[panel.id]={...layout[panel.id],collapsed};
-    if(persist)save();
+    if(persist){layout[panel.id]={...layout[panel.id],collapsed};save();}
     restorePosition(panel);
   }
   function refreshButtons(panel){
@@ -127,7 +131,7 @@
     dockButton.addEventListener('click',()=>dock(panel,!panel.classList.contains('hud-in-canvas')));
     header.append(dockButton);
     // Existing Navigation/Telemetry title buttons keep their original click handlers.
-    dock(panel,layout[panel.id]?.inside??definition.inside,false);
+    dock(panel,mobileViewport()?false:(layout[panel.id]?.inside??definition.inside),false);
     setCollapsed(panel,layout[panel.id]?.collapsed??panel.classList.contains('collapsed'),false);
     refreshButtons(panel);
 
@@ -216,7 +220,7 @@
       save();
       panels.forEach(definition=>{
         const panel=document.getElementById(definition.id);
-        dock(panel,definition.inside);
+        dock(panel,mobileViewport()?false:definition.inside);
         setCollapsed(panel,definition.id==='telemetry-console');
       });
       renderMenu();
@@ -244,12 +248,40 @@
       window.dispatchEvent(new Event('resize'));
     });
   }
+  if(typeof workspace.requestFullscreen!=='function')fullscreen.hidden=true;
   fullscreen.addEventListener('click',()=>{
-    if(document.fullscreenElement===workspace)document.exitFullscreen();
-    else workspace.requestFullscreen();
+    if(document.fullscreenElement===workspace){
+      if(typeof document.exitFullscreen==='function')
+        void document.exitFullscreen().catch?.(()=>{});
+    }else if(typeof workspace.requestFullscreen==='function'){
+      void workspace.requestFullscreen().catch?.(()=>{});
+    }
   });
   document.addEventListener('fullscreenchange',refreshFullscreen);
-  window.addEventListener('resize',()=>panels.forEach(({id})=>restorePosition(document.getElementById(id))));
+  let lastMobile=mobileViewport();
+  window.addEventListener('resize',()=>{
+    const nextMobile=mobileViewport();
+    if(nextMobile!==lastMobile){
+      lastMobile=nextMobile;
+      applyStoredLayout();
+    }
+    panels.forEach(({id})=>restorePosition(document.getElementById(id)));
+  });
+  function applyStoredLayout(){
+    let incoming={};
+    try{incoming=JSON.parse(localStorage.getItem(storageKey)||'{}');}catch{}
+    if(!incoming||typeof incoming!=='object'||Array.isArray(incoming))incoming={};
+    for(const key of Object.keys(layout))delete layout[key];
+    Object.assign(layout,incoming);
+    for(const definition of panels){
+      const panel=document.getElementById(definition.id);
+      if(!panel)continue;
+      dock(panel,mobileViewport()?false:(layout[panel.id]?.inside??definition.inside),false);
+      setCollapsed(panel,layout[panel.id]?.collapsed??definition.id==='telemetry-console',false);
+    }
+    if(!menu.hidden)renderMenu();
+  }
+  window.addEventListener('orbital-preferences-applied',applyStoredLayout);
   rootlessExpose();
   function rootlessExpose(){
     window.OrbitalHUD={
@@ -257,7 +289,7 @@
         const panel=document.getElementById(id);
         if(panel)setCollapsed(panel,!panel.classList.contains('hud-minimized'));
       },
-      resetLayout:()=>{localStorage.removeItem(storageKey);location.reload();}
+      resetLayout:()=>{localStorage.removeItem(storageKey);applyStoredLayout();save();}
     };
   }
 })();

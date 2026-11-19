@@ -1492,7 +1492,7 @@
   }
   function showSystemMap(){
     state.systemView=true;
-    try{localStorage.setItem(FRAME_KEY,'star');}catch{}
+    try{localStorage.setItem(FRAME_KEY,'star');}catch{}globalThis.dispatchEvent?.(new Event('orbital-preferences-changed'));
     const baseScale=Math.min(W/700,H/660);
     state.zoom=clamp(.65*Math.min(W,H)/(STAR.ORBIT_RADIUS_KM*baseScale),MIN_ZOOM,6);
     const planet=STAR.planet(state.t),s=scale();
@@ -1504,7 +1504,7 @@
   }
   function showPlanetMap(){
     state.systemView=false;
-    try{localStorage.setItem(FRAME_KEY,'planet');}catch{}state.followPlayer=false;state.followTarget=false;
+    try{localStorage.setItem(FRAME_KEY,'planet');}catch{}globalThis.dispatchEvent?.(new Event('orbital-preferences-changed'));state.followPlayer=false;state.followTarget=false;
     state.zoom=1;state.panX=0;state.panY=0;
     updateZoom();updateHud();
     logEvent('Returned to Kestrel planetary view.','good');
@@ -1514,11 +1514,11 @@
     if(!target){logEvent('Select a live navigation target before focusing the camera.');return;}
     if(target.kind==='star'){
       state.systemView=true;
-      try{localStorage.setItem(FRAME_KEY,'star');}catch{}
+      try{localStorage.setItem(FRAME_KEY,'star');}catch{}globalThis.dispatchEvent?.(new Event('orbital-preferences-changed'));
       state.zoom=clamp(.65*Math.min(W,H)/(STAR.ORBIT_RADIUS_KM*Math.min(W/700,H/660)),MIN_ZOOM,6);
     }else if(target.kind==='planet'){
       state.systemView=false;state.zoom=1.8;
-      try{localStorage.setItem(FRAME_KEY,'planet');}catch{}
+      try{localStorage.setItem(FRAME_KEY,'planet');}catch{}globalThis.dispatchEvent?.(new Event('orbital-preferences-changed'));
     }else{
       state.zoom=clamp(Math.max(state.zoom,2.8),MIN_ZOOM,6);
     }
@@ -1721,7 +1721,7 @@
     }catch{return {...DEFAULT_KEYS};}
   }
   let hotkeys=loadHotkeys(),settingsOpen=false,capturingAction=null;
-  function saveHotkeys(){try{localStorage.setItem('orbital-outlaws.hotkeys.v1',JSON.stringify(hotkeys));}catch{}updateHotkeyHints();}
+  function saveHotkeys(){try{localStorage.setItem('orbital-outlaws.hotkeys.v1',JSON.stringify(hotkeys));}catch{}updateHotkeyHints();globalThis.dispatchEvent?.(new Event('orbital-preferences-changed'));}
   function actionForKey(code){
     const matched=Object.keys(hotkeys).find(k=>hotkeys[k]===code);
     return {main:'main',left:'rotate-left',right:'rotate-right',stabilize:'stabilize',fire:'fire',repair:'repair'}[matched]||null;
@@ -1762,6 +1762,17 @@
     hotkeys[capturingAction]=code;saveHotkeys();capturingAction=null;
     $('hotkey-feedback').textContent='Saved: '+keyLabel(code);renderHotkeys();
   }
+  window.addEventListener('orbital-preferences-applied',()=>{
+    if(!state)return;
+    const useStar=storedFrame()==='star';
+    if(useStar!==!!state.systemView){
+      if(useStar)showSystemMap();else showPlanetMap();
+    }
+    state.showAxes=storedAxes();
+    hotkeys=loadHotkeys();updateHotkeyHints();
+    if(settingsOpen)renderHotkeys();
+    updateHud();
+  });
   function settingsTab(tab){
     const controls=tab==='controls';
     $('settings-controls-pane').classList.toggle('hidden',!controls);
@@ -1823,7 +1834,11 @@
       const stop=()=>{state.down.delete(action);button.classList.remove('pressed');};
       button.addEventListener('pointerup',stop);button.addEventListener('pointercancel',stop);button.addEventListener('lostpointercapture',stop);
     }
-    document.querySelectorAll('[data-thrust]').forEach(b=>hold(b,b.dataset.thrust));hold($('fire-btn'),'fire');hold($('repair-btn'),'repair');
+    document.querySelectorAll('[data-thrust]').forEach(b=>hold(b,b.dataset.thrust));
+    document.querySelectorAll('[data-mobile-thrust]').forEach(b=>hold(b,b.dataset.mobileThrust));
+    hold($('fire-btn'),'fire');
+    if($('mobile-fire-btn'))hold($('mobile-fire-btn'),'fire');
+    hold($('repair-btn'),'repair');
     $('reset-btn').addEventListener('click',reset);
     $('retry-btn')?.addEventListener('click',reset);
     $('ruler-toggle').addEventListener('click',toggleRuler);
@@ -1897,6 +1912,7 @@
     $('settings-show-axes').addEventListener('change',e=>{
       state.showAxes=e.target.checked;
       try{localStorage.setItem(AXES_KEY,String(state.showAxes));}catch{}
+      globalThis.dispatchEvent?.(new Event('orbital-preferences-changed'));
     });
     $('settings-close').addEventListener('click',closeSettings);
     $('settings-done').addEventListener('click',closeSettings);
@@ -1907,6 +1923,7 @@
     canvas.addEventListener('contextmenu',e=>e.preventDefault());
     canvas.addEventListener('wheel',e=>{e.preventDefault();const pt=coords(e);zoomAt(Math.exp(-e.deltaY*.0016),pt.px,pt.py);},{passive:false});
     canvas.addEventListener('pointermove',e=>{
+      if(e.pointerType==='touch')return; // Mobile touch navigation owns drag/pinch gestures.
       const pt=coords(e);
       if(drag&&drag.id===e.pointerId){state.panX+=pt.px-drag.px;state.panY+=pt.py-drag.py;drag.px=pt.px;drag.py=pt.py;return;}
       if(state.measurement.enabled&&state.measurement.start&&!state.measurement.end){
@@ -1917,6 +1934,7 @@
       if(state.aimMode==='manual')state.mouseTarget=state.gimbalTarget;
     });
     canvas.addEventListener('pointerdown',e=>{
+      if(e.pointerType==='touch')return; // Taps are dispatched on release, not touch-down.
       const pt=coords(e),p=fromScreen(pt.px,pt.py);
       if(e.button===1||e.button===2||e.shiftKey){
         e.preventDefault();
@@ -1926,6 +1944,9 @@
         drag={id:e.pointerId,px:pt.px,py:pt.py};canvas.setPointerCapture(e.pointerId);return;
       }
       if(e.button!==0)return;
+      selectCanvas(e,pt,p);
+    });
+    function selectCanvas(e,pt,p){
       if(state.measurement.enabled){
         e.preventDefault();chooseRulerPoint(measurementAnchor(pt,p));return;
       }
@@ -1963,7 +1984,25 @@
       for(const pickup of state.pickups)if(pickup.alive){const d=magnitude(p.x-pickup.x,p.y-pickup.y);if(d<Math.max(17,19/scale())&&d<dist){dist=d;candidate=pickup;}}
       if(candidate&&candidate.type){updateTargetOptions('pickup:'+candidate.id);state.navPlan=null;logEvent('Navigation target selected: '+candidate.type+'.');updateHud();return;}
       e.preventDefault();state.aimMode='manual';state.mouseTarget=p;state.gimbalTarget=p;state.lastBallistic=-999;logEvent('Manual gun aim: curved shot path shown. Hold SPACE to fire.');updateHud();
-    });
+    }
+    // A touch drag pans the map; a two-finger gesture zooms at the midpoint.
+    // A stationary finger only selects/aims after release, preventing accidental
+    // targeting while exploring the map.
+    if(window.OrbitalTouchNavigation){
+      window.OrbitalTouchNavigation.attach(canvas,{
+        onTap:e=>{
+          const pt=coords(e);
+          selectCanvas(e,pt,fromScreen(pt.px,pt.py));
+        },
+        onPan:(dx,dy)=>{
+          if(state.followTarget||state.followPlayer){
+            state.followTarget=false;state.followPlayer=false;updateHud();
+          }
+          state.panX+=dx;state.panY+=dy;
+        },
+        onPinch:(factor,x,y)=>zoomAt(factor,x,y)
+      });
+    }
     function endPointer(e){if(drag&&drag.id===e.pointerId)drag=null;if(state.pointerThrust){state.pointerThrust=false;state.down.delete('main');}}
     canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',endPointer);canvas.addEventListener('lostpointercapture',endPointer);
     window.addEventListener('resize',fitCanvas);

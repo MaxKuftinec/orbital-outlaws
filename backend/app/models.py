@@ -124,6 +124,17 @@ class Account(Base):
     created_at: Mapped[float] = mapped_column(Float, nullable=False)
 
 
+class AccountPreferences(Base):
+    """Portable, account-scoped cockpit preferences (never flight state)."""
+    __tablename__ = 'account_preferences'
+    account_id: Mapped[str] = mapped_column(ForeignKey('accounts.id'), primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    preferences: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    updated_at: Mapped[float] = mapped_column(Float, nullable=False)
+
+
+
+
 class EmailChallenge(Base):
     """One-time code hash; never persist or log the delivered six digits."""
     __tablename__ = 'email_challenges'

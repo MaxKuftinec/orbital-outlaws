@@ -182,3 +182,113 @@ def test_owner_websocket_and_admin_only_spawns(client_accounts, monkeypatch):
     assert spawned.status_code == 201, spawned.text
     refuel = client.post('/dev/players/' + pilot_id + '/refuel', headers=headers)
     assert refuel.status_code == 200, refuel.text
+
+
+def test_remember_me_and_minimum_password_without_complexity_rules(client_accounts):
+    client, messages, database = client_accounts
+    slug = uuid4().hex[:12]
+    email = slug + '@example.com'
+    username = 'p' + slug
+    assert client.post('/auth/register', json={
+        'username': username, 'email': email, 'password': '1234567'
+    }).status_code == 422
+    assert client.post('/auth/register', json={
+        'username': username, 'email': email, 'password': 'abcdefgh'
+    }).status_code == 202
+    assert client.post('/auth/verify', json={
+        'identifier': email, 'code': messages[-1][1]
+    }).status_code == 200
+    remembered = client.post('/auth/login', json={
+        'identifier': email, 'password': 'abcdefgh', 'remember_me': True
+    }).json()
+    assert remembered['expires_in'] == 30 * 24 * 3600
+    with database.sessions() as db:
+        row = db.get(AccountSession, token_digest(remembered['access_token']))
+        assert row.expires_at > time.time() + 29 * 24 * 3600
+    temporary = client.post('/auth/login', json={
+        'identifier': username, 'password': 'abcdefgh'
+    }).json()
+    assert temporary['expires_in'] == 12 * 3600
+
+
+def test_profile_management_and_revoking_all_sessions(client_accounts):
+    client, messages, database = client_accounts
+    slug = uuid4().hex[:12]
+    email = slug + '@example.com'
+    username = 'p' + slug
+    assert client.post('/auth/register', json={
+        'username': username, 'email': email, 'password': 'abcdefgh'
+    }).status_code == 202
+    assert client.post('/auth/verify', json={
+        'identifier': email, 'code': messages[-1][1]
+    }).status_code == 200
+    def sign_in():
+        return client.post('/auth/login', json={
+            'identifier': email, 'password': 'abcdefgh', 'remember_me': True
+        }).json()['access_token']
+    a, b = sign_in(), sign_in()
+    h1 = {'Authorization': 'Bearer ' + a}
+    h2 = {'Authorization': 'Bearer ' + b}
+    new_name = 'updated_' + slug
+    assert client.patch('/auth/me/callsign', json={'username': new_name},
+                        headers=h1).json()['username'] == new_name
+    assert client.patch('/auth/me/callsign', json={'username': 'x'},
+                        headers=h1).status_code == 422
+    assert client.post('/auth/me/password', json={
+        'current_password': 'incorrect', 'new_password': '87654321'
+    }, headers=h1).status_code == 401
+    assert client.post('/auth/me/password', json={
+        'current_password': 'abcdefgh', 'new_password': '87654321'
+    }, headers=h1).status_code == 200
+    assert client.get('/auth/me', headers=h1).status_code == 401
+    assert client.get('/auth/me', headers=h2).status_code == 401
+    assert client.post('/auth/login', json={
+        'identifier': new_name, 'password': 'abcdefgh'
+    }).status_code == 401
+    fresh = client.post('/auth/login', json={
+        'identifier': new_name, 'password': '87654321'
+    }).json()['access_token']
+    assert client.post('/auth/logout-all', headers={
+        'Authorization': 'Bearer ' + fresh
+    }).status_code == 200
+    assert client.get('/auth/me', headers={
+        'Authorization': 'Bearer ' + fresh
+    }).status_code == 401
+
+
+def test_cockpit_preferences_are_private_validated_and_revisioned(client_accounts):
+    client, messages, database = client_accounts
+    slug = uuid4().hex[:12]
+    email = slug + '@example.com'
+    assert client.post('/auth/register', json={
+        'username': 'p' + slug, 'email': email, 'password': 'abcdefgh'
+    }).status_code == 202
+    assert client.post('/auth/verify', json={
+        'identifier': email, 'code': messages[-1][1]
+    }).status_code == 200
+    token = client.post('/auth/login', json={
+        'identifier': email, 'password': 'abcdefgh'
+    }).json()['access_token']
+    headers = {'Authorization': 'Bearer ' + token}
+    path = '/auth/me/preferences'
+    assert client.get(path).status_code == 401
+    assert client.get(path, headers=headers).json() == {
+        'revision': 0, 'preferences': {}, 'updated_at': None
+    }
+    prefs = {'frame': 'star', 'show_axes': False,
+             'layout': {'ship-panel': {'inside': False, 'collapsed': True, 'x': 0.5, 'y': 0.3}},
+             'hotkeys': {'main': 'KeyQ', 'fire': 'Space'}}
+    assert client.put(path, json={'revision': 0,
+                     'preferences': {'unknown': 'bad'}}, headers=headers).status_code == 422
+    assert client.put(path, json={'revision': 0, 'preferences': {
+        'layout': {'ship-panel': {'x': 10}}
+    }}, headers=headers).status_code == 422
+    result = client.put(path, json={'revision': 0, 'preferences': prefs}, headers=headers)
+    assert result.status_code == 200, result.text
+    assert result.json()['revision'] == 1
+    assert client.get(path, headers=headers).json()['preferences'] == prefs
+    assert client.put(path, json={'revision': 0, 'preferences': {}},
+                      headers=headers).status_code == 409
+    assert client.put(path, json={'revision': 1, 'preferences': {'frame': 'planet'}},
+                      headers=headers).json()['revision'] == 2
+    assert client.get(path, headers=headers).json()['preferences'] == {'frame': 'planet'}

@@ -20,6 +20,15 @@ as a local, **not-saved** sandbox. A VM alone does not create multiplayer;
 the current server still has isolated pilot sectors, so production
 gameplay routes remain blocked until identity and shared-world work is done.
 
+## Mobile browser cockpit
+
+The same authoritative flight is now playable from phone and touch-tablet
+browsers. The mobile layout puts navigation in a compact toolbar, instruments
+in a scrollable bottom drawer, and five hold-to-act flight buttons over the
+canvas. Drag to pan, pinch to zoom, and tap to select a target or aim.
+The desktop cockpit is unchanged. See the
+[mobile controls, testing and Firebase deployment guide](docs/MOBILE_COCKPIT.md).
+
 ## Pilot profile and inertial map instruments
 
 **Pilot Registry:** The cockpit now has a **Pilot Profile** action with

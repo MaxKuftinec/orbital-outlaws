@@ -9,13 +9,14 @@ import NavigationPanel from './components/NavigationPanel.vue'
 import SystemAtlas from './components/SystemAtlas.vue'
 import PilotProfile from './components/PilotProfile.vue'
 import AutoBurnPanel from './components/AutoBurnPanel.vue'
+import { restoreSession } from './services/session'
+import { setupPreferenceSync, hydratePreferences } from './services/preferences'
 
 const publicPreview = import.meta.env.VITE_PUBLIC_PREVIEW === '1'
-const tokenKey = 'orbital-outlaws.account.session.v1'
 
 const legacyFiles = [
   'map-tools.js', 'map-visuals.js', 'star-system.js', 'reference-frames.js', 'autopilot-attitude.js', 'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
-  'arrival.js', 'persistence.js', 'workspace.js', 'rendering.js', 'game.js'
+  'arrival.js', 'persistence.js', 'workspace.js', 'rendering.js', 'touch-navigation.js', 'game.js'
 ]
 
 export default defineComponent({
@@ -24,9 +25,10 @@ export default defineComponent({
   data() {
     return {
       publicPreview,
-      authenticated: Boolean(sessionStorage.getItem(tokenKey)),
+      authenticated: Boolean(restoreSession()),
       backendOnline: false,
       persistentOnline: false,
+      mobileInstrumentsOpen: false,
       startupError: '',
       view: window.location.hash === '#/atlas' ? 'atlas' : 'cockpit'
     }
@@ -35,8 +37,10 @@ export default defineComponent({
     window.addEventListener('orbital-persistence', this.updatePersistence as EventListener)
     window.addEventListener('orbital-auth', this.updateAuth as EventListener)
     window.addEventListener('hashchange', this.onHashChange as EventListener)
+    window.addEventListener('keydown', this.onMobileKeydown as EventListener)
     ;(window as typeof window & { ORBITAL_API_BASE_URL?: string }).ORBITAL_API_BASE_URL =
       import.meta.env.VITE_API_BASE_URL ?? ''
+    setupPreferenceSync()
     this.startCockpit()
     if (!this.publicPreview && !this.authenticated) {
       this.$nextTick(() => this.openProfile())
@@ -46,16 +50,36 @@ export default defineComponent({
     window.removeEventListener('orbital-persistence', this.updatePersistence as EventListener)
     window.removeEventListener('orbital-auth', this.updateAuth as EventListener)
     window.removeEventListener('hashchange', this.onHashChange as EventListener)
+    window.removeEventListener('keydown', this.onMobileKeydown as EventListener)
+    document.body.classList.remove('orbital-mobile-instruments-open')
+  },
+  watch: {
+    mobileInstrumentsOpen(open: boolean) {
+      document.body.classList.toggle('orbital-mobile-instruments-open', open)
+    }
   },
   methods: {
+    onMobileKeydown(event: Event) {
+      if ((event as KeyboardEvent).key === 'Escape') this.mobileInstrumentsOpen = false
+    },
     openProfile() {
+      this.mobileInstrumentsOpen = false;
       (this.$refs.pilotProfile as { show: () => void } | undefined)?.show()
     },
+    toggleMobileInstruments() {
+      this.mobileInstrumentsOpen = !this.mobileInstrumentsOpen
+    },
+    openMobileSettings() {
+      this.mobileInstrumentsOpen = false
+      document.getElementById('settings-btn')?.click()
+    },
     onHashChange() {
+      this.mobileInstrumentsOpen = false
       this.view = window.location.hash === '#/atlas' ? 'atlas' : 'cockpit'
       this.$nextTick(() => window.dispatchEvent(new Event('resize')))
     },
     openAtlas() {
+      this.mobileInstrumentsOpen = false
       window.location.hash = '#/atlas'
       this.onHashChange()
       window.scrollTo({top:0,behavior:'smooth'})
@@ -76,7 +100,7 @@ export default defineComponent({
       })
     },
     updateAuth() {
-      this.authenticated = Boolean(sessionStorage.getItem(tokenKey))
+      this.authenticated = Boolean(restoreSession())
     },
     updatePersistence(event: Event) {
       this.persistentOnline = Boolean((event as CustomEvent).detail?.online)
@@ -92,6 +116,7 @@ export default defineComponent({
     },
     async startCockpit() {
       try {
+        if (!this.publicPreview) await hydratePreferences()
         for (const filename of legacyFiles) {
           // Anonymous pilot WebSockets are private until authenticated alpha.
           if (this.publicPreview && filename === 'persistence.js') continue
@@ -136,6 +161,13 @@ export default defineComponent({
       </div>
     </header>
 
+    <nav class="mobile-navigation" aria-label="Mobile cockpit navigation">
+      <button type="button" ref="mobileInstrumentsToggle" aria-controls="mobile-instruments" :aria-expanded="mobileInstrumentsOpen" @click="toggleMobileInstruments">☷ Instruments</button>
+      <button type="button" @click="openAtlas">◈ System atlas</button>
+      <button type="button" @click="openProfile">✧ Profile</button>
+      <button type="button" @click="openMobileSettings">⚙ Settings</button>
+    </nav>
+
     <main class="game-layout">
       <section class="arena-shell" aria-label="Orbital gameplay area">
         <div class="arena-head">
@@ -144,7 +176,17 @@ export default defineComponent({
         </div>
         <div class="canvas-wrap" id="canvas-workspace">
           <button type="button" id="fullscreen-btn" class="fullscreen-btn" aria-label="Enter fullscreen cockpit">⛶ Fullscreen</button>
-          <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat"></canvas>
+          <canvas id="orbit-canvas" aria-label="Top-down orbital flight map. On touch devices, drag to pan, pinch to zoom, and tap an object to select it"></canvas>
+          <div class="mobile-flight-pad" aria-label="Touch spacecraft flight controls">
+            <div class="mobile-gesture-hint">DRAG TO PAN <span>·</span> PINCH TO ZOOM <span>·</span> TAP TO TARGET</div>
+            <div class="mobile-pad-grid">
+              <button type="button" class="mobile-helm-button" data-mobile-thrust="rotate-left" aria-label="Hold to rotate counterclockwise"><strong>⟲</strong><span>LEFT</span></button>
+              <button type="button" class="mobile-helm-button" data-mobile-thrust="stabilize" aria-label="Hold to stabilize rotation"><strong>◈</strong><span>STABILIZE</span></button>
+              <button type="button" class="mobile-helm-button mobile-helm-engine" data-mobile-thrust="main" aria-label="Hold to fire main engine"><strong>▲</strong><span>THRUST</span></button>
+              <button type="button" class="mobile-helm-button" data-mobile-thrust="rotate-right" aria-label="Hold to rotate clockwise"><strong>⟳</strong><span>RIGHT</span></button>
+              <button type="button" id="mobile-fire-btn" class="mobile-helm-button mobile-helm-fire" aria-label="Hold to fire weapon"><strong>⌖</strong><span>FIRE</span></button>
+            </div>
+          </div>
           <!-- Separate floating consoles are required by the legacy control bridge;
                sidebar instances provide the full instrument readouts -->
           <!-- <TelemetryPanel :console="true" /> We don't need this, please don't uncomment--> 
@@ -184,7 +226,9 @@ export default defineComponent({
         </section>
       </section>
 
-      <aside class="sidebar" aria-label="Spacecraft instruments">
+      <button v-if="mobileInstrumentsOpen" type="button" class="mobile-instruments-backdrop" aria-label="Close instruments" @click="mobileInstrumentsOpen=false"></button>
+      <aside id="mobile-instruments" class="sidebar" :class="{'mobile-instruments-open': mobileInstrumentsOpen}" :role="mobileInstrumentsOpen ? 'dialog' : undefined" :aria-modal="mobileInstrumentsOpen ? 'true' : undefined" aria-label="Spacecraft instruments">
+        <div class="mobile-instruments-heading"><div><span>ORBITAL OUTLAWS / SYSTEMS</span><strong>Instruments</strong></div><button type="button" aria-label="Close instrument drawer" @click="mobileInstrumentsOpen=false">✕</button></div>
 
         <section class="panel propulsion">
           <div class="panel-heading"><span>PROPULSION</span><span>SCOUT MK-I</span></div>
@@ -225,7 +269,7 @@ export default defineComponent({
           <label class="settings-axis-switch" for="settings-show-axes"><input type="checkbox" id="settings-show-axes" checked /> Show coordinate axes and origin grid</label>
           <p class="mini-note">The ruler, object anchors, inertial compass and distance scale work in either frame without upgrades.</p>
         </section>
-        <div class="settings-bottom"><span class="mini-note">Display choices are saved locally.</span><button type="button" id="settings-done" class="buy-btn">Done</button></div>
+        <div class="settings-bottom"><span class="mini-note">Cockpit layout, hotkeys and map settings sync with your pilot account when signed in.</span><button type="button" id="settings-done" class="buy-btn">Done</button></div>
       </div>
     </div>
     <footer class="footer-note">Orbital Outlaws · v1.1 <span>Autonomous server-side sector · persistent upgrades · configurable panels</span></footer>
