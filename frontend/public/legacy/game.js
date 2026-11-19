@@ -1926,6 +1926,10 @@
     $('settings-tab-controls').addEventListener('click',()=>settingsTab('controls'));
     $('settings-tab-frame').addEventListener('click',()=>settingsTab('frame'));
     $('settings-tab-ephemeris').addEventListener('click',()=>settingsTab('ephemeris'));
+    window.addEventListener('orbital-ephemeris-frame-request',event=>{
+      const frame=event.detail?.frame;
+      if(frame==='star'||frame==='planet')FRAME_CONFIG.setFrame('ephemeris',frame);
+    });
     $('settings-ephemeris-frame-planet').addEventListener('click',()=>FRAME_CONFIG.setFrame('ephemeris','planet'));
     $('settings-ephemeris-frame-star').addEventListener('click',()=>FRAME_CONFIG.setFrame('ephemeris','star'));
     $('settings-frame-scope-canvas').addEventListener('change',()=>FRAME_CONFIG.setScope('canvas'));
