@@ -22,7 +22,7 @@ class CallsignBody(BaseModel):
 
 class PasswordChangeBody(BaseModel):
     current_password: str
-    new_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=7, max_length=128)
 
 
 class PreferencesBody(BaseModel):
