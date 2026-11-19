@@ -316,7 +316,7 @@ export default defineComponent({
 
 <template>
   <v-dialog v-model="open" max-width="1050" scrollable content-class="pilot-profile-dialog">
-    <section class="pilot-account" :class="{'pilot-signed-in':stage==='profile'}" aria-label="Orbital Outlaws pilot identity">
+    <section class="pilot-account" :class="{'pilot-signed-in':stage==='profile','pilot-registering':stage==='register'}" aria-label="Orbital Outlaws pilot identity">
       <header class="pilot-account-header">
         <div><span class="pilot-kicker">ORBITAL OUTLAWS / PILOT REGISTRY</span><h2>{{ stage === 'profile' ? 'PILOT DOSSIER' : 'CLAIM YOUR CALLSIGN' }}</h2>
           <p>Every legend begins with an identity. No personal photograph required.</p></div>
