@@ -12,7 +12,7 @@
   function propagate(s,T,mu,stepSize=.18,inner=91,outer=1600,trace=false){
     let x=s.x,y=s.y,vx=s.vx,vy=s.vy,minR=Infinity,maxR=0;
     const steps=Math.max(1,Math.ceil(Math.max(0,T)/stepSize)),h=T/steps;
-    const points=trace?[{x,y}]:null;
+    const points=trace?[{x,y,t:0}]:null;
     for(let i=0;i<steps;i++){
       const r2=Math.max(x*x+y*y,1),f=-mu/(r2*Math.sqrt(r2));
       const hvx=vx+.5*h*x*f,hvy=vy+.5*h*y*f;
@@ -21,9 +21,9 @@
       if(rn<=inner || rn>=outer)return {x,y,vx:hvx,vy:hvy,safe:false,minR,maxR,points};
       const rr=Math.max(x*x+y*y,1),g=-mu/(rr*Math.sqrt(rr));
       vx=hvx+.5*h*x*g;vy=hvy+.5*h*y*g;
-      if(points&&i%4===0)points.push({x,y});
+      if(points&&i%4===0)points.push({x,y,t:(i+1)*h});
     }
-    if(points)points.push({x,y});
+    if(points)points.push({x,y,t:T});
     return {x,y,vx,vy,safe:true,minR,maxR,points};
   }
   function targetAt(target,t,mu,inner,outer){
