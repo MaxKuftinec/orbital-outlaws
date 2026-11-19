@@ -32,7 +32,7 @@ class PreferencesBody(BaseModel):
 
 def validate_preferences(data: dict) -> dict:
     """Allow only bounded, non-executable, non-sensitive UI configuration."""
-    if set(data) - {'layout', 'frame', 'show_axes', 'hotkeys'}:
+    if set(data) - {'layout', 'frame', 'ephemeris_frame', 'frame_scope', 'show_axes', 'hotkeys'}:
         raise HTTPException(422, 'Unsupported preference keys')
     try:
         if len(json.dumps(data, allow_nan=False).encode()) > 12000:
@@ -44,6 +44,14 @@ def validate_preferences(data: dict) -> dict:
         if type(data['frame']) is not str or data['frame'] not in ('planet', 'star'):
             raise HTTPException(422, 'Invalid map reference frame')
         result['frame'] = data['frame']
+    if 'ephemeris_frame' in data:
+        if type(data['ephemeris_frame']) is not str or data['ephemeris_frame'] not in ('planet', 'star'):
+            raise HTTPException(422, 'Invalid Ephemeris reference frame')
+        result['ephemeris_frame'] = data['ephemeris_frame']
+    if 'frame_scope' in data:
+        if type(data['frame_scope']) is not str or data['frame_scope'] not in ('canvas', 'all'):
+            raise HTTPException(422, 'Invalid frame propagation scope')
+        result['frame_scope'] = data['frame_scope']
     if 'show_axes' in data:
         if type(data['show_axes']) is not bool:
             raise HTTPException(422, 'Invalid axes visibility')
