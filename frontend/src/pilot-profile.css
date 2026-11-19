@@ -75,3 +75,25 @@
 }
 @media(max-width:410px){.pilot-portrait-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
   .pilot-avatar-option img{height:76px}.pilot-featured{height:170px}}
+
+/* Account dashboard — consistent with the pilot registry visual language. */
+.pilot-profile-tabs{display:flex;gap:5px;flex-wrap:wrap;padding:4px;border:1px solid #294758;
+  background:#0a1d2b;border-radius:10px}
+.pilot-profile-tabs button{flex:1;min-width:85px;cursor:pointer;color:#96afbe;border:0;border-radius:7px;
+  background:transparent;padding:10px 8px;font-size:11px;font-weight:700}
+.pilot-profile-tabs button.active{background:#284d60;color:#ffe0a7}
+.pilot-profile-section{display:flex;flex-direction:column;gap:13px;padding:5px 0 12px}
+.pilot-profile-section h4{margin:4px 0;color:#e4f1f5;font-size:17px}
+.pilot-profile-section>p{margin:0;color:#96adba;font-size:12px;line-height:1.65}
+.pilot-profile-section .pilot-form{flex:none;gap:10px}
+.pilot-profile-section .pilot-form h4{margin:0}
+.pilot-account-footer{margin-top:8px;padding-top:16px;border-top:1px solid #294758}
+.pilot-dossier .pilot-outline{font-size:11px}
+.pilot-remember{display:flex!important;align-items:center;gap:10px;font-size:12px;color:#d3e3ec!important;
+  cursor:pointer;margin-top:2px}
+.pilot-form .pilot-remember input{width:17px;height:17px;min-height:0;accent-color:#e6c08e;flex:none}
+.pilot-device-note{font-size:11px!important;line-height:1.55;color:#8ca7b5!important}
+.pilot-sync-status{display:flex;align-items:center;gap:6px;border:1px solid #315967;
+  background:#0e2936;padding:11px 13px;border-radius:9px;color:#cae6e8;font-size:12px}
+.pilot-profile-section dl{margin:0}
+.pilot-profile-section dd{overflow-wrap:anywhere;max-width:65%}
