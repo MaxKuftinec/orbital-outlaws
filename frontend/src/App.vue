@@ -15,7 +15,7 @@ import { setupPreferenceSync, hydratePreferences } from './services/preferences'
 const publicPreview = import.meta.env.VITE_PUBLIC_PREVIEW === '1'
 
 const legacyFiles = [
-  'map-tools.js', 'map-visuals.js', 'star-system.js', 'reference-frames.js', 'autopilot-attitude.js', 'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
+  'map-tools.js', 'map-visuals.js', 'star-system.js', 'reference-frames.js', 'frame-config.js', 'autopilot-attitude.js', 'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
   'arrival.js', 'persistence.js', 'workspace.js', 'rendering.js', 'touch-navigation.js', 'game.js'
 ]
 
@@ -172,7 +172,7 @@ export default defineComponent({
       <section class="arena-shell" aria-label="Orbital gameplay area">
         <div class="arena-head">
           <div><span class="section-kicker">SECTOR 01</span><div class="arena-title">Kestrel system · parent star + planet <span class="online"></span></div></div>
-          <div class="arena-actions"><v-btn density="compact" variant="tonal"  id="orbit-btn" class="small-btn selected" aria-pressed="true">◌ Trajectory</v-btn><v-btn density="compact" variant="tonal" id="ephemeris-visibility-btn" class="small-btn" aria-pressed="false" title="Show or hide the selected object's projected orbit" disabled>◎ Ephemeris OFF</v-btn><v-btn density="compact" variant="tonal" id="focus-target-btn" class="small-btn focus-target-btn" aria-label="Center and zoom to selected navigation target" title="Center and zoom to selected navigation target (camera only)" disabled>⌖ Focus</v-btn><v-btn density="compact" variant="tonal" id="follow-target-btn" class="small-btn follow-target-btn" aria-pressed="false" aria-label="Follow selected navigation target with camera" title="Keep camera centered on moving selection; dragging releases follow" disabled>◎ Follow</v-btn><v-btn density="compact" variant="tonal"  id="zoom-out" class="small-btn" aria-label="Zoom out">−</v-btn><span id="zoom-level" class="zoom-text">1.0×</span><v-btn density="compact" variant="tonal"  id="zoom-in" class="small-btn" aria-label="Zoom in">+</v-btn></div>
+          <div class="arena-actions"><v-btn density="compact" variant="tonal"  id="orbit-btn" class="small-btn selected" aria-pressed="true">◌ Trajectory</v-btn><v-btn density="compact" variant="tonal" id="ephemeris-visibility-btn" class="small-btn" aria-pressed="false" title="Show or hide the selected object's projected orbit" disabled>◎ Ephemeris OFF</v-btn><v-btn density="compact" variant="outlined" id="ephemeris-settings-btn" class="small-btn ephemeris-settings-shortcut" title="Configure Ephemeris Computer reference frame" aria-label="Configure Ephemeris Computer reference frame" disabled>⚙</v-btn><v-btn density="compact" variant="tonal" id="focus-target-btn" class="small-btn focus-target-btn" aria-label="Center and zoom to selected navigation target" title="Center and zoom to selected navigation target (camera only)" disabled>⌖ Focus</v-btn><v-btn density="compact" variant="tonal" id="follow-target-btn" class="small-btn follow-target-btn" aria-pressed="false" aria-label="Follow selected navigation target with camera" title="Keep camera centered on moving selection; dragging releases follow" disabled>◎ Follow</v-btn><v-btn density="compact" variant="tonal"  id="zoom-out" class="small-btn" aria-label="Zoom out">−</v-btn><span id="zoom-level" class="zoom-text">1.0×</span><v-btn density="compact" variant="tonal"  id="zoom-in" class="small-btn" aria-label="Zoom in">+</v-btn></div>
         </div>
         <div class="canvas-wrap" id="canvas-workspace">
           <button type="button" id="fullscreen-btn" class="fullscreen-btn" aria-label="Enter fullscreen cockpit">⛶ Fullscreen</button>
@@ -253,6 +253,7 @@ export default defineComponent({
         <nav class="settings-tabs" aria-label="Settings sections">
           <button type="button" id="settings-tab-controls" class="selected" aria-selected="true">⌨ Controls</button>
           <button type="button" id="settings-tab-frame" aria-selected="false">◎ Frame of reference</button>
+          <button type="button" id="settings-tab-ephemeris" aria-selected="false">✦ Ephemeris Computer</button>
         </nav>
         <section id="settings-controls-pane" aria-label="Keyboard controls">
           <p class="mini-note">Select a command and press its new key. Keybindings are saved in this browser.</p>
@@ -266,8 +267,24 @@ export default defineComponent({
             <button type="button" id="settings-frame-planet" aria-pressed="true"><b>◎ Kestrel</b><small>Planet-centered coordinates</small></button>
             <button type="button" id="settings-frame-star" aria-pressed="false"><b>✦ Veyra</b><small>Star-centered coordinates</small></button>
           </div>
+          <fieldset class="settings-frame-scope">
+            <legend>When changing the canvas frame</legend>
+            <label for="settings-frame-scope-canvas"><input type="radio" id="settings-frame-scope-canvas" name="settings-frame-scope" value="canvas" checked />
+              <span><b>Canvas only</b><small>Leave other instruments on their individually selected frames</small></span></label>
+            <label for="settings-frame-scope-all"><input type="radio" id="settings-frame-scope-all" name="settings-frame-scope" value="all" />
+              <span><b>Apply to all frame-aware tools</b><small>Change Ephemeris and future tools to the canvas frame too. You can still override them individually</small></span></label>
+          </fieldset>
           <label class="settings-axis-switch" for="settings-show-axes"><input type="checkbox" id="settings-show-axes" checked /> Show coordinate axes and origin grid</label>
           <p class="mini-note">The ruler, object anchors, inertial compass and distance scale work in either frame without upgrades.</p>
+        </section>
+        <section id="settings-ephemeris-pane" class="hidden" aria-label="Ephemeris Computer reference frame">
+          <div class="section-kicker">INSTRUMENT / EPHEMERIS COMPUTER</div>
+          <p class="mini-note">Choose how this instrument displays projected trajectories, independently of the canvas frame. Changing this setting does not affect spacecraft physics or the actual orbit</p>
+          <div class="settings-frame-choice" role="group" aria-label="Ephemeris reference frame">
+            <button type="button" id="settings-ephemeris-frame-planet" aria-pressed="true"><b>◎ Kestrel</b><small>Trajectory stays relative to Kestrel and travels with it on the Veyra map</small></button>
+            <button type="button" id="settings-ephemeris-frame-star" aria-pressed="false"><b>✦ Veyra</b><small>Plot every future point against Veyra, accounting for Kestrel's orbital movement</small></button>
+          </div>
+          <p class="mini-note">The current forecast is a short, unpowered two-body approximation. The frame is a view setting, not a change to the prediction's gravitational solver</p>
         </section>
         <div class="settings-bottom"><span class="mini-note">Cockpit layout, hotkeys and map settings sync with your pilot account when signed in.</span><button type="button" id="settings-done" class="buy-btn">Done</button></div>
       </div>
