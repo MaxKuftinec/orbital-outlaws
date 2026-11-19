@@ -10,8 +10,9 @@ type PilotProfileData = {
   avatar_id: string
   created_at: number
 }
-type Stage = 'login' | 'register' | 'verify' | 'profile'
+type Stage = 'login' | 'register' | 'verify' | 'reset-request' | 'reset-confirm' | 'profile'
 const TOKEN_KEY = 'orbital-outlaws.account.session.v1'
+const ACCOUNT_KEY = 'orbital-outlaws.account.id.v1'
 const avatars = [
   { id: 'vanguard', title: 'Vanguard', tagline: 'Flight pathfinder', designation: 'FLIGHT / 01' },
   { id: 'navigator', title: 'Navigator', tagline: 'Orbital tactician', designation: 'NAV / 02' },
@@ -32,6 +33,7 @@ export default defineComponent({
       registration: { email: '', username: '', password: '', confirm: '' },
       login: { identifier: '', password: '' },
       verification: { identifier: '', code: '' },
+      reset: { identifier: '', code: '', password: '', confirm: '' },
       chosenAvatar: 'navigator',
       profile: null as PilotProfileData | null,
       token: '',
@@ -43,6 +45,14 @@ export default defineComponent({
     if (this.token) void this.refresh()
   },
   methods: {
+    publishSession() {
+      if (this.token && this.profile) {
+        sessionStorage.setItem(ACCOUNT_KEY, this.profile.id)
+      } else {
+        sessionStorage.removeItem(ACCOUNT_KEY)
+      }
+      window.dispatchEvent(new Event('orbital-auth'))
+    },
     show() {
       this.open = true
       this.error = ''
@@ -138,6 +148,7 @@ export default defineComponent({
         this.token = answer.access_token
         sessionStorage.setItem(TOKEN_KEY, this.token)
         this.profile = answer.profile
+        this.publishSession()
         this.chosenAvatar = this.profile?.avatar_id || 'navigator'
         this.login.password = ''
         this.stage = 'profile'
@@ -154,10 +165,12 @@ export default defineComponent({
         this.profile = await this.api('/me', 'GET', undefined, true)
         this.chosenAvatar = this.profile?.avatar_id || 'navigator'
         this.stage = 'profile'
+        this.publishSession()
       } catch {
         this.token = ''
         this.profile = null
         sessionStorage.removeItem(TOKEN_KEY)
+        this.publishSession()
       }
     },
     async chooseAvatar(id: string) {
@@ -182,8 +195,47 @@ export default defineComponent({
       this.profile = null
       this.token = ''
       sessionStorage.removeItem(TOKEN_KEY)
+      this.publishSession()
       this.stage = 'login'
       this.message = 'Signed out.'
+    },
+    async requestReset() {
+      this.error = ''
+      this.message = ''
+      this.busy = true
+      try {
+        await this.api('/password-reset/request','POST',{identifier:this.reset.identifier})
+        this.stage = 'reset-confirm'
+        this.message = 'If that account exists, a six-digit recovery code was sent.'
+      } catch (e) {
+        this.error = (e as Error).message
+      } finally {
+        this.busy = false
+      }
+    },
+    async confirmReset() {
+      if (this.reset.password !== this.reset.confirm) {
+        this.error = 'Both password fields must match.'
+        return
+      }
+      this.error = ''
+      this.busy = true
+      try {
+        await this.api('/password-reset/confirm','POST',{
+          identifier:this.reset.identifier,code:this.reset.code,
+          new_password:this.reset.password
+        })
+        this.login.identifier = this.reset.identifier
+        this.reset.code = ''
+        this.reset.password = ''
+        this.reset.confirm = ''
+        this.stage = 'login'
+        this.message = 'Password updated. Sign in with your new password.'
+      } catch (e) {
+        this.error = (e as Error).message
+      } finally {
+        this.busy = false
+      }
     }
   }
 })
@@ -243,7 +295,23 @@ export default defineComponent({
             <label>Email or callsign<input v-model.trim="login.identifier" autocomplete="username" required placeholder="Email or callsign" /></label>
             <label>Password<input v-model="login.password" type="password" autocomplete="current-password" required placeholder="Your account password"/></label>
             <button class="pilot-primary" type="submit" :disabled="busy">{{ busy?'SIGNING IN…':'SIGN IN' }}</button>
-            <div class="pilot-secondary-actions"><button type="button" @click="verification.identifier=login.identifier;setStage('verify')">Enter verification code</button></div>
+            <div class="pilot-secondary-actions"><button type="button" @click="verification.identifier=login.identifier;setStage('verify')">Enter verification code</button><button type="button" @click="reset.identifier=login.identifier;setStage('reset-request')">Forgot password?</button></div>
+          </form>
+          <form v-else-if="stage==='reset-request'" class="pilot-form" @submit.prevent="requestReset">
+            <span class="pilot-panel-kicker">ACCOUNT RECOVERY</span><h3>Recover your flight credentials</h3>
+            <p>We'll send a short-lived recovery code to the account's verified email.</p>
+            <label>Email or callsign<input v-model.trim="reset.identifier" autocomplete="username" required /></label>
+            <button class="pilot-primary" type="submit" :disabled="busy">{{ busy?'SENDING…':'SEND RECOVERY CODE' }}</button>
+            <div class="pilot-secondary-actions"><button type="button" @click="setStage('login')">Back to sign in</button></div>
+          </form>
+          <form v-else-if="stage==='reset-confirm'" class="pilot-form" @submit.prevent="confirmReset">
+            <span class="pilot-panel-kicker">ACCOUNT RECOVERY</span><h3>Set a new password</h3>
+            <label>Email or callsign<input v-model.trim="reset.identifier" autocomplete="username" required /></label>
+            <label>Six-digit recovery code<input v-model.trim="reset.code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required /></label>
+            <label>New password<input v-model="reset.password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required /></label>
+            <label>Confirm password<input v-model="reset.confirm" type="password" autocomplete="new-password" minlength="12" required /></label>
+            <button class="pilot-primary" type="submit" :disabled="busy">{{ busy?'UPDATING…':'UPDATE PASSWORD' }}</button>
+            <div class="pilot-secondary-actions"><button type="button" :disabled="busy" @click="requestReset">Resend code</button><button type="button" @click="setStage('login')">Back to sign in</button></div>
           </form>
           <div v-else-if="profile" class="pilot-dossier">
             <span class="pilot-panel-kicker">REGISTRY / VERIFIED PILOT</span><h3>{{ profile.username }}</h3>
@@ -251,8 +319,8 @@ export default defineComponent({
             <dl><div><dt>Identity</dt><dd>Independent civilian pilot</dd></div>
               <div><dt>Portrait</dt><dd>{{ avatars.find(a=>a.id===chosenAvatar)?.title }}</dd></div>
               <div><dt>Alliances</dt><dd>Not yet available</dd></div>
-              <div><dt>Flight persistence</dt><dd>Account linking pending</dd></div></dl>
-            <p class="pilot-dossier-note">Your account and portrait are saved. Linking this account to a persistent ship is the next multiplayer security milestone.</p>
+              <div><dt>Flight persistence</dt><dd>Live server pilot</dd></div><div><dt>Pilot ID</dt><dd><code>{{ profile.id }}</code></dd></div></dl>
+            <p class="pilot-dossier-note">Your account owns a persistent flight on the server. Sign out to disconnect flight controls.</p>
             <button type="button" class="pilot-outline" @click="logout">Sign out</button>
           </div>
           <p v-if="error" role="alert" class="pilot-feedback error">{{ error }}</p>
