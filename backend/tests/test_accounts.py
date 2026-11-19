@@ -275,7 +275,8 @@ def test_cockpit_preferences_are_private_validated_and_revisioned(client_account
     assert client.get(path, headers=headers).json() == {
         'revision': 0, 'preferences': {}, 'updated_at': None
     }
-    prefs = {'frame': 'star', 'show_axes': False,
+    prefs = {'frame': 'star', 'ephemeris_frame': 'planet', 'frame_scope': 'canvas',
+             'show_axes': False,
              'layout': {'ship-panel': {'inside': False, 'collapsed': True, 'x': 0.5, 'y': 0.3}},
              'hotkeys': {'main': 'KeyQ', 'fire': 'Space'}}
     assert client.put(path, json={'revision': 0,
@@ -283,6 +284,12 @@ def test_cockpit_preferences_are_private_validated_and_revisioned(client_account
     assert client.put(path, json={'revision': 0, 'preferences': {
         'layout': {'ship-panel': {'x': 10}}
     }}, headers=headers).status_code == 422
+    for bad in ({'ephemeris_frame': 'galactic'},
+                {'frame_scope': 'overwrite-everything'},
+                {'frame_scope': 1},
+                {'ephemeris_frame': None}):
+        assert client.put(path, json={'revision': 0, 'preferences': bad},
+                          headers=headers).status_code == 422
     result = client.put(path, json={'revision': 0, 'preferences': prefs}, headers=headers)
     assert result.status_code == 200, result.text
     assert result.json()['revision'] == 1
