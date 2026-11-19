@@ -137,8 +137,8 @@ def _send_mail(email: str, subject: str, body: str):
 def send_verification(email: str, code: str):
     _send_mail(email, 'Orbital Outlaws — verify your pilot account',
                'Your Orbital Outlaws verification code is: '+code+
-               '\\n\\nThis code expires after 10 minutes. Do not share it with anyone.\\n'
-               'If you did not register, you can ignore this email.\\n')
+               '\n\nThis code expires after 10 minutes. Do not share it with anyone.\n'
+               'If you did not register, you can ignore this email.\n')
 
 
 class RegisterBody(BaseModel):
@@ -348,7 +348,7 @@ def request_password_reset(body: IdentityBody, request: Request):
         try:
             _send_mail(email, 'Orbital Outlaws — reset your password',
                        'Your Orbital Outlaws password reset code is: '+code+
-                       '\\n\\nExpires in 10 minutes. If you did not request this, ignore it.\\n')
+                       '\n\nExpires in 10 minutes. If you did not request this, ignore it.\n')
         except (OSError, smtplib.SMTPException):
             import logging
             logging.exception('Password reset email could not be delivered')
