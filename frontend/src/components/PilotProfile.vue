@@ -166,7 +166,7 @@ export default defineComponent({
         this.profileTab = 'overview'
         this.login.password = ''
         this.stage = 'profile'
-        this.message = 'Welcome to the frontier, ' + (this.profile?.username || 'pilot') + '.'
+        this.message = 'Welcome to the frontier, ' + (this.profile?.username || 'pilot')
       } catch (e) {
         this.error = (e as Error).message
         this.login.password = ''
@@ -196,7 +196,7 @@ export default defineComponent({
       this.error = ''
       try {
         this.profile = await this.api('/me/avatar', 'PATCH', { avatar_id: id }, true)
-        this.message = 'Profile portrait saved.'
+        this.message = 'Profile portrait saved'
       } catch (e) {
         this.error = (e as Error).message
       } finally {
@@ -319,7 +319,7 @@ export default defineComponent({
     <section class="pilot-account" :class="{'pilot-signed-in':stage==='profile','pilot-registering':stage==='register'}" aria-label="Orbital Outlaws pilot identity">
       <header class="pilot-account-header">
         <div><span class="pilot-kicker">ORBITAL OUTLAWS / PILOT REGISTRY</span><h2>{{ stage === 'profile' ? 'PILOT DOSSIER' : 'CLAIM YOUR CALLSIGN' }}</h2>
-          <p>Every legend begins with an identity. No personal photograph required.</p></div>
+          <p>Every legend begins with an identity. No personal photograph required</p></div>
         <button type="button" class="pilot-close" aria-label="Close pilot registry" @click="open=false">✕</button>
       </header>
       <div class="pilot-account-content">
@@ -338,7 +338,7 @@ export default defineComponent({
               <span>{{ avatar.title }}</span>
             </button>
           </div>
-          <p class="pilot-art-footnote">Portraits define appearance only. They do not affect attributes, abilities, or gameplay balance.</p>
+          <p class="pilot-art-footnote">Portraits define appearance only. They do not affect attributes, abilities, or gameplay balance</p>
         </aside>
         <div class="pilot-form-panel">
           <div v-if="stage==='login'||stage==='register'" class="pilot-form-tabs" role="tablist" aria-label="Account access">
@@ -347,16 +347,16 @@ export default defineComponent({
           </div>
           <form v-if="stage==='register'" class="pilot-form" @submit.prevent="submitRegister">
             <span class="pilot-panel-kicker">NEW PLAYER / REGISTRATION</span><h3>Join the frontier</h3>
-            <p>Reserve a unique callsign and verify your email to activate your profile.</p>
+            <p>Reserve a unique callsign and verify your email to activate your profile</p>
             <label>Callsign <small>3–20 letters, digits or underscores</small><input v-model.trim="registration.username" autocomplete="username" minlength="3" maxlength="20" pattern="[A-Za-z][A-Za-z0-9_]{2,19}" required placeholder="e.g. orbital_pioneer"/></label>
             <label>Email address<input v-model.trim="registration.email" type="email" autocomplete="email" required placeholder="pilot@example.com"/></label>
-            <label>Password <small>8+ characters, no symbol or uppercase rules</small><input v-model="registration.password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required placeholder="Choose a strong password"/></label>
-            <label>Confirm password<input v-model="registration.confirm" type="password" autocomplete="new-password" minlength="8" required placeholder="Repeat your password"/></label>
+            <label>Password <small>At least 7 characters</small><input v-model="registration.password" type="password" autocomplete="new-password" minlength="7" maxlength="128" required placeholder="Choose a strong password"/></label>
+            <label>Confirm password<input v-model="registration.confirm" type="password" autocomplete="new-password" minlength="7" required placeholder="Repeat your password"/></label>
             <button class="pilot-primary" type="submit" :disabled="busy">{{ busy?'REGISTERING…':'CREATE PILOT ACCOUNT' }}</button>
           </form>
           <form v-else-if="stage==='verify'" class="pilot-form" @submit.prevent="submitVerification">
             <span class="pilot-panel-kicker">IDENTITY / EMAIL VERIFICATION</span><h3>Check your transmission</h3>
-            <p>Enter the six digits sent to your inbox. Codes expire after 10 minutes.</p>
+            <p>Enter the six digits sent to your inbox. Codes expire after 10 minutes</p>
             <label>Email or callsign<input v-model.trim="verification.identifier" autocomplete="username" required /></label>
             <label>Verification code<input v-model.trim="verification.code" class="pilot-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" minlength="6" pattern="[0-9]{6}" required placeholder="000000" /></label>
             <button class="pilot-primary" type="submit" :disabled="busy">{{ busy?'VERIFYING…':'VERIFY ACCOUNT' }}</button>
@@ -364,17 +364,17 @@ export default defineComponent({
           </form>
           <form v-else-if="stage==='login'" class="pilot-form" @submit.prevent="submitLogin">
             <span class="pilot-panel-kicker">RETURNING PLAYER / ACCESS</span><h3>Welcome aboard</h3>
-            <p>Sign in using your callsign or verified email address.</p>
+            <p>Sign in using your callsign or verified email address</p>
             <label>Email or callsign<input v-model.trim="login.identifier" autocomplete="username" required placeholder="Email or callsign" /></label>
             <label>Password<input v-model="login.password" type="password" autocomplete="current-password" required placeholder="Your account password"/></label>
             <label class="pilot-remember"><input v-model="rememberMe" type="checkbox" /> Keep me signed in on this device for 30 days</label>
-            <p class="pilot-device-note">Uncheck on shared computers. Signing out or changing your password revokes your session.</p>
+            <p class="pilot-device-note">Uncheck on shared computers. Signing out or changing your password revokes your session</p>
             <button class="pilot-primary" type="submit" :disabled="busy">{{ busy?'SIGNING IN…':'SIGN IN' }}</button>
             <div class="pilot-secondary-actions"><button type="button" @click="verification.identifier=login.identifier;setStage('verify')">Enter verification code</button><button type="button" @click="reset.identifier=login.identifier;setStage('reset-request')">Forgot password?</button></div>
           </form>
           <form v-else-if="stage==='reset-request'" class="pilot-form" @submit.prevent="requestReset">
             <span class="pilot-panel-kicker">ACCOUNT RECOVERY</span><h3>Recover your flight credentials</h3>
-            <p>We'll send a short-lived recovery code to the account's verified email.</p>
+            <p>We'll send a short-lived recovery code to the account's verified email</p>
             <label>Email or callsign<input v-model.trim="reset.identifier" autocomplete="username" required /></label>
             <button class="pilot-primary" type="submit" :disabled="busy">{{ busy?'SENDING…':'SEND RECOVERY CODE' }}</button>
             <div class="pilot-secondary-actions"><button type="button" @click="setStage('login')">Back to sign in</button></div>
@@ -434,7 +434,7 @@ export default defineComponent({
           <p v-if="error" role="alert" class="pilot-feedback error">{{ error }}</p>
           <p v-if="message" role="status" class="pilot-feedback success">{{ message }}</p>
           <div class="pilot-footnote"><span class="pilot-status-dot"></span> ACCOUNT SYSTEM / EARLY ACCESS
-            <span>Alliance affiliations and social features are planned for a later release.</span></div>
+            <span>Alliance affiliations and social features are planned for a later release</span></div>
         </div>
       </div>
     </section>
