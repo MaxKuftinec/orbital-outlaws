@@ -61,7 +61,7 @@ from .account_settings import router as account_settings_router
 approved_origins=[origin.strip() for origin in os.getenv('AUTH_ORIGINS','').split(',') if origin.strip()]
 if approved_origins:
     app.add_middleware(CORSMiddleware,allow_origins=approved_origins,
-                       allow_methods=['GET','POST','PATCH'],
+                       allow_methods=['GET','POST','PATCH','PUT'],
                        allow_headers=['Authorization','Content-Type'])
 app.include_router(accounts_router)
 app.include_router(account_settings_router)
