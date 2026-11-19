@@ -149,7 +149,7 @@ def test_dev_spawn_raider_is_explicitly_guarded(monkeypatch):
     url = '/dev/players/' + 'c' * 32 + '/raiders'
     with TestClient(app) as client:
         monkeypatch.delenv('ORBITAL_DEV_COMMANDS', raising=False)
-        assert client.post(url).status_code == 403
+        assert client.post(url).status_code == 401
         monkeypatch.setenv('ORBITAL_DEV_COMMANDS', '1')
         spawned = client.post(url)
         assert spawned.status_code == 201, spawned.text
@@ -163,7 +163,7 @@ def test_dev_ally_spawn_is_also_guarded(monkeypatch):
     url = '/dev/players/' + 'd' * 32 + '/allies'
     with TestClient(app) as client:
         monkeypatch.delenv('ORBITAL_DEV_COMMANDS', raising=False)
-        assert client.post(url).status_code == 403
+        assert client.post(url).status_code == 401
         monkeypatch.setenv('ORBITAL_DEV_COMMANDS', '1')
         response = client.post(url)
         assert response.status_code == 201
@@ -180,7 +180,7 @@ def test_dev_respawn_requires_flag_and_replaces_live_ship(monkeypatch):
     url='/dev/players/'+'a'*32+'/respawn'
     with TestClient(app) as client:
         monkeypatch.delenv('ORBITAL_DEV_COMMANDS',raising=False)
-        assert client.post(url).status_code==403
+        assert client.post(url).status_code==401
         monkeypatch.setenv('ORBITAL_DEV_COMMANDS','1')
         assert client.post('/dev/players/wrong/respawn').status_code==400
         fresh=client.post(url)
