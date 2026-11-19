@@ -248,9 +248,14 @@
       window.dispatchEvent(new Event('resize'));
     });
   }
+  if(typeof workspace.requestFullscreen!=='function')fullscreen.hidden=true;
   fullscreen.addEventListener('click',()=>{
-    if(document.fullscreenElement===workspace)document.exitFullscreen();
-    else workspace.requestFullscreen();
+    if(document.fullscreenElement===workspace){
+      if(typeof document.exitFullscreen==='function')
+        void document.exitFullscreen().catch?.(()=>{});
+    }else if(typeof workspace.requestFullscreen==='function'){
+      void workspace.requestFullscreen().catch?.(()=>{});
+    }
   });
   document.addEventListener('fullscreenchange',refreshFullscreen);
   let lastMobile=mobileViewport();
