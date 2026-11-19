@@ -58,16 +58,29 @@ export default defineComponent({
   data() {
     return {
       market: { ...DEFAULT_MARKET, owned: { ...DEFAULT_MARKET.owned } },
-      offers: OFFERS
+      offers: OFFERS,
+      ephemerisFrame: localStorage.getItem('orbital-outlaws.ephemeris-frame.v1') === 'star' ? 'star' : 'planet'
     }
   },
   mounted() {
     window.addEventListener(COCKPIT_STATE_EVENT, this.onState as EventListener)
+    window.addEventListener('orbital-reference-frames-updated', this.onFrameUpdate as EventListener)
+    window.addEventListener('orbital-preferences-applied', this.onFrameUpdate as EventListener)
   },
   beforeUnmount() {
     window.removeEventListener(COCKPIT_STATE_EVENT, this.onState as EventListener)
+    window.removeEventListener('orbital-reference-frames-updated', this.onFrameUpdate as EventListener)
+    window.removeEventListener('orbital-preferences-applied', this.onFrameUpdate as EventListener)
   },
   methods: {
+    onFrameUpdate() {
+      this.ephemerisFrame = localStorage.getItem('orbital-outlaws.ephemeris-frame.v1') === 'star' ? 'star' : 'planet'
+    },
+    setEphemerisFrame(event: Event) {
+      const frame = (event.target as HTMLSelectElement).value
+      if (frame !== 'planet' && frame !== 'star') return
+      window.dispatchEvent(new CustomEvent('orbital-ephemeris-frame-request', {detail: {frame}}))
+    },
     onState(event: Event) {
       this.market = { ...(event as CustomEvent<CockpitState>).detail.market }
     },
@@ -90,6 +103,15 @@ export default defineComponent({
         <span :id="offer.statusId">
           {{ market.owned[offer.key] ? offer.ownedDescription : offer.price + ' ¤' }}
         </span>
+        <label v-if="offer.key==='ephemeris' && market.owned.ephemeris"
+               class="ephemeris-market-settings" for="ephemeris-market-frame">
+          <span>PROJECTION REFERENCE</span>
+          <select id="ephemeris-market-frame" :value="ephemerisFrame"
+                  aria-label="Ephemeris Computer reference frame" @change="setEphemerisFrame">
+            <option value="planet">◎ Kestrel-relative</option>
+            <option value="star">✦ Veyra-centered</option>
+          </select>
+        </label>
       </div>
       <button :id="offer.buttonId" class="buy-btn"
               :disabled="market.owned[offer.key] || market.ended || market.credits < offer.price"
