@@ -6,12 +6,15 @@ const vm=require('node:vm');
 const source=fs.readFileSync(path.join(__dirname,'../frontend/public/legacy/persistence.js'),'utf8');
 
 function harness(){
-  const sockets=[],sent=[],listeners=new Map(),docListeners=new Map(),store=new Map();
+  const sockets=[],sent=[],listeners=new Map(),docListeners=new Map(),store=new Map([
+    ['orbital-outlaws.account.session.v1','test_alpha_bearer_token_valid_1234567890'],
+    ['orbital-outlaws.account.id.v1','12345678123412341234123456789abc']
+  ]);
   let now=1000,control={thrust:false,turn:0,stabilize:false,gimbal:0,
                          fire:false,repair:false,aim_x:0,aim_y:0},interval;
   class MockWebSocket {
     static OPEN=1;
-    constructor(url){this.url=url;this.readyState=1;sockets.push(this);}
+    constructor(url,protocols){this.url=url;this.protocols=protocols;this.readyState=1;sockets.push(this);}
     send(data){sent.push(JSON.parse(data));}
     emit(packet){this.onmessage({data:JSON.stringify(packet)});}
     close(){this.readyState=3;this.onclose?.({code:1000});}
@@ -24,7 +27,7 @@ function harness(){
     removeEventListener:name=>docListeners.delete(name)};
   const context={window,document,URL,location:{href:'http://localhost:5173/'},WebSocket:MockWebSocket,
     crypto:{randomUUID:()=> '12345678-1234-1234-1234-123456789abc'},
-    localStorage:{getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v)},
+    sessionStorage:{getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},
     performance:{now:()=>now},setInterval:fn=>{interval=fn;return 1},clearInterval:()=>{},
     setTimeout:()=>1,clearTimeout:()=>{}};
   vm.runInNewContext(source,context);
@@ -36,7 +39,7 @@ function harness(){
     onBurn:value=>burns.push(value)
   });
   return {sockets,sent,handle,states,progress,encounters,statuses,errors,burns,document,
-    listeners,docListeners,control,
+    listeners,docListeners,store,control,
     setTime:v=>{now=v},setControl:value=>{control=value},tick:()=>interval()};
 }
 const sector={saved_at_utc:100,snapshot:{version:3,t:40,player:{hp:85,ammo:27,alive:true},
@@ -47,6 +50,7 @@ const welcome={type:'welcome',flight:{state:{x:123,heading:.3}},
 test('WebSocket receives server-authoritative flight, sector, credits and technologies',()=>{
   const h=harness();
   assert.match(h.sockets[0].url,/^ws:\/\/localhost:5173\/players\/12345678123412341234123456789abc\/live$/);
+  assert.deepEqual(h.sockets[0].protocols,['orbital-v1','auth.test_alpha_bearer_token_valid_1234567890']);
   h.sockets[0].emit(welcome);
   assert.equal(h.states[0].state.x,123);
   assert.equal(h.states[0].clientSampleMs,1000);
@@ -132,4 +136,16 @@ test('guided burn uses server messages, not browser-local intervals or fuel edit
   h.sockets[0].close();
   assert.equal(h.handle.startBurn(plan),false);
   assert.equal(h.handle.abortBurn(),false);
+});
+
+
+test('logging out disconnects persistent flight instead of reconnecting anonymously',()=>{
+  const h=harness();
+  h.sockets[0].emit(welcome);
+  h.store.delete('orbital-outlaws.account.session.v1');
+  h.store.delete('orbital-outlaws.account.id.v1');
+  h.listeners.get('orbital-auth')();
+  assert.deepEqual(h.statuses,[true,false]);
+  assert.equal(h.handle.purchase('nav'),false);
+  assert.equal(h.sockets.length,1);
 });
