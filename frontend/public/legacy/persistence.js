@@ -1,20 +1,18 @@
 /* One bidirectional WebSocket: server owns flight, NPCs, combat and economy. */
 (function(root){
   'use strict';
-  const key='orbital-outlaws.pilot.v1';
-  function pilotId(){
-    let id=localStorage.getItem(key);
-    if(!id||!/^[a-f0-9]{32}$/.test(id)){
-      id=crypto.randomUUID().replace(/-/g,'');
-      localStorage.setItem(key,id);
-    }
-    return id;
+  const tokenKey='orbital-outlaws.account.session.v1';
+  const accountKey='orbital-outlaws.account.id.v1';
+  function credentials(){
+    const token=sessionStorage.getItem(tokenKey);
+    const id=sessionStorage.getItem(accountKey);
+    if(!token||!/^[A-Za-z0-9_-]{32,128}$/.test(token)||!/^[a-f0-9]{32}$/.test(id||''))return null;
+    return {token,id};
   }
   function attach({controls,onState,onProgress,onEncounter,onAssistance,onBurn,onConnected,onError}){
     const origin=new URL(root.ORBITAL_API_BASE_URL||'/',location.href);
-    const address=(origin.protocol==='https:'?'wss:':'ws:')+'//'+origin.host+
-      origin.pathname.replace(/\/$/,'')+'/players/'+pilotId()+'/live';
     let socket=null,connected=false,last='',lastSent=0,retry=null,closed=false;
+    let activeIdentity='';
     let nextSeq=1,lastControls=null;
     const pending=new Set(); // One normal in-flight command; at most one urgent release.
 
@@ -49,10 +47,16 @@
       }
     }
     function connect(){
-      if(closed)return;
-      const ws=new WebSocket(address);
+      const auth=credentials();
+      if(closed||!auth||activeIdentity!==auth.id+':'+auth.token)return;
+      const address=(origin.protocol==='https:'?'wss:':'ws:')+'//'+origin.host+
+        origin.pathname.replace(/\/$/,'')+'/players/'+auth.id+'/live';
+      // The session token travels in a WebSocket subprotocol, not the URL.
+      // The server validates it against the account and echoes only orbital-v1.
+      const ws=new WebSocket(address,['orbital-v1','auth.'+auth.token]);
       socket=ws;
       ws.onmessage=event=>{
+        if(ws!==socket)return;
         const data=JSON.parse(event.data);
         if(data.type==='welcome'||data.type==='snapshot'){
           if(data.type==='snapshot'&&Number.isInteger(data.input_ack)){
@@ -74,19 +78,33 @@
         else if(data.type==='auto_burn')onBurn?.(data.result);
         else if(data.type==='error')onError(data.message);
       };
-      ws.onerror=()=>onError('WebSocket connection error');
+      ws.onerror=()=>{if(ws===socket)onError('WebSocket connection error');};
       ws.onclose=event=>{
-        pending.clear();lastControls=null;
+        if(ws!==socket)return;
+        socket=null;pending.clear();lastControls=null;
         if(connected){connected=false;onConnected(false);}
-        if(event.code===1008){onError('Development WebSocket disabled. Enable ORBITAL_DEV_COMMANDS=1 locally.');return;}
+        if(event.code===1008){onError('Flight session rejected. Please sign in again.');return;}
         if(!closed)retry=setTimeout(connect,1500);
       };
+    }
+    function syncAuth(){
+      const auth=credentials();
+      const next=auth?auth.id+':'+auth.token:'';
+      if(next===activeIdentity)return;
+      activeIdentity=next;
+      clearTimeout(retry);
+      pending.clear();lastControls=null;
+      const old=socket;socket=null;
+      if(old)old.close(1000,'Account session changed');
+      if(connected){connected=false;onConnected(false);}
+      if(auth)connect();
     }
     const events=['keydown','keyup','pointerdown','pointerup','pointercancel','click','blur'];
     for(const name of events)root.addEventListener(name,tick);
     document.addEventListener('visibilitychange',tick);
     const interval=setInterval(tick,50);
-    connect();
+    root.addEventListener('orbital-auth',syncAuth);
+    syncAuth();
     return {
       purchase:upgrade=>send('purchase',{upgrade}),
        setReserve:kg=>send('reserve',{kg}),
@@ -96,6 +114,7 @@
        abortBurn:()=>send('auto_burn_abort'),
       close:()=>{
         closed=true;clearInterval(interval);clearTimeout(retry);
+        root.removeEventListener('orbital-auth',syncAuth);
         for(const name of events)root.removeEventListener(name,tick);
         document.removeEventListener('visibilitychange',tick);
         socket?.close();
