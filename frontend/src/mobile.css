@@ -115,7 +115,8 @@
   .pilot-account{max-height:calc(100dvh - 16px);border-radius:13px}
   .pilot-account-header{padding:14px 15px}
   .pilot-account-content{grid-template-columns:minmax(0,1fr);min-height:0}
-  .pilot-account:not(.pilot-signed-in) .pilot-art-gallery{display:none}
+  .pilot-account:not(.pilot-signed-in):not(.pilot-registering) .pilot-art-gallery{display:none}
+  .pilot-account.pilot-registering .pilot-featured,.pilot-account.pilot-registering .pilot-art-footnote{display:none}
   .pilot-art-gallery{padding:10px 14px}
   .pilot-featured{height:138px}
   .pilot-portrait-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
