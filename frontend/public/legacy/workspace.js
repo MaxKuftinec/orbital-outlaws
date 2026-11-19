@@ -7,8 +7,13 @@
   if(!workspace||!sidebar||!fullscreen)return;
 
   const storageKey='orbital-outlaws.hud-layout.v2';
-  const layout=JSON.parse(localStorage.getItem(storageKey)||'{}');
-  const save=()=>localStorage.setItem(storageKey,JSON.stringify(layout));
+  let initial={};
+  try{initial=JSON.parse(localStorage.getItem(storageKey)||'{}');}catch{}
+  const layout=initial&&typeof initial==='object'&&!Array.isArray(initial)?initial:{};
+  const save=()=>{
+    localStorage.setItem(storageKey,JSON.stringify(layout));
+    window.dispatchEvent(new Event('orbital-preferences-changed'));
+  };
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
   const panels=[
     {id:'nav-command',title:'Navigation',inside:true},
@@ -250,6 +255,21 @@
   });
   document.addEventListener('fullscreenchange',refreshFullscreen);
   window.addEventListener('resize',()=>panels.forEach(({id})=>restorePosition(document.getElementById(id))));
+  function applyStoredLayout(){
+    let incoming={};
+    try{incoming=JSON.parse(localStorage.getItem(storageKey)||'{}');}catch{}
+    if(!incoming||typeof incoming!=='object'||Array.isArray(incoming))incoming={};
+    for(const key of Object.keys(layout))delete layout[key];
+    Object.assign(layout,incoming);
+    for(const definition of panels){
+      const panel=document.getElementById(definition.id);
+      if(!panel)continue;
+      dock(panel,layout[panel.id]?.inside??definition.inside,false);
+      setCollapsed(panel,layout[panel.id]?.collapsed??definition.id==='telemetry-console',false);
+    }
+    if(!menu.hidden)renderMenu();
+  }
+  window.addEventListener('orbital-preferences-applied',applyStoredLayout);
   rootlessExpose();
   function rootlessExpose(){
     window.OrbitalHUD={
@@ -257,7 +277,7 @@
         const panel=document.getElementById(id);
         if(panel)setCollapsed(panel,!panel.classList.contains('hud-minimized'));
       },
-      resetLayout:()=>{localStorage.removeItem(storageKey);location.reload();}
+      resetLayout:()=>{localStorage.removeItem(storageKey);applyStoredLayout();save();}
     };
   }
 })();
