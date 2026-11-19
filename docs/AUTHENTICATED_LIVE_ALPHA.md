@@ -141,3 +141,98 @@ without changing pilot identities. You can revert the frontend to
 `VITE_PUBLIC_PREVIEW=1` and redeploy if you need to disable live flight
 quickly; disabling `AUTH_ENABLED` on the VM also rejects authenticated
 flight requests.
+
+
+## 7. Persistent sign-in, profile management and cockpit sync
+
+The production account screen now offers **Keep me signed in on this device
+for 30 days**. When checked, the server creates a 30-day session and the
+frontend keeps its opaque bearer token in browser localStorage so opening a
+new tab or restarting the browser does not require logging in again.
+Unchecking the option retains the existing tab-scoped 12-hour session.
+Existing sessions do not magically convert to remembered sessions:
+**sign in once again and check the option after deploying**.
+
+Security trade-off: localStorage bearer tokens are readable to JavaScript
+on the Firebase origin, so an XSS vulnerability could expose a session.
+Use HTTPS, never insert untrusted HTML, maintain strict dependencies,
+review Content Security Policy separately, and do not select remember-me
+on shared devices. Logout revokes the current server session; changing
+password or selecting Sign out on all devices revokes every session.
+This is an alpha implementation, not device-bound authentication.
+
+Password signup, email-reset and in-profile change use a minimum of **8
+characters**, with **no mandatory uppercase/digit/special character**
+composition rules. The server still hashes passwords with Argon2id and
+limits authentication attempts. Use a longer unique passphrase or password
+manager voluntarily.
+
+The Pilot Profile dialog now contains Profile (portrait, callsign),
+Security (change password, revoke sessions) and Cockpit Sync tabs.
+Changing verified email is deliberately not offered without a verified
+email-change protocol.
+
+### Portable UI preferences
+
+`GET /auth/me/preferences` and `PUT /auth/me/preferences` require the
+player's bearer token; each account has its own PostgreSQL document and
+revision. The API validates size and structure, only accepting:
+dock/collapse/normalized panel coordinates, map reference frame, axes
+visibility and hotkey bindings. These never change spacecraft physics.
+
+On sign-in the frontend loads the server document **before** initializing
+the older Canvas cockpit. Existing browser settings are migrated once for
+a new account. Edits are stored locally immediately and pushed to the
+server with a short debounce. Different devices pull the saved document
+when the pilot signs in, opens a new tab, or clicks Reload preferences
+from cloud; it is not a live multi-device stream. On concurrent edits the
+latest local save wins after a revision conflict. The app retains local
+settings if synchronization fails; cloud synchronization resumes on a
+subsequent change/refresh.
+
+`Base.metadata.create_all` creates the new `account_preferences`
+table on backend startup without modifying existing accounts, pilots or
+flight tables. Production databases should still be backed up before
+deployment and use explicit migrations once the schema becomes complex.
+
+### Deploy this update without losing live pilots or Caddy Basic Auth
+
+**VM terminal:**
+
+```bash
+cd ~/orbital-outlaws
+git status --short
+# Preserve any local Caddyfile edits used for protected Swagger UI.
+git pull --ff-only
+cd infra/compute-engine
+sudo docker compose --env-file .env -f compose.yaml up -d --build api
+sudo docker compose --env-file .env -f compose.yaml logs --tail=40 api
+```
+
+Do **not** run `docker compose down -v`. That deletes the PostgreSQL
+volume. Avoid overwriting any tracked local Caddyfile Basic Auth edits.
+The API deployment briefly disconnects active WebSockets; simulation
+time remains frozen during the API downtime.
+
+**Windows PowerShell, after the API is running:**
+
+```powershell
+cd C:\Users\DELL\orbital-outlaws
+git pull --ff-only
+# Keep frontend/.env.production.local with VITE_PUBLIC_PREVIEW=0
+# and VITE_API_BASE_URL=https://34-87-6-209.sslip.io
+cd frontend
+npm ci
+npm run build
+cd ..
+firebase deploy --only hosting:orbital-outlaws --project axore-456421
+```
+
+The `PUT` method was added to FastAPI's CORS allowlist for the Firebase
+origin. Check that `AUTH_ORIGINS` includes the actual frontend URL.
+
+After deployment: log in again with Remember me, set a floating panel,
+change a hotkey and toggle the reference frame, then open a fresh browser
+or another device, sign in, and confirm the choices are restored.
+Verify that Swagger still requires Caddy Basic Auth and admin developer
+operations still require the administrator's bearer token.
