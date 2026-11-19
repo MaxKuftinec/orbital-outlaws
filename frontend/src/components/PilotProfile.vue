@@ -91,15 +91,15 @@ export default defineComponent({
       if (!response.ok) {
         const detail = result.detail
         throw new Error(typeof detail === 'string' ? detail :
-          response.status === 503 ? 'Accounts are not yet enabled on this server.' :
-          response.status === 401 ? 'Incorrect credentials or expired session.' :
+          response.status === 503 ? 'Accounts are not yet enabled on this server' :
+          response.status === 401 ? 'Incorrect credentials or expired session' :
           'Request failed. Please check your details.')
       }
       return result
     },
     async submitRegister() {
       if (this.registration.password !== this.registration.confirm) {
-        this.error = 'Both password fields must match.'
+        this.error = 'Both password fields must match'
         return
       }
       this.error = ''
@@ -115,7 +115,7 @@ export default defineComponent({
         this.registration.password = ''
         this.registration.confirm = ''
         this.stage = 'verify'
-        this.message = 'We sent a six-digit verification code. Check your inbox.'
+        this.message = 'We sent a six-digit verification code. Check your inbox'
       } catch (e) {
         this.error = (e as Error).message
       } finally {
@@ -133,7 +133,7 @@ export default defineComponent({
         this.login.identifier = this.verification.identifier
         this.verification.code = ''
         this.stage = 'login'
-        this.message = 'Account verified. You can sign in now.'
+        this.message = 'Account verified. You can sign in now'
       } catch (e) {
         this.error = (e as Error).message
       } finally {
@@ -145,7 +145,7 @@ export default defineComponent({
       this.busy = true
       try {
         await this.api('/resend', 'POST', { identifier: this.verification.identifier })
-        this.message = 'If your account is pending, another code is on its way.'
+        this.message = 'If your account is pending, another code is on its way'
       } catch (e) {
         this.error = (e as Error).message
       } finally {

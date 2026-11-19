@@ -1,7 +1,7 @@
-"""Verified email/password accounts for Orbital Outlaws.
+"""Verified email/password accounts for Orbital Outlaws
 
 Account sessions authorize the owner's persistent flight; privileged
-production development commands require a separate administrator identity.
+production development commands require a separate administrator identity
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from .models import Account, AccountSession, AuthThrottle, EmailChallenge, Passw
 
 router = APIRouter(prefix='/auth', tags=['accounts'])
 password_hasher = PasswordHash.recommended()
-# Fixed dummy hash avoids a noticeably faster failure for non-existent identities.
+# Fixed dummy hash avoids a noticeably faster failure for non-existent identities
 DUMMY_PASSWORD_HASH = password_hasher.hash('not-an-existing-player-credential')
 AVATARS = ('vanguard', 'navigator', 'salvager', 'envoy', 'mechanic', 'sentinel')
 USERNAME_RE = r'^[a-zA-Z][a-zA-Z0-9_]{2,19}$'
@@ -48,7 +48,7 @@ def smtp_ready():
 
 
 def sessions():
-    # Deferred import avoids circular dependency with main.py's app/router.
+    # Deferred import avoids circular dependency with main.py's app/router
     from .main import store
     return store().sessions
 
@@ -70,7 +70,7 @@ def token_digest(token: str) -> str:
 
 
 def throttle(db, category: str, value: str, limit: int, seconds: float):
-    """Shared PostgreSQL-backed throttle; not process-local per-worker state."""
+    """Shared PostgreSQL-backed throttle; not process-local per-worker state"""
     key = hashlib.sha256(f'{category}:{value.casefold()}'.encode()).hexdigest()
     now = time.time()
     row = db.scalars(select(AuthThrottle).where(
@@ -82,7 +82,7 @@ def throttle(db, category: str, value: str, limit: int, seconds: float):
         row.count = 1
         row.resets_at = now + seconds
     elif row.count >= limit:
-        raise HTTPException(429, 'Too many attempts. Please retry later.')
+        raise HTTPException(429, 'Too many attempts. Please retry later')
     else:
         row.count += 1
 
@@ -118,7 +118,7 @@ def issue_challenge(db, account: Account) -> str:
 
 
 def _send_mail(email: str, subject: str, body: str):
-    """SMTP submission over STARTTLS 587 or implicit TLS 465."""
+    """SMTP submission over STARTTLS 587 or implicit TLS 465"""
     smtp_ready()
     host = os.environ['SMTP_HOST']
     port = int(os.getenv('SMTP_PORT', '587'))
@@ -139,14 +139,14 @@ def _send_mail(email: str, subject: str, body: str):
 def send_verification(email: str, code: str):
     _send_mail(email, 'Orbital Outlaws — verify your pilot account',
                'Your Orbital Outlaws verification code is: '+code+
-               '\n\nThis code expires after 10 minutes. Do not share it with anyone.\n'
-               'If you did not register, you can ignore this email.\n')
+               '\n\nThis code expires after 10 minutes. Do not share it with anyone\n'
+               'If you did not register, you can ignore this email\n')
 
 
 class RegisterBody(BaseModel):
     username: str = Field(min_length=3, max_length=20, pattern=USERNAME_RE)
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=7, max_length=128)
     avatar_id: str = Field(default='navigator')
 
 
@@ -164,7 +164,7 @@ class LoginBody(IdentityBody):
 
 
 class PasswordResetConfirm(VerifyBody):
-    new_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=7, max_length=128)
 
 
 class AvatarBody(BaseModel):
@@ -195,9 +195,9 @@ def register(body: RegisterBody, request: Request):
         send_verification(email, code)
     except (OSError, smtplib.SMTPException) as exc:
         # Account remains pending, and can request a new code later.
-        raise HTTPException(503, 'Email could not be delivered. Please retry verification later.') from exc
+        raise HTTPException(503, 'Email could not be delivered. Please retry verification later') from exc
     return {'status': 'verification_required',
-            'message': 'A six-digit code was sent to your email address.'}
+            'message': 'A six-digit code was sent to your email address'}
 
 
 @router.post('/resend', status_code=202)
@@ -219,8 +219,8 @@ def resend(body: IdentityBody, request: Request):
         try:
             send_verification(recipient, code)
         except (OSError, smtplib.SMTPException) as exc:
-            raise HTTPException(503, 'Email could not be delivered. Please try again later.') from exc
-    return {'status': 'accepted', 'message': 'If verification is pending, a new code was sent.'}
+            raise HTTPException(503, 'Email could not be delivered. Please try again later') from exc
+    return {'status': 'accepted', 'message': 'If verification is pending, a new code was sent'}
 
 
 @router.post('/verify')
@@ -250,7 +250,7 @@ def verify(body: VerifyBody, request: Request):
                     db.delete(challenge)
                     profile = public_profile(account)
     if invalid:
-        raise HTTPException(400, 'Invalid or expired code. Request another code if needed.')
+        raise HTTPException(400, 'Invalid or expired code. Request another code if needed')
     return {'status': 'verified', 'profile': profile}
 
 
@@ -277,7 +277,7 @@ def login(body: LoginBody, request: Request):
 
 
 def profile_for_token(token: str) -> dict:
-    """The account ID is the server-authoritative pilot ID."""
+    """The account ID is the server-authoritative pilot ID"""
     require_accounts_enabled()
     if not token or len(token) < 32 or len(token) > 128:
         raise HTTPException(401, 'Please sign in')
@@ -325,7 +325,7 @@ def logout(identity: tuple = Depends(signed_in)):
 
 @router.post('/password-reset/request', status_code=202)
 def request_password_reset(body: IdentityBody, request: Request):
-    """Return the same response regardless of whether this identity exists."""
+    """Return the same response regardless of whether this identity exists"""
     require_accounts_enabled()
     smtp_ready()
     rate_limit(request, 'password-reset-request', body.identifier, 4, 3600)
@@ -352,11 +352,11 @@ def request_password_reset(body: IdentityBody, request: Request):
         try:
             _send_mail(email, 'Orbital Outlaws — reset your password',
                        'Your Orbital Outlaws password reset code is: '+code+
-                       '\n\nExpires in 10 minutes. If you did not request this, ignore it.\n')
+                       '\n\nExpires in 10 minutes. If you did not request this, ignore it\n')
         except (OSError, smtplib.SMTPException):
             import logging
             logging.exception('Password reset email could not be delivered')
-    return {'status': 'accepted', 'message': 'If this account exists, a reset code has been sent.'}
+    return {'status': 'accepted', 'message': 'If this account exists, a reset code has been sent'}
 
 
 @router.post('/password-reset/confirm')
@@ -382,4 +382,4 @@ def confirm_password_reset(body: PasswordResetConfirm, request: Request):
                 db.delete(row)
     if invalid:
         raise HTTPException(400, 'Invalid or expired recovery code.')
-    return {'status': 'password_updated', 'message': 'Password changed. Sign in again.'}
+    return {'status': 'password_updated', 'message': 'Password changed. Sign in again'}

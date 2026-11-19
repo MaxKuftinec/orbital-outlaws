@@ -23,7 +23,7 @@ def store() -> WorldStore:
 
 
 async def _heartbeat_world_clock(database: WorldStore):
-    """Persist simulation seconds even if nobody is playing or making API calls."""
+    """Persist simulation seconds even if nobody is playing or making API calls"""
     while True:
         await asyncio.sleep(1.)
         try:
@@ -36,7 +36,7 @@ async def _heartbeat_world_clock(database: WorldStore):
 async def lifespan(_app: FastAPI):
     database = store()
     # One authoritative world owner per PostgreSQL database. A second API
-    # worker must not independently run the same simulation clock.
+    # worker must not independently run the same simulation clock
     await run_in_threadpool(database.clock.acquire_ownership)
     heartbeat = None
     try:
@@ -53,8 +53,8 @@ async def lifespan(_app: FastAPI):
 
 app=FastAPI(title='Orbital Outlaws',version='1.1.0',lifespan=lifespan)
 
-# Public accounts are disabled unless AUTH_ENABLED=1 and all secrets are set.
-# Browser origin allow-list is explicit; never use wildcard CORS for credentials.
+# Public accounts are disabled unless AUTH_ENABLED=1 and all secrets are set
+# Browser origin allow-list is explicit; never use wildcard CORS for credentials
 from fastapi.middleware.cors import CORSMiddleware
 from .accounts import router as accounts_router, profile_for_token
 from .account_settings import router as account_settings_router
@@ -68,12 +68,12 @@ app.include_router(account_settings_router)
 
 
 
-# Swagger exposes a Bearer authorization control for private game/admin routes.
+# Swagger exposes a Bearer authorization control for private game/admin routes
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def _request_profile(credentials: HTTPAuthorizationCredentials | None):
-    # Preserve anonymous tooling solely for explicitly enabled LOCAL development.
+    # Preserve anonymous tooling solely for explicitly enabled LOCAL development
     if os.getenv('ORBITAL_DEV_COMMANDS') == '1' and os.getenv('AUTH_ENABLED') != '1':
         return None
     if credentials is None or credentials.scheme.lower() != 'bearer':
