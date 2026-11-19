@@ -29,6 +29,8 @@ AVATARS = ('vanguard', 'navigator', 'salvager', 'envoy', 'mechanic', 'sentinel')
 USERNAME_RE = r'^[a-zA-Z][a-zA-Z0-9_]{2,19}$'
 CODE_RE = r'^\d{6}$'
 SESSION_TTL_SECONDS = 12 * 3600
+REMEMBER_TTL_SECONDS = 30 * 24 * 3600
+
 VERIFICATION_TTL_SECONDS = 10 * 60
 
 
@@ -144,7 +146,7 @@ def send_verification(email: str, code: str):
 class RegisterBody(BaseModel):
     username: str = Field(min_length=3, max_length=20, pattern=USERNAME_RE)
     email: EmailStr
-    password: str = Field(min_length=12, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
     avatar_id: str = Field(default='navigator')
 
 
@@ -158,10 +160,11 @@ class VerifyBody(IdentityBody):
 
 class LoginBody(IdentityBody):
     password: str
+    remember_me: bool = False
 
 
 class PasswordResetConfirm(VerifyBody):
-    new_password: str = Field(min_length=12, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class AvatarBody(BaseModel):
@@ -265,11 +268,12 @@ def login(body: LoginBody, request: Request):
             raise HTTPException(403, 'Verify your email before logging in')
         token = secrets.token_urlsafe(32)
         now = time.time()
+        ttl = REMEMBER_TTL_SECONDS if body.remember_me else SESSION_TTL_SECONDS
         db.add(AccountSession(token_digest=token_digest(token), account_id=account.id,
-                              created_at=now, expires_at=now + SESSION_TTL_SECONDS))
+                              created_at=now, expires_at=now + ttl))
         profile = public_profile(account)
     return {'access_token': token, 'token_type': 'bearer',
-            'expires_in': SESSION_TTL_SECONDS, 'profile': profile}
+            'expires_in': ttl, 'profile': profile}
 
 
 def profile_for_token(token: str) -> dict:
