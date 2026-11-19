@@ -7,7 +7,7 @@
   if(!workspace||!sidebar||!fullscreen)return;
 
   const storageKey='orbital-outlaws.hud-layout.v2';
-  const mobileViewport=()=>window.matchMedia?.('(max-width: 780px)').matches||false;
+  const mobileViewport=()=>window.matchMedia?.('(max-width: 780px), (pointer: coarse) and (max-width: 1100px)').matches||false;
   let initial={};
   try{initial=JSON.parse(localStorage.getItem(storageKey)||'{}');}catch{}
   const layout=initial&&typeof initial==='object'&&!Array.isArray(initial)?initial:{};
