@@ -16,7 +16,7 @@ const publicPreview = import.meta.env.VITE_PUBLIC_PREVIEW === '1'
 
 const legacyFiles = [
   'map-tools.js', 'map-visuals.js', 'star-system.js', 'reference-frames.js', 'autopilot-attitude.js', 'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
-  'arrival.js', 'persistence.js', 'workspace.js', 'rendering.js', 'game.js'
+  'arrival.js', 'persistence.js', 'workspace.js', 'rendering.js', 'touch-navigation.js', 'game.js'
 ]
 
 export default defineComponent({
@@ -28,6 +28,7 @@ export default defineComponent({
       authenticated: Boolean(restoreSession()),
       backendOnline: false,
       persistentOnline: false,
+      mobileInstrumentsOpen: false,
       startupError: '',
       view: window.location.hash === '#/atlas' ? 'atlas' : 'cockpit'
     }
@@ -51,13 +52,23 @@ export default defineComponent({
   },
   methods: {
     openProfile() {
+      this.mobileInstrumentsOpen = false
       (this.$refs.pilotProfile as { show: () => void } | undefined)?.show()
     },
+    toggleMobileInstruments() {
+      this.mobileInstrumentsOpen = !this.mobileInstrumentsOpen
+    },
+    openMobileSettings() {
+      this.mobileInstrumentsOpen = false
+      document.getElementById('settings-btn')?.click()
+    },
     onHashChange() {
+      this.mobileInstrumentsOpen = false
       this.view = window.location.hash === '#/atlas' ? 'atlas' : 'cockpit'
       this.$nextTick(() => window.dispatchEvent(new Event('resize')))
     },
     openAtlas() {
+      this.mobileInstrumentsOpen = false
       window.location.hash = '#/atlas'
       this.onHashChange()
       window.scrollTo({top:0,behavior:'smooth'})
@@ -139,6 +150,13 @@ export default defineComponent({
       </div>
     </header>
 
+    <nav class="mobile-navigation" aria-label="Mobile cockpit navigation">
+      <button type="button" aria-controls="mobile-instruments" :aria-expanded="mobileInstrumentsOpen" @click="toggleMobileInstruments">☷ Instruments</button>
+      <button type="button" @click="openAtlas">◈ System atlas</button>
+      <button type="button" @click="openProfile">✧ Profile</button>
+      <button type="button" @click="openMobileSettings">⚙ Settings</button>
+    </nav>
+
     <main class="game-layout">
       <section class="arena-shell" aria-label="Orbital gameplay area">
         <div class="arena-head">
@@ -147,7 +165,17 @@ export default defineComponent({
         </div>
         <div class="canvas-wrap" id="canvas-workspace">
           <button type="button" id="fullscreen-btn" class="fullscreen-btn" aria-label="Enter fullscreen cockpit">⛶ Fullscreen</button>
-          <canvas id="orbit-canvas" aria-label="Top-down gravity simulation with spacecraft, orbit predictions, salvage pods and projectile combat"></canvas>
+          <canvas id="orbit-canvas" aria-label="Top-down orbital flight map. On touch devices, drag to pan, pinch to zoom, and tap an object to select it"></canvas>
+          <div class="mobile-flight-pad" aria-label="Touch spacecraft flight controls">
+            <div class="mobile-gesture-hint">DRAG TO PAN <span>·</span> PINCH TO ZOOM <span>·</span> TAP TO TARGET</div>
+            <div class="mobile-pad-grid">
+              <button type="button" class="mobile-helm-button" data-mobile-thrust="rotate-left" aria-label="Hold to rotate counterclockwise"><strong>⟲</strong><span>LEFT</span></button>
+              <button type="button" class="mobile-helm-button" data-mobile-thrust="stabilize" aria-label="Hold to stabilize rotation"><strong>◈</strong><span>STABILIZE</span></button>
+              <button type="button" class="mobile-helm-button mobile-helm-engine" data-mobile-thrust="main" aria-label="Hold to fire main engine"><strong>▲</strong><span>THRUST</span></button>
+              <button type="button" class="mobile-helm-button" data-mobile-thrust="rotate-right" aria-label="Hold to rotate clockwise"><strong>⟳</strong><span>RIGHT</span></button>
+              <button type="button" id="mobile-fire-btn" class="mobile-helm-button mobile-helm-fire" aria-label="Hold to fire weapon"><strong>⌖</strong><span>FIRE</span></button>
+            </div>
+          </div>
           <!-- Separate floating consoles are required by the legacy control bridge;
                sidebar instances provide the full instrument readouts -->
           <!-- <TelemetryPanel :console="true" /> We don't need this, please don't uncomment--> 
@@ -187,7 +215,9 @@ export default defineComponent({
         </section>
       </section>
 
-      <aside class="sidebar" aria-label="Spacecraft instruments">
+      <button v-if="mobileInstrumentsOpen" type="button" class="mobile-instruments-backdrop" aria-label="Close instruments" @click="mobileInstrumentsOpen=false"></button>
+      <aside id="mobile-instruments" class="sidebar" :class="{'mobile-instruments-open': mobileInstrumentsOpen}" aria-label="Spacecraft instruments">
+        <div class="mobile-instruments-heading"><div><span>ORBITAL OUTLAWS / SYSTEMS</span><strong>Instruments</strong></div><button type="button" aria-label="Close instrument drawer" @click="mobileInstrumentsOpen=false">✕</button></div>
 
         <section class="panel propulsion">
           <div class="panel-heading"><span>PROPULSION</span><span>SCOUT MK-I</span></div>
