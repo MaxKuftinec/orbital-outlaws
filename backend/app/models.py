@@ -149,3 +149,14 @@ class AuthThrottle(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     resets_at: Mapped[float] = mapped_column(Float, nullable=False)
+
+
+class PasswordResetChallenge(Base):
+    """One-use, short-lived recovery code; never store raw recovery codes."""
+    __tablename__ = 'password_reset_challenges'
+    account_id: Mapped[str] = mapped_column(ForeignKey('accounts.id'), primary_key=True)
+    challenge_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[float] = mapped_column(Float, nullable=False)
+    sent_at: Mapped[float] = mapped_column(Float, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
