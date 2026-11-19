@@ -68,7 +68,7 @@ function connectionHarness(){
     removeEventListener:()=>{}
   };
   const document={hidden:false,addEventListener:()=>{},removeEventListener:()=>{}};
-  const localStorage={getItem:()=> 'a'.repeat(32),setItem:()=>{}};
+  const sessionStorage={getItem:key=>key==='orbital-outlaws.account.id.v1'? 'a'.repeat(32): 'valid_test_session_token_1234567890_xyz',setItem:()=>{}};
   class WebSocket{
     static OPEN=1;
     static current=null;
@@ -76,7 +76,7 @@ function connectionHarness(){
     send(body){this.sent.push(JSON.parse(body))}
     close(){}
   }
-  const ctx={window:rootWindow,document,localStorage,WebSocket,
+  const ctx={window:rootWindow,document,sessionStorage,WebSocket,
     location:{href:'http://localhost:5173/'},URL,performance:{now:()=>now},
     setInterval:fn=>{periodic=fn;return 1},clearInterval:()=>{},
     setTimeout:()=>1,clearTimeout:()=>{}
