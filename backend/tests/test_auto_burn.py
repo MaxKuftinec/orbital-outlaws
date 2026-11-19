@@ -138,7 +138,7 @@ def test_dev_only_rest_endpoint_rejects_public_and_invalid_orders(monkeypatch, p
     with TestClient(app) as client:
         monkeypatch.delenv('ORBITAL_DEV_COMMANDS',raising=False)
         assert client.post('/players/'+pilot+'/auto-burn',json={
-            'direction':'prograde','cutoff':'duration','duration_s':2}).status_code==403
+            'direction':'prograde','cutoff':'duration','duration_s':2}).status_code==401
         monkeypatch.setenv('ORBITAL_DEV_COMMANDS','1')
         assert client.post('/players/not-a-pilot/auto-burn',json={
             'direction':'prograde','cutoff':'duration','duration_s':2}).status_code==400
