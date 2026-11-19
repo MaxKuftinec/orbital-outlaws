@@ -9,9 +9,10 @@ import NavigationPanel from './components/NavigationPanel.vue'
 import SystemAtlas from './components/SystemAtlas.vue'
 import PilotProfile from './components/PilotProfile.vue'
 import AutoBurnPanel from './components/AutoBurnPanel.vue'
+import { restoreSession } from './services/session'
+import { setupPreferenceSync, hydratePreferences } from './services/preferences'
 
 const publicPreview = import.meta.env.VITE_PUBLIC_PREVIEW === '1'
-const tokenKey = 'orbital-outlaws.account.session.v1'
 
 const legacyFiles = [
   'map-tools.js', 'map-visuals.js', 'star-system.js', 'reference-frames.js', 'autopilot-attitude.js', 'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
@@ -24,7 +25,7 @@ export default defineComponent({
   data() {
     return {
       publicPreview,
-      authenticated: Boolean(sessionStorage.getItem(tokenKey)),
+      authenticated: Boolean(restoreSession()),
       backendOnline: false,
       persistentOnline: false,
       startupError: '',
@@ -37,6 +38,7 @@ export default defineComponent({
     window.addEventListener('hashchange', this.onHashChange as EventListener)
     ;(window as typeof window & { ORBITAL_API_BASE_URL?: string }).ORBITAL_API_BASE_URL =
       import.meta.env.VITE_API_BASE_URL ?? ''
+    setupPreferenceSync()
     this.startCockpit()
     if (!this.publicPreview && !this.authenticated) {
       this.$nextTick(() => this.openProfile())
@@ -76,7 +78,7 @@ export default defineComponent({
       })
     },
     updateAuth() {
-      this.authenticated = Boolean(sessionStorage.getItem(tokenKey))
+      this.authenticated = Boolean(restoreSession())
     },
     updatePersistence(event: Event) {
       this.persistentOnline = Boolean((event as CustomEvent).detail?.online)
@@ -92,6 +94,7 @@ export default defineComponent({
     },
     async startCockpit() {
       try {
+        if (!this.publicPreview) await hydratePreferences()
         for (const filename of legacyFiles) {
           // Anonymous pilot WebSockets are private until authenticated alpha.
           if (this.publicPreview && filename === 'persistence.js') continue
@@ -225,7 +228,7 @@ export default defineComponent({
           <label class="settings-axis-switch" for="settings-show-axes"><input type="checkbox" id="settings-show-axes" checked /> Show coordinate axes and origin grid</label>
           <p class="mini-note">The ruler, object anchors, inertial compass and distance scale work in either frame without upgrades.</p>
         </section>
-        <div class="settings-bottom"><span class="mini-note">Display choices are saved locally.</span><button type="button" id="settings-done" class="buy-btn">Done</button></div>
+        <div class="settings-bottom"><span class="mini-note">Cockpit layout, hotkeys and map settings sync with your pilot account when signed in.</span><button type="button" id="settings-done" class="buy-btn">Done</button></div>
       </div>
     </div>
     <footer class="footer-note">Orbital Outlaws · v1.1 <span>Autonomous server-side sector · persistent upgrades · configurable panels</span></footer>
