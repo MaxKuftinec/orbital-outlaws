@@ -1,6 +1,8 @@
 <script lang="ts">
 import { defineComponent } from 'vue'
 import '../pilot-profile.css'
+import { restoreSession, saveSession, clearSession, ACCOUNT_KEY } from '../services/session'
+import { hydratePreferences, pushPreferences } from '../services/preferences'
 
 type PilotProfileData = {
   id: string
@@ -11,8 +13,6 @@ type PilotProfileData = {
   created_at: number
 }
 type Stage = 'login' | 'register' | 'verify' | 'reset-request' | 'reset-confirm' | 'profile'
-const TOKEN_KEY = 'orbital-outlaws.account.session.v1'
-const ACCOUNT_KEY = 'orbital-outlaws.account.id.v1'
 const avatars = [
   { id: 'vanguard', title: 'Vanguard', tagline: 'Flight pathfinder', designation: 'FLIGHT / 01' },
   { id: 'navigator', title: 'Navigator', tagline: 'Orbital tactician', designation: 'NAV / 02' },
@@ -32,6 +32,11 @@ export default defineComponent({
       message: '',
       registration: { email: '', username: '', password: '', confirm: '' },
       login: { identifier: '', password: '' },
+      rememberMe: true,
+      profileTab: 'overview' as 'overview' | 'security' | 'preferences',
+      callsignEdit: '',
+      passwordChange: { current: '', next: '', confirm: '' },
+      preferencesStatus: 'local',
       verification: { identifier: '', code: '' },
       reset: { identifier: '', code: '', password: '', confirm: '' },
       chosenAvatar: 'navigator',
@@ -41,10 +46,17 @@ export default defineComponent({
     }
   },
   mounted() {
-    this.token = sessionStorage.getItem(TOKEN_KEY) || ''
+    this.token = restoreSession()
+    window.addEventListener('orbital-cloud-sync', this.updateSyncStatus as EventListener)
     if (this.token) void this.refresh()
   },
+  beforeUnmount() {
+    window.removeEventListener('orbital-cloud-sync', this.updateSyncStatus as EventListener)
+  },
   methods: {
+    updateSyncStatus(event: Event) {
+      this.preferencesStatus = String((event as CustomEvent).detail?.status || 'local')
+    },
     publishSession() {
       if (this.token && this.profile) {
         sessionStorage.setItem(ACCOUNT_KEY, this.profile.id)
@@ -144,12 +156,14 @@ export default defineComponent({
       this.error = ''
       this.busy = true
       try {
-        const answer = await this.api('/login', 'POST', this.login)
+        const answer = await this.api('/login', 'POST', { ...this.login, remember_me: this.rememberMe })
         this.token = answer.access_token
-        sessionStorage.setItem(TOKEN_KEY, this.token)
+        saveSession(this.token, answer.profile.id, this.rememberMe)
         this.profile = answer.profile
         this.publishSession()
         this.chosenAvatar = this.profile?.avatar_id || 'navigator'
+        this.callsignEdit = this.profile?.username || ''
+        this.profileTab = 'overview'
         this.login.password = ''
         this.stage = 'profile'
         this.message = 'Welcome to the frontier, ' + (this.profile?.username || 'pilot') + '.'
@@ -164,12 +178,13 @@ export default defineComponent({
       try {
         this.profile = await this.api('/me', 'GET', undefined, true)
         this.chosenAvatar = this.profile?.avatar_id || 'navigator'
+        this.callsignEdit = this.profile?.username || ''
         this.stage = 'profile'
         this.publishSession()
       } catch {
         this.token = ''
         this.profile = null
-        sessionStorage.removeItem(TOKEN_KEY)
+        clearSession()
         this.publishSession()
       }
     },
@@ -194,10 +209,68 @@ export default defineComponent({
       } catch { /* Expired sessions are cleared locally as well. */ }
       this.profile = null
       this.token = ''
-      sessionStorage.removeItem(TOKEN_KEY)
+      clearSession()
       this.publishSession()
       this.stage = 'login'
       this.message = 'Signed out.'
+    },
+    async saveCallsign() {
+      this.error = ''
+      this.message = ''
+      this.busy = true
+      try {
+        this.profile = await this.api('/me/callsign', 'PATCH', { username: this.callsignEdit }, true)
+        this.callsignEdit = this.profile?.username || ''
+        this.message = 'Callsign updated across your account.'
+      } catch (error) { this.error = (error as Error).message }
+      finally { this.busy = false }
+    },
+    async changePassword() {
+      if (this.passwordChange.next !== this.passwordChange.confirm) {
+        this.error = 'New passwords must match.'
+        return
+      }
+      this.error = ''
+      this.busy = true
+      try {
+        await this.api('/me/password', 'POST', {
+          current_password: this.passwordChange.current,
+          new_password: this.passwordChange.next
+        }, true)
+        this.passwordChange = { current: '', next: '', confirm: '' }
+        this.token = ''
+        this.profile = null
+        clearSession()
+        this.publishSession()
+        this.stage = 'login'
+        this.message = 'Password updated. Sign in again; all previous sessions have been revoked.'
+      } catch (error) { this.error = (error as Error).message }
+      finally { this.busy = false }
+    },
+    async signOutEverywhere() {
+      this.error = ''
+      this.busy = true
+      try {
+        await this.api('/logout-all', 'POST', undefined, true)
+        this.token = ''
+        this.profile = null
+        clearSession()
+        this.publishSession()
+        this.stage = 'login'
+        this.message = 'All sessions revoked. Sign in again on this device.'
+      } catch (error) { this.error = (error as Error).message }
+      finally { this.busy = false }
+    },
+    async syncPreferences() {
+      this.error = ''
+      this.message = ''
+      this.busy = true
+      try {
+        await pushPreferences()
+        await hydratePreferences()
+        this.message = 'Cockpit preferences refreshed from your cloud profile.'
+      } catch (error) { this.error = (error as Error).message }
+      finally { this.busy = false }
     },
     async requestReset() {
       this.error = ''
