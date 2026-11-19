@@ -38,7 +38,9 @@ test('client routes and Vite proxy have no /api prefix',()=>{
   assert.match(proxy,/'\/players':/);
   assert.match(proxy,/'\/worlds':/);
   assert.match(proxy,/'\/dev':/);
-  assert.ok(persistence.includes("+'/players/'+pilotId()+'/live'"));
+  assert.ok(persistence.includes("+'/players/'+auth.id+'/live'"));
+  assert.match(persistence,/new WebSocket\\(address,\\['orbital-v1','auth\\.'\\+auth\\.token\\]\\)/);
+  assert.doesNotMatch(persistence,/localStorage\\.setItem\\(.*pilot/);
   assert.doesNotMatch(persistence,/\/api\/players/);
 });
 
