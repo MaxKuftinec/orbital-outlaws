@@ -84,6 +84,6 @@ def test_dev_refuel_api_fills_tank_and_records_authoritative_events(monkeypatch,
             assert client.post(url).status_code == 409
 
             monkeypatch.setenv('ORBITAL_DEV_COMMANDS', '0')
-            assert client.post(url).status_code == 403
+            assert client.post(url).status_code == 401
     finally:
         main.store.cache_clear()
