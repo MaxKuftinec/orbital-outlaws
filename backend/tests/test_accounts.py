@@ -136,7 +136,7 @@ def test_password_recovery_revokes_prior_sessions(client_accounts, monkeypatch):
     requested = client.post('/auth/password-reset/request', json={'identifier': username})
     assert requested.status_code == 202
     assert emails[-1][0] == email
-    code = re.search(r'code is: (\\d{6})', emails[-1][2]).group(1)
+    code = re.search(r'code is: (\d{6})', emails[-1][2]).group(1)
     wrong = '000000' if code != '000000' else '111111'
     reset = {'identifier': username, 'code': wrong, 'new_password': 'new-strong-password-value'}
     assert client.post('/auth/password-reset/confirm', json=reset).status_code == 400
