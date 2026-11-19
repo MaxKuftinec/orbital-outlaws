@@ -4,8 +4,13 @@ const vm=require('node:vm');
 const fs=require('node:fs');
 const path=require('node:path');
 const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
-const STAR=require('../frontend/public/legacy/star-system.js');
-const NAV=require('../frontend/public/legacy/navigation.js');
+function loadLegacy(file){
+  const context={module:{exports:{}}};
+  vm.runInNewContext(read(file),context);
+  return context.module.exports;
+}
+const STAR=loadLegacy('frontend/public/legacy/star-system.js');
+const NAV=loadLegacy('frontend/public/legacy/navigation.js');
 
 function makeSettings(){
   const stored=new Map();
