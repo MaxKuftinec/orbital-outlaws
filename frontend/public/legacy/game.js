@@ -1492,7 +1492,7 @@
   }
   function showSystemMap(){
     state.systemView=true;
-    try{localStorage.setItem(FRAME_KEY,'star');}catch{}
+    try{localStorage.setItem(FRAME_KEY,'star');}catch{}window.dispatchEvent(new Event('orbital-preferences-changed'));
     const baseScale=Math.min(W/700,H/660);
     state.zoom=clamp(.65*Math.min(W,H)/(STAR.ORBIT_RADIUS_KM*baseScale),MIN_ZOOM,6);
     const planet=STAR.planet(state.t),s=scale();
@@ -1504,7 +1504,7 @@
   }
   function showPlanetMap(){
     state.systemView=false;
-    try{localStorage.setItem(FRAME_KEY,'planet');}catch{}state.followPlayer=false;state.followTarget=false;
+    try{localStorage.setItem(FRAME_KEY,'planet');}catch{}window.dispatchEvent(new Event('orbital-preferences-changed'));state.followPlayer=false;state.followTarget=false;
     state.zoom=1;state.panX=0;state.panY=0;
     updateZoom();updateHud();
     logEvent('Returned to Kestrel planetary view.','good');
@@ -1514,11 +1514,11 @@
     if(!target){logEvent('Select a live navigation target before focusing the camera.');return;}
     if(target.kind==='star'){
       state.systemView=true;
-      try{localStorage.setItem(FRAME_KEY,'star');}catch{}
+      try{localStorage.setItem(FRAME_KEY,'star');}catch{}window.dispatchEvent(new Event('orbital-preferences-changed'));
       state.zoom=clamp(.65*Math.min(W,H)/(STAR.ORBIT_RADIUS_KM*Math.min(W/700,H/660)),MIN_ZOOM,6);
     }else if(target.kind==='planet'){
       state.systemView=false;state.zoom=1.8;
-      try{localStorage.setItem(FRAME_KEY,'planet');}catch{}
+      try{localStorage.setItem(FRAME_KEY,'planet');}catch{}window.dispatchEvent(new Event('orbital-preferences-changed'));
     }else{
       state.zoom=clamp(Math.max(state.zoom,2.8),MIN_ZOOM,6);
     }
@@ -1721,7 +1721,7 @@
     }catch{return {...DEFAULT_KEYS};}
   }
   let hotkeys=loadHotkeys(),settingsOpen=false,capturingAction=null;
-  function saveHotkeys(){try{localStorage.setItem('orbital-outlaws.hotkeys.v1',JSON.stringify(hotkeys));}catch{}updateHotkeyHints();}
+  function saveHotkeys(){try{localStorage.setItem('orbital-outlaws.hotkeys.v1',JSON.stringify(hotkeys));}catch{}updateHotkeyHints();window.dispatchEvent(new Event('orbital-preferences-changed'));}
   function actionForKey(code){
     const matched=Object.keys(hotkeys).find(k=>hotkeys[k]===code);
     return {main:'main',left:'rotate-left',right:'rotate-right',stabilize:'stabilize',fire:'fire',repair:'repair'}[matched]||null;
@@ -1762,6 +1762,17 @@
     hotkeys[capturingAction]=code;saveHotkeys();capturingAction=null;
     $('hotkey-feedback').textContent='Saved: '+keyLabel(code);renderHotkeys();
   }
+  window.addEventListener('orbital-preferences-applied',()=>{
+    if(!state)return;
+    const useStar=storedFrame()==='star';
+    if(useStar!==!!state.systemView){
+      if(useStar)showSystemMap();else showPlanetMap();
+    }
+    state.showAxes=storedAxes();
+    hotkeys=loadHotkeys();updateHotkeyHints();
+    if(settingsOpen)renderHotkeys();
+    updateHud();
+  });
   function settingsTab(tab){
     const controls=tab==='controls';
     $('settings-controls-pane').classList.toggle('hidden',!controls);
@@ -1897,6 +1908,7 @@
     $('settings-show-axes').addEventListener('change',e=>{
       state.showAxes=e.target.checked;
       try{localStorage.setItem(AXES_KEY,String(state.showAxes));}catch{}
+      window.dispatchEvent(new Event('orbital-preferences-changed'));
     });
     $('settings-close').addEventListener('click',closeSettings);
     $('settings-done').addEventListener('click',closeSettings);
