@@ -25,7 +25,7 @@ test('Vue matches Axore Options API convention',()=>{
 test('every cockpit panel can dock, undock, minimize and drag; fullscreen keeps a HUD picker',()=>{
   const canvas=app.indexOf('id="canvas-workspace"');
   const ship=app.indexOf('<ShipPanel />');
-  const aside=app.indexOf('<aside class="sidebar"');
+  const aside=app.indexOf('<aside id="mobile-instruments" class="sidebar"');
   assert.ok(canvas>=0&&ship>canvas&&ship<aside);
   assert.match(workspace,/sidebar\.querySelectorAll\('\.panel'\)/);
   assert.match(workspace,/for\(const definition of panels\)/);
