@@ -1681,7 +1681,7 @@
   function draw(){
     // When Physics Lab owns this viewport, don't waste a 60 Hz flight paint
     // behind it. Flight simulation and the server connection remain active.
-    if(globalThis.OrbitalVisualizationMode==='gravity')return;
+    if(['wells','physics','atlas'].includes(globalThis.OrbitalVisualizationMode))return;
     // Attached rulers move with physical bodies; refresh the Tools readout at
     // 4 Hz instead of writing to the DOM on every 60 FPS canvas render.
     const measurement=state.measurement;
@@ -1709,7 +1709,7 @@
       let steps=0;
       while(accumulator>=.015 && steps<22){step(.015);accumulator-=.015;steps++;if(state.ended)break;}
       if(steps>=22)accumulator=0;
-      if(globalThis.OrbitalVisualizationMode!=='gravity'){
+      if(!['wells','physics','atlas'].includes(globalThis.OrbitalVisualizationMode)){
         if(state.t-state.lastPrediction>.22)computePrediction();
         if(state.t-state.lastBallistic>.1)updateShotPreview();
       }
@@ -1827,7 +1827,7 @@
         if(e.code==='Escape'){e.preventDefault();closeSettings();}
         return;
       }
-      if(window.OrbitalVisualizationMode==='gravity')return;
+      if(['physics','atlas'].includes(globalThis.OrbitalVisualizationMode))return;
       if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName))return;
       const action=actionForKey(e.code);
       if(action){e.preventDefault();if(action!=='fire'&&action!=='repair')manual();state.down.add(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.add('pressed'));if(action==='fire')$('fire-btn').classList.add('pressed');if(action==='repair')$('repair-btn').classList.add('pressed');}
@@ -2051,8 +2051,22 @@
   bindControls();updateHotkeyHints();reset();fitCanvas();
   // Read-only world snapshot, consumed by the Physics Lab at low frequency.
   window.OrbitalPhysicsLabSnapshot=()=>({time:state?.t||0});
+  // Safe read-only live-world feed for the alternate cockpit gravity renderer.
+  // Planet/star parameters come from OrbitalStarSystem (the same model as game.js).
+  window.OrbitalGameSnapshot=()=>({
+    time:state?.t||0,systemView:!!state?.systemView,
+    ships:state?[
+      {...state.player,player:true},
+      state.ally,
+      ...(state.allies||[]),
+      ...(state.enemies||[])
+    ].filter(Boolean).map(ship=>({
+      id:ship.id,name:ship.name,x:ship.x,y:ship.y,
+      alive:ship.alive,player:!!ship.player||!!ship.isPlayer
+    })):[]
+  });
   window.addEventListener('orbital-visualization-mode',event=>{
-    if(event.detail?.mode==='gravity'&&state){
+    if(event.detail?.mode!=='flight'&&state){
       state.down.clear();
       state.pointerThrust=false;
       document.querySelectorAll('.pressed').forEach(button=>button.classList.remove('pressed'));
