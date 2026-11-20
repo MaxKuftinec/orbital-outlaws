@@ -173,8 +173,15 @@ class WorldStore:
                 raise ValueError('An automated burn is already active; abort it first')
             flight = db.get(FlightControl, entity_id)
             now = max(self.now(world), entity.checkpoint_s)
-            current = advance(State(**entity.checkpoint), entity.checkpoint_s, now,
-                              world.mu, self._controls(flight), flight.expires_s, system=True)
+            try:
+                current = advance(State(**entity.checkpoint), entity.checkpoint_s, now,
+                                  world.mu, self._controls(flight), flight.expires_s,
+                                  system=True, detect_impact=True)
+            except CelestialImpact as impact:
+                self._terminate_player(db, entity, saved, impact.at_s,
+                                       impact.state, impact.body)
+                return {'pilot_id': pilot_id, 'destroyed': True,
+                        'state': impact.state.as_dict(), 'at_s': impact.at_s}
             reserve_row = db.get(PlayerSettings, entity_id)
             reserve = reserve_row.reserve_kg if reserve_row else 36.
             plan = validate_plan(direction, reference, cutoff, duration_s,
@@ -220,7 +227,15 @@ class WorldStore:
             if not auto or auto.progress['status'] not in ACTIVE_STATES:
                 raise ValueError('No active automated burn to abort')
             now = max(self.now(world), entity.checkpoint_s)
-            current = self._settle_auto(db, entity, world, now)
+            try:
+                current = self._settle_auto(db, entity, world, now)
+            except CelestialImpact as impact:
+                saved = db.get(EncounterSnapshot, entity_id)
+                self._terminate_player(db, entity, saved, impact.at_s,
+                                       impact.state, impact.body)
+                return {'pilot_id': pilot_id, 'destroyed': True,
+                        'auto_burn': public_status(auto.plan, auto.progress),
+                        'state': impact.state.as_dict(), 'at_s': impact.at_s}
             if auto.progress['status'] in ACTIVE_STATES:
                 progress = {**auto.progress, 'status':'aborted', 'reason':reason}
                 auto.progress = progress
@@ -611,9 +626,15 @@ class WorldStore:
             if active_auto and active_auto.progress['status'] in ACTIVE_STATES:
                 current = self._settle_auto(db, entity, world, at)
             else:
-                current = advance(State(**entity.checkpoint), entity.checkpoint_s, at,
-                                  world.mu, self._controls(flight), flight.expires_s,
-                                  system=True)
+                try:
+                    current = advance(State(**entity.checkpoint), entity.checkpoint_s, at,
+                                      world.mu, self._controls(flight), flight.expires_s,
+                                      system=True, detect_impact=True)
+                except CelestialImpact as impact:
+                    self._terminate_player(db, entity, saved, impact.at_s,
+                                           impact.state, impact.body)
+                    return {'pilot_id':pilot_id, 'added_kg':0.0, 'destroyed':True,
+                            'state':impact.state.as_dict()}
             capacity_kg = 200.0
             room_kg = max(0.0, capacity_kg - current.fuel_kg)
             added_kg = min(room_kg, requested_kg) if requested_kg is not None else room_kg
