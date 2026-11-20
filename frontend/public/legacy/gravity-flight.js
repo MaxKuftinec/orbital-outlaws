@@ -9,6 +9,21 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
   const TWO_PI=Math.PI*2;
+  const PALETTES=Object.freeze({
+    classic:Object.freeze({
+      name:'Original Teal',top:'#0e2534',bottom:'#050e1a',
+      rim:'#e6c17c',inside:'rgba(239,185,119,.38)',
+      grid:'rgba(110,207,228,.25)',axis:'#87aebe',
+      own:'#62d9f6',danger:'#ff7184',ephemeris:'#edbe6b'
+    }),
+    survey:Object.freeze({
+      name:'Survey · High Contrast',top:'#0d1728',bottom:'#080b17',
+      rim:'#fcf6df',inside:'rgba(249,148,76,.43)',
+      grid:'rgba(235,239,254,.32)',axis:'#ced8eb',
+      own:'#48e2ff',danger:'#ff6688',ephemeris:'#ffe078'
+    })
+  });
+  function paletteFor(name){return PALETTES[name]||PALETTES.survey;}
   const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
   function world(snapshot,system){
     const time=Number.isFinite(snapshot?.time)?snapshot.time:0;
@@ -29,6 +44,14 @@
       ?map({...snapshot.waypoint,type:'waypoint',name:'WAYPOINT'}):null;
     return {time,systemView,camera:snapshot?.camera||null,
       selectedNavKey:String(snapshot?.selectedNavKey||''),
+      orbitVisible:!!snapshot?.orbitVisible,
+      dangerPrediction:!!snapshot?.dangerPrediction,
+      ownTrajectory:Array.isArray(snapshot?.ownTrajectory)?snapshot.ownTrajectory:[],
+      ephemerisOwned:!!snapshot?.ephemerisOwned,
+      ephemerisVisible:!!snapshot?.ephemerisVisible,
+      ephemerisFrame:snapshot?.ephemerisFrame==='star'?'star':'planet',
+      ephemeris:snapshot?.ephemeris||null,
+      system,
       bodies:[
         {name:'VEYRA',x:star.x,y:star.y,mu:system.STAR_MU,radius:system.STAR_RADIUS_KM},
         {name:'KESTREL',x:planet.x,y:planet.y,mu:system.PLANET_MU,radius:85}
@@ -101,15 +124,21 @@
     const rx=dx*cs-dy*sn,ry=dx*sn+dy*cs;
     const depth=clamp((axes.zMax-phi)/(axes.zMax-axes.zMin),-.5,1.5);
     const z=depth*Math.min(w,h)*.45*(view.depth??1);
-    return {x:w*.5+rx,y:h*.5+ry*Math.cos(tilt)+z*Math.sin(tilt),
+    // Fabric magnification moves our virtual view closer to the same
+    // geometric surface. It DOES NOT edit physical X/Y/Z axis bounds.
+    // At magnification 1 and overhead 0 the screen is pixel-aligned to Flight.
+    const magnification=clamp(view.fabricZoom??1,.15,40);
+    return {x:w*.5+rx*magnification,
+      y:h*.5+(ry*Math.cos(tilt)+z*Math.sin(tilt))*magnification,
       depth,order:ry*Math.cos(tilt)-z*Math.sin(tilt)};
   }
   function paintSurface(ctx,w,h,scene,axes,options={}){
     if(!validAxes(axes))return null;
     const detail=clamp(Math.floor(options.detail||30),12,50);
     ctx.fillStyle='#07111c';ctx.fillRect(0,0,w,h);
+    const colors=paletteFor(options.palette);
     const gradient=ctx.createLinearGradient(0,0,0,h);
-    gradient.addColorStop(0,'#0e2534');gradient.addColorStop(1,'#050e1a');
+    gradient.addColorStop(0,colors.top);gradient.addColorStop(1,colors.bottom);
     ctx.fillStyle=gradient;ctx.fillRect(0,0,w,h);
     const grid=[];
     for(let j=0;j<=detail;j++){
@@ -125,7 +154,9 @@
     for(let j=0;j<detail;j++)for(let i=0;i<detail;i++){
       const a=grid[j][i],b=grid[j][i+1],c=grid[j+1][i+1],d=grid[j+1][i];
       quads.push({a,b,c,d,order:(a.order+b.order+c.order+d.order)*.25,
-        depth:(a.depth+b.depth+c.depth+d.depth)*.25});
+        depth:(a.depth+b.depth+c.depth+d.depth)*.25,
+        x:axes.xMin+(axes.xMax-axes.xMin)*(i+.5)/detail,
+        y:axes.yMin+(axes.yMax-axes.yMin)*(j+.5)/detail});
     }
     quads.sort((a,b)=>a.order-b.order);
     ctx.lineWidth=.7;
@@ -133,10 +164,111 @@
       const t=clamp(q.depth,0,1),hue=193-t*157,light=18+14*(1-t);
       ctx.beginPath();ctx.moveTo(q.a.x,q.a.y);ctx.lineTo(q.b.x,q.b.y);
       ctx.lineTo(q.c.x,q.c.y);ctx.lineTo(q.d.x,q.d.y);ctx.closePath();
-      ctx.fillStyle='hsl('+hue.toFixed(0)+' 50% '+light.toFixed(1)+'%)';ctx.fill();
-      ctx.strokeStyle='rgba(110,207,228,'+(.20+(1-t)*.23).toFixed(3)+')';ctx.stroke();
+      const inside=scene.bodies.some(b=>Math.hypot(q.x-b.x,q.y-b.y)<b.radius);
+      if(options.palette==='classic'){
+        ctx.fillStyle='hsl('+hue.toFixed(0)+' 50% '+light.toFixed(1)+'%)';
+        ctx.strokeStyle='rgba(110,207,228,'+(.20+(1-t)*.23).toFixed(3)+')';
+      }else{
+        // High-contrast Survey palette: distinct exterior / interior areas
+        // even when the two masses' potential contributions overlap.
+        const tint=clamp(t,0,1);
+        ctx.fillStyle=inside?'hsl(26 65% '+(26+18*tint).toFixed(1)+'%)':
+          'hsl('+(206-45*tint).toFixed(0)+' 45% '+(22+23*tint).toFixed(1)+'%)';
+        ctx.strokeStyle=colors.grid;
+      }
+      ctx.fill();ctx.stroke();
     }
+    if(options.showBoundary!==false)drawBodyBoundaries(ctx,w,h,scene,axes,options);
     return {count:detail,quads:detail*detail};
+  }
+  // The physical surface (r=R) separates the parabolic interior from
+  // the inverse-distance exterior. Fill the interior and outline the EXACT
+  // material radius independently of mesh tessellation
+  function drawBodyBoundaries(ctx,w,h,scene,axes,options={}){
+    const colors=paletteFor(options.palette);
+    ctx.save();
+    ctx.beginPath();ctx.rect(0,0,w,h);ctx.clip();
+    for(const b of scene.bodies){
+      const visible=!(b.x+b.radius<axes.xMin||b.x-b.radius>axes.xMax||
+        b.y+b.radius<axes.yMin||b.y-b.radius>axes.yMax);
+      if(!visible)continue;
+      ctx.beginPath();
+      const count=96;
+      for(let i=0;i<=count;i++){
+        const angle=i*TWO_PI/count;
+        const x=b.x+Math.cos(angle)*b.radius;
+        const y=b.y+Math.sin(angle)*b.radius;
+        const p=plotPoint(x,y,field(scene,x,y).phi,axes,w,h,options);
+        if(i===0)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y);
+      }
+      ctx.closePath();
+      ctx.fillStyle=colors.inside;ctx.fill();
+      ctx.strokeStyle=colors.rim;ctx.lineWidth=2.4;
+      ctx.setLineDash([]);ctx.stroke();
+      const edge=plotPoint(b.x+b.radius,b.y,
+        field(scene,b.x+b.radius,b.y).phi,axes,w,h,options);
+      if(edge.x>=-70&&edge.x<=w+70&&edge.y>=-30&&edge.y<=h+30){
+        ctx.font='bold 10px ui-monospace,monospace';
+        ctx.fillStyle=colors.rim;ctx.textAlign='left';
+        ctx.fillText('SURFACE · R '+fmt(b.radius)+' km',edge.x+6,edge.y-8);
+      }
+    }
+    ctx.restore();
+  }
+  // Forecast points are Kestrel-relative. Their future epoch is essential
+  // when plotting in the Veyra frame, while Kestrel-frame forecasts remain
+  // attached to the moving planet, as requested for the Ephemeris Computer.
+  function trajectoryPoint(scene,point,relativeSeconds,reference){
+    if(!point||!Number.isFinite(point.x)||!Number.isFinite(point.y))return null;
+    const time=Number.isFinite(relativeSeconds)?relativeSeconds:0;
+    const planetNow=scene.system.planet(scene.time);
+    const future=reference==='star'?scene.system.planet(scene.time+time):planetNow;
+    return {x:point.x+future.x-(scene.systemView?0:planetNow.x),
+      y:point.y+future.y-(scene.systemView?0:planetNow.y)};
+  }
+  function trajectoryPaths(scene){
+    const own=scene.orbitVisible?scene.ownTrajectory.map(p=>trajectoryPoint(
+      scene,p,(Number.isFinite(p.t)?p.t:scene.time)-scene.time,
+      scene.systemView?'star':'planet')).filter(Boolean):[];
+    const ephem=scene.ephemerisOwned&&scene.ephemerisVisible&&scene.ephemeris?
+      (scene.ephemeris.points||[]).map(p=>trajectoryPoint(
+        scene,p,Number.isFinite(p.t)?p.t:0,scene.ephemerisFrame)).filter(Boolean):[];
+    const markers=scene.ephemerisOwned&&scene.ephemerisVisible&&scene.ephemeris?
+      (scene.ephemeris.markers||[]).map((m,i)=>m?.safe?
+        {point:trajectoryPoint(scene,m,(i+1)*60,scene.ephemerisFrame),
+         label:'T+'+(i+1)*60+'s'}:null).filter(Boolean):[];
+    return {own,ephem,markers};
+  }
+  function drawTrajectories(ctx,w,h,scene,axes,options={}){
+    if(!validAxes(axes))return;
+    const colors=paletteFor(options.palette);
+    const paths=trajectoryPaths(scene);
+    const visible=(points,color,dash)=>{
+      if(points.length<2)return;
+      ctx.beginPath();
+      let first=true;
+      for(const p of points){
+        const pt=plotPoint(p.x,p.y,field(scene,p.x,p.y).phi,axes,w,h,options);
+        if(!Number.isFinite(pt.x+pt.y))continue;
+        if(first){ctx.moveTo(pt.x,pt.y);first=false;}
+        else ctx.lineTo(pt.x,pt.y);
+      }
+      if(!first){ctx.strokeStyle=color;ctx.lineWidth=2.4;ctx.setLineDash(dash);ctx.stroke();}
+    };
+    ctx.save();ctx.beginPath();ctx.rect(0,0,w,h);ctx.clip();
+    visible(paths.own,scene.dangerPrediction?colors.danger:colors.own,[6,4]);
+    visible(paths.ephem,colors.ephemeris,[9,5]);
+    ctx.setLineDash([]);
+    for(const m of paths.markers){
+      if(!m?.point)continue;
+      const p=plotPoint(m.point.x,m.point.y,field(scene,m.point.x,m.point.y).phi,
+        axes,w,h,options);
+      ctx.fillStyle=colors.ephemeris;ctx.beginPath();
+      ctx.arc(p.x,p.y,4.5,0,TWO_PI);ctx.fill();
+      ctx.font='bold 10px ui-monospace,monospace';
+      ctx.fillText(m.label,p.x+9,p.y-8);
+    }
+    ctx.restore();
   }
   function shape(ctx,type,x,y,color,r){
     ctx.save();ctx.translate(x,y);ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=1.6;
@@ -203,7 +335,8 @@
       }
       rendered.push({...e,screenX:p.x,screenY:p.y});
     }
-    ctx.textAlign='left';ctx.fillStyle='#87aebe';ctx.font='10px ui-monospace,monospace';
+    ctx.textAlign='left';ctx.fillStyle=paletteFor(options.palette).axis;
+    ctx.font='10px ui-monospace,monospace';
     ctx.fillText('X '+fmt(axes.xMin)+' — '+fmt(axes.xMax)+' km',12,h-32);
     ctx.fillText('Y '+fmt(axes.yMin)+' — '+fmt(axes.yMax)+' km',12,h-18);
     ctx.restore();
@@ -211,6 +344,7 @@
   }
   function paint(ctx,w,h,scene,axes,options={}){
     const mesh=paintSurface(ctx,w,h,scene,axes,options);
+    drawTrajectories(ctx,w,h,scene,axes,options);
     drawEntities(ctx,w,h,scene,axes,options);
     return mesh;
   }
@@ -218,6 +352,7 @@
     return Math.abs(value)>1e5?value.toExponential(2):
       Number(value.toPrecision(5)).toLocaleString('en-US',{maximumFractionDigits:2});
   }
-  return {world,field,axesFor,axesFromCamera,validAxes,sampleRange,
-    plotPoint,paintSurface,drawEntities,paint,fmt,entityColor};
+  return {world,field,axesFor,axesFromCamera,validAxes,sampleRange,PALETTES,paletteFor,
+    plotPoint,paintSurface,drawBodyBoundaries,trajectoryPoint,trajectoryPaths,
+    drawTrajectories,drawEntities,paint,fmt,entityColor};
 });
