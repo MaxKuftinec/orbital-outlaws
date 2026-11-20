@@ -2055,16 +2055,53 @@
   // Planet/star parameters come from OrbitalStarSystem (the same model as game.js).
   window.OrbitalGameSnapshot=()=>({
     time:state?.t||0,systemView:!!state?.systemView,
+    camera:state?{
+      panX:state.panX,panY:state.panY,zoom:state.zoom,
+      width:W,height:H,scale:scale(),
+      followPlayer:!!state.followPlayer,followTarget:!!state.followTarget
+    }:null,
+    selectedNavKey:state?.selectedNavKey||'',
     ships:state?[
-      {...state.player,player:true},
-      state.ally,
-      ...(state.allies||[]),
-      ...(state.enemies||[])
+      {...state.player,player:true,type:'ship'},
+      state.ally&&{...state.ally,type:'ally'},
+      ...(state.allies||[]).map(a=>({...a,type:'ally'})),
+      ...(state.enemies||[]).map(a=>({...a,type:'enemy'}))
     ].filter(Boolean).map(ship=>({
       id:ship.id,name:ship.name,x:ship.x,y:ship.y,
-      alive:ship.alive,player:!!ship.player||!!ship.isPlayer
-    })):[]
+      type:ship.type,alive:ship.alive,player:!!ship.player
+    })):[],
+    pickups:state?.pickups?.filter(a=>a.alive).map(a=>({
+      id:a.id,name:a.type,x:a.x,y:a.y,amount:a.amount,type:a.type,alive:a.alive
+    }))||[],
+    shots:state?.shots?.filter(a=>a.alive!==false).map(a=>({
+      id:a.id,x:a.x,y:a.y,type:'shot',alive:true
+    }))||[],
+    waypoint:state?.waypoint?{...state.waypoint}:null
   });
+  // Camera changes from the Well viewer are deliberately limited to the
+  // usual 2D pan/zoom state; they never alter player velocity or position.
+  window.OrbitalGravityCameraUpdate=({centerX,centerY,scale:requestedScale})=>{
+    if(!state||!Number.isFinite(centerX)||!Number.isFinite(centerY)||
+      !Number.isFinite(requestedScale)||requestedScale<=0)return false;
+    state.zoom=clamp(requestedScale/Math.min(W/700,H/660),MIN_ZOOM,6);
+    const actualScale=scale();
+    state.panX=-centerX*actualScale;state.panY=-centerY*actualScale;
+    state.followPlayer=false;state.followTarget=false;
+    updateZoom();
+    return true;
+  };
+  window.OrbitalGravitySelectContact=({type,id})=>{
+    if(!state)return false;
+    let key=null;
+    if(type==='body')key=id==='VEYRA'?'star':id==='KESTREL'?'planet':null;
+    if(type==='enemy')key='enemy:'+id;
+    if(type==='ally')key=(id===state.ally?.id)?'ally':'ally:'+id;
+    if(['credits','fuel','ammo','parts','wreck'].includes(type))key='pickup:'+id;
+    if(type==='waypoint')key='waypoint';
+    if(!key)return false;
+    updateTargetOptions(key);state.navPlan=null;
+    updateHud();return true;
+  };
   window.addEventListener('orbital-visualization-mode',event=>{
     if(event.detail?.mode!=='flight'&&state){
       state.down.clear();
