@@ -142,3 +142,72 @@ test('real local salvage, allied craft, raiders and projectiles share the same t
     assert.ok(Math.abs((b.entities[i].y-a.entities[i].y)-planet.y)<1e-6)
   }
 });
+
+test('fabric magnification changes screen proximity but not physical axis window or gravitational readings',()=>{
+  const scene=GRAV.world(snapshot,STAR)
+  const axes=GRAV.axesFromCamera(scene,{width:800,height:540,scale:1,panX:0,panY:0})
+  const x=130,y=74,phi=GRAV.field(scene,x,y).phi
+  const origin=GRAV.plotPoint(x,y,phi,axes,800,540,{yaw:0,pitch:0,depth:1,fabricZoom:1})
+  const close=GRAV.plotPoint(x,y,phi,axes,800,540,{yaw:0,pitch:0,depth:1,fabricZoom:3})
+  assert.ok(Math.abs(close.x-400-3*(origin.x-400))<1e-8)
+  assert.ok(Math.abs(close.y-270-3*(origin.y-270))<1e-8)
+  assert.equal(axes.xMin,-400)
+  assert.equal(axes.yMax,270)
+  assert.ok(Math.abs(phi-GRAV.field(scene,x,y).phi)<1e-12)
+});
+
+test('the Ephemeris projection honors independent Kestrel/Veyra choices at future epochs',()=>{
+  const time=71000
+  const s=GRAV.world({...snapshot,time,systemView:true},STAR)
+  const p={x:240,y:-80}
+  const now=STAR.planet(time),future=STAR.planet(time+60)
+  const local=GRAV.trajectoryPoint(s,p,60,'planet')
+  const stellar=GRAV.trajectoryPoint(s,p,60,'star')
+  assert.ok(Math.hypot(local.x-p.x-now.x,local.y-p.y-now.y)<1e-6)
+  assert.ok(Math.hypot(stellar.x-p.x-future.x,stellar.y-p.y-future.y)<1e-6)
+  const kestrel=GRAV.world({...snapshot,time,systemView:false},STAR)
+  const starRelative=GRAV.trajectoryPoint(kestrel,p,60,'star')
+  assert.ok(Math.hypot(starRelative.x-(p.x+future.x-now.x),
+    starRelative.y-(p.y+future.y-now.y))<1e-6)
+  const localRelative=GRAV.trajectoryPoint(kestrel,p,60,'planet')
+  assert.ok(Math.hypot(localRelative.x-p.x,localRelative.y-p.y)<1e-8)
+});
+
+test('both user trajectory and unlocked Ephemeris remain gated by player instrument flags',()=>{
+  const own=[{x:240,y:10,t:snapshot.time+10},{x:245,y:25,t:snapshot.time+20}]
+  const ephemeris={points:[{x:300,y:20,t:0},{x:310,y:30,t:60}],
+    markers:[{x:310,y:30,safe:true},{x:320,y:40,safe:false}]}
+  const scene=GRAV.world({...snapshot,systemView:false,orbitVisible:true,
+    ownTrajectory:own,ephemerisOwned:true,ephemerisVisible:true,
+    ephemerisFrame:'planet',ephemeris},STAR)
+  const lines=GRAV.trajectoryPaths(scene)
+  assert.equal(lines.own.length,2)
+  assert.equal(lines.ephem.length,2)
+  assert.equal(lines.markers.length,1)
+  assert.equal(lines.markers[0].label,'T+60s')
+  const noTech=GRAV.world({...snapshot,orbitVisible:false,ephemerisOwned:false,
+    ephemerisVisible:true,ownTrajectory:own,ephemeris},STAR)
+  const hidden=GRAV.trajectoryPaths(noTech)
+  assert.equal(hidden.own.length,0)
+  assert.equal(hidden.ephem.length,0)
+});
+
+test('Classic and Survey palettes are selectable, and radii remain physical boundaries',()=>{
+  assert.equal(GRAV.paletteFor('classic').name,'Original Teal')
+  assert.equal(GRAV.paletteFor('survey').name,'Survey · High Contrast')
+  const scene=GRAV.world(snapshot,STAR)
+  const kestrel=scene.bodies.find(b=>b.name==='KESTREL')
+  assert.equal(kestrel.radius,85)
+  const atCenter=GRAV.field(scene,kestrel.x,kestrel.y)
+  const atSurface=GRAV.field(scene,kestrel.x+kestrel.radius,kestrel.y)
+  assert.ok(atCenter.phi<atSurface.phi)
+  const view=read('frontend/src/components/GravityFlightView.vue')
+  assert.match(view,/zoomMode:'fabric'/)
+  assert.match(view,/this.zoomMode==='fabric'/)
+  assert.match(view,/this.fabricZoom\/f/)
+  assert.match(view,/setPalette\('classic'\)/)
+  assert.match(view,/setPalette\('survey'\)/)
+  assert.match(view,/showBoundary/)
+  assert.match(view,/showEphemerisPath/)
+  assert.match(view,/showOwnPath/)
+});
