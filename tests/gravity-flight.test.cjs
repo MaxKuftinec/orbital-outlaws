@@ -88,7 +88,7 @@ test('the well renderer caches its mesh while refreshing live contacts via anima
   const scene=GRAV.world(snapshot,STAR),axes=GRAV.axesFor(scene,'kestrel');
   const ctx={
     createLinearGradient(){return {addColorStop(){}}},fillRect(){},beginPath(){},
-    moveTo(){},lineTo(){},closePath(){},fill(){},stroke(){},arc(){},translate(){},bezierCurveTo(){},
+    moveTo(){},lineTo(){},closePath(){},fill(){},stroke(){},arc(){},translate(){},bezierCurveTo(){},rect(){},clip(){},setLineDash(){},
     fillText(){},save(){},restore(){},
     set fillStyle(x){},set strokeStyle(x){},set font(x){},
     set textAlign(x){},set lineWidth(x){}
