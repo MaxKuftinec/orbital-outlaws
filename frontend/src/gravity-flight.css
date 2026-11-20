@@ -175,3 +175,24 @@
   .gravity-flight-palette{padding:7px}
   .gravity-flight-palette-options button{font-size:8px}
 }
+
+/* Familiar Sims-style camera controls, scoped to the live Well view. */
+.gravity-flight-camera-guide{
+  margin:9px 0 7px;padding:9px;border:1px solid #365a71;
+  border-radius:8px;background:#0b2233;
+  display:grid;justify-items:center;gap:6px
+}
+.gravity-flight-camera-guide>span{width:100%;text-align:left;
+  font:800 9px ui-monospace,monospace;letter-spacing:.08em;color:#a3d9e6}
+.gravity-flight-wasd{display:grid;justify-items:center;gap:4px}
+.gravity-flight-wasd>div{display:flex;gap:4px}
+.gravity-flight-wasd kbd{min-width:28px;height:27px;display:grid;place-items:center;
+  border:1px solid #6594a4;border-bottom-width:3px;border-radius:5px;
+  background:#21445a;color:#f1fbff;font:800 11px ui-monospace,monospace}
+.gravity-flight-camera-guide small{text-align:center;color:#a5c5d5;
+  font:500 9px/1.4 system-ui}
+@media(max-width:680px){
+  .gravity-flight-camera-guide{padding:6px;margin:6px 0}
+  .gravity-flight-wasd kbd{min-width:24px;height:24px;font-size:10px}
+  .gravity-flight-camera-guide small{font-size:8px}
+}
