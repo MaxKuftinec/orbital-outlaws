@@ -12,7 +12,7 @@ from .physics import State, propagate, orbital_envelope, apply_impulse
 from .flight import advance, LEASE_S
 from .auto_burn import (advance_guided, validate_plan, initial_progress,
                         public_status, ACTIVE_STATES)
-from .star_system import propagate_local, system_info
+from .star_system import propagate_local, system_info, CelestialImpact
 from .universe import new_sector, advance_sector, player_fire as fire_projectile, incoming_ship, event as sector_event
 from .arrival_guidance import ACTIVE_ARRIVAL
 from .world_clock import ServerClock
@@ -94,11 +94,11 @@ class WorldStore:
             control = self._controls(flight) if flight else None
             return advance(State(**entity.checkpoint), entity.checkpoint_s, at_s,
                            world.mu, control, flight.expires_s if flight else 0,
-                           system=world.id == 'kestrel')
+                           system=world.id == 'kestrel', detect_impact=True)
         before = State(**entity.checkpoint)
         after, progress = advance_guided(before, entity.checkpoint_s, at_s,
                                          world.mu, auto.plan, auto.progress,
-                                         system=world.id == 'kestrel')
+                                         system=world.id == 'kestrel', detect_impact=True)
         if at_s > entity.checkpoint_s:
             peri, apo = orbital_envelope(after, world.mu)
             entity.checkpoint_s = at_s
@@ -114,6 +114,43 @@ class WorldStore:
                              after=after.as_dict(),
                              idempotency_key='auto-finish:'+secrets.token_hex(16)))
         return after
+
+    def _terminate_player(self, db, entity, saved, at_s: float, state: State, cause: str):
+        """Persist a terminal flight state, encounter death and disabled controls."""
+        if not saved.snapshot.get('player', {}).get('alive', True):
+            return
+        snapshot = copy.deepcopy(saved.snapshot)
+        snapshot['player']['alive'] = False
+        snapshot['player']['hp'] = 0.
+        snapshot['player']['destroyedAtS'] = at_s
+        snapshot['player']['destroyedCause'] = cause
+        sector_event(snapshot, at_s,
+                     f"KESTREL-7 destroyed ({cause}); orbital trajectory terminated.",
+                     'danger')
+        saved.snapshot = snapshot
+        saved.saved_at_utc = time.time()
+        entity.checkpoint_s = at_s
+        entity.checkpoint = state.as_dict()
+        radius = math.hypot(state.x, state.y)
+        entity.periapsis_km = radius
+        entity.apoapsis_km = radius
+        entity.version += 1
+        flight = db.get(FlightControl, entity.id)
+        if flight:
+            flight.thrust = False
+            flight.turn = 0
+            flight.stabilize = False
+            flight.gimbal = 0.
+            flight.expires_s = 0.
+        auto = db.get(AutoBurn, entity.id)
+        if auto and auto.progress['status'] in ACTIVE_STATES:
+            auto.progress = {**auto.progress, 'status': 'aborted',
+                             'reason': 'Spacecraft destroyed'}
+            auto.updated_s = at_s
+        db.add(Event(world_id=entity.world_id, entity_id=entity.id,
+                     at_s=at_s, kind='ship_destroyed',
+                     payload={'cause': cause}, after=state.as_dict(),
+                     idempotency_key='destroyed:'+secrets.token_hex(16)))
 
     def player_auto_start(self, pilot_id: str, *, direction: str,
                           reference: str, cutoff: str,
@@ -226,6 +263,7 @@ class WorldStore:
             if entity and not db.get(PlayerSettings,entity_id) and not any(
                     isinstance(obj,PlayerSettings) and obj.entity_id==entity_id for obj in db.new):
                 db.add(PlayerSettings(entity_id=entity_id,reserve_kg=36.))
+        self.player_encounter(pilot_id)
         return self.get_entity('kestrel', entity_id)
 
     def player_encounter(self, pilot_id: str):
