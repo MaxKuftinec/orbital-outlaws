@@ -28,6 +28,7 @@
     const waypoint=snapshot?.waypoint&&Number.isFinite(snapshot.waypoint.x)&&Number.isFinite(snapshot.waypoint.y)
       ?map({...snapshot.waypoint,type:'waypoint',name:'WAYPOINT'}):null;
     return {time,systemView,camera:snapshot?.camera||null,
+      selectedNavKey:String(snapshot?.selectedNavKey||''),
       bodies:[
         {name:'VEYRA',x:star.x,y:star.y,mu:system.STAR_MU,radius:system.STAR_RADIUS_KM},
         {name:'KESTREL',x:planet.x,y:planet.y,mu:system.PLANET_MU,radius:85}
@@ -184,6 +185,16 @@
       const color=entityColor(e),size=e.player?5.2:e.type==='shot'?2.2:4;
       shape(ctx,e.type,p.x,p.y,color,size);
       if(e.player){ctx.strokeStyle=color;ctx.beginPath();ctx.arc(p.x,p.y,10,0,TWO_PI);ctx.stroke();}
+      const targetKey=e.type==='ally'?'ally:'+e.id:
+        e.type==='enemy'?'enemy:'+e.id:
+        ['wreck','fuel','credits','ammo','parts'].includes(e.type)?'pickup:'+e.id:'';
+      const isSelected=!!targetKey&&(scene.selectedNavKey===targetKey||
+        (e.type==='ally'&&scene.selectedNavKey==='ally'&&
+         scene.ships.filter(a=>a.type==='ally')[0]?.id===e.id));
+      if(isSelected){
+        ctx.strokeStyle='#ffe4a0';ctx.lineWidth=2;
+        ctx.beginPath();ctx.arc(p.x,p.y,13,0,TWO_PI);ctx.stroke();
+      }
       const caption=e.player?'YOUR SHIP':
         e.type==='ship'?(e.name||'SPACECRAFT'):
         e.type==='shot'?'':e.type.toUpperCase()+(e.type==='credits'&&e.amount!==null?' · '+e.amount+' ¤':'');
