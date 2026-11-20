@@ -1,7 +1,7 @@
 <script lang="ts">
 import {defineComponent, markRaw} from 'vue'
 type Axes={xMin:number;xMax:number;yMin:number;yMax:number;zMin:number;zMax:number}
-type Scene={bodies:any[];ships:any[];pickups:any[];shots:any[];entities:any[];camera:any;time:number;systemView:boolean}
+type Scene={bodies:any[];ships:any[];pickups:any[];shots:any[];entities:any[];camera:any;time:number;systemView:boolean;orbitVisible:boolean;ephemerisVisible:boolean;ephemerisOwned:boolean;ephemeris:any;ownTrajectory:any[];ephemerisFrame:'star'|'planet';system:any}
 type PointerSample={x:number;y:number}
 type Drag={id:number;x:number;y:number;yaw:number;pitch:number;mode:'orbit'|'pan';moved:boolean}
 
