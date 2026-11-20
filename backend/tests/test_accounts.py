@@ -190,7 +190,7 @@ def test_remember_me_and_minimum_password_without_complexity_rules(client_accoun
     email = slug + '@example.com'
     username = 'p' + slug
     assert client.post('/auth/register', json={
-        'username': username, 'email': email, 'password': '1234567'
+        'username': username, 'email': email, 'password': '123456'
     }).status_code == 422
     assert client.post('/auth/register', json={
         'username': username, 'email': email, 'password': 'abcdefgh'
