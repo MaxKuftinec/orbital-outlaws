@@ -1,0 +1,120 @@
+/* Live game-world potential surface. Distinct from Physics Lab experiments. */
+#canvas-workspace.gravity-wells .gravity-flight{position:absolute;inset:0;z-index:10;
+  overflow:hidden;background:#06121f;color:#e6f1f7}
+#canvas-workspace .gravity-flight-surface{display:block;width:100%;height:100%!important;
+  cursor:grab;touch-action:none;user-select:none}
+#canvas-workspace .gravity-flight-surface:active{cursor:grabbing}
+#canvas-workspace.gravity-wells .hud-toolbar{z-index:1000}
+#canvas-workspace.gravity-wells .map-scale-readout,
+#canvas-workspace.gravity-wells .canvas-overlay,
+#canvas-workspace.gravity-wells .selected-target-caption,
+#canvas-workspace.gravity-wells .map-tools-popover{display:none!important}
+#canvas-workspace.gravity-wells .gravity-flight-heading,
+#canvas-workspace.gravity-wells .gravity-flight-controls,
+#canvas-workspace.gravity-wells .gravity-flight-metrics,
+#canvas-workspace.gravity-wells .gravity-flight-hint{position:absolute;z-index:25}
+.gravity-flight-heading{top:14px;left:14px;right:255px;pointer-events:none;
+  text-shadow:0 2px 4px #0008;display:grid;gap:3px}
+.gravity-flight-heading span,.gravity-flight-metrics>small{font:800 9px ui-monospace,monospace;
+  letter-spacing:.1em;color:#7bccd7}
+.gravity-flight-heading strong{font:850 clamp(13px,2.1vw,21px) system-ui;letter-spacing:.04em}
+.gravity-flight-heading small{font-size:10px;color:#b4ccd8}
+.gravity-flight-controls{top:60px;right:12px;width:min(262px,45%);
+  max-height:calc(100% - 73px);overflow:auto;overscroll-behavior:contain;
+  border:1px solid #456477;border-radius:11px;background:#091a2beF;
+  padding:12px 13px;box-shadow:0 10px 32px #0008;pointer-events:auto}
+.gravity-flight-title{display:flex;justify-content:space-between;gap:4px;
+  align-items:center;margin-bottom:11px}
+.gravity-flight-title strong{font:800 11px ui-monospace,monospace;color:#dceef6}
+.gravity-flight-title small{font-size:9px;color:#84aabb}
+.gravity-flight-presets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+.gravity-flight-presets button{min-width:0;border:1px solid #406077;border-radius:6px;
+  padding:7px 2px;background:#133348;color:#d8e9ef;font:750 10px system-ui}
+.gravity-flight-presets button[aria-pressed=true]{border-color:#dcb771;background:#453923;color:#ffedca}
+.gravity-flight-axis{margin-top:12px}
+.gravity-flight-axis>label{display:flex;align-items:center;gap:8px;
+  font:800 11px ui-monospace,monospace;color:#9eddf3}
+.gravity-flight-axis>label span{font:500 9px system-ui;color:#8fabbc}
+.gravity-flight-range{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+  gap:4px;margin-top:5px;align-items:center}
+.gravity-flight-range span{font-size:9px;color:#91a9b8}
+.gravity-flight-range input{min-width:0;width:100%;background:#0e2839;
+  color:#edf6f9;border:1px solid #45667c;border-radius:6px;
+  padding:7px 4px;font:650 10px ui-monospace,monospace;
+  font-variant-numeric:tabular-nums}
+.gravity-flight-range input:focus{outline:2px solid #74dbed;outline-offset:1px}
+.gravity-flight-fit{width:100%;margin-top:12px;border:1px solid #457778;
+  border-radius:7px;padding:8px;background:#124744;color:#b7f7e4;
+  font:800 10px system-ui}
+.gravity-flight-depth{margin-top:12px;display:grid;gap:8px}
+.gravity-flight-depth label{display:flex;justify-content:space-between;
+  font-size:10px;color:#bed3df;gap:4px}
+.gravity-flight-depth label b{color:#f6d89c}
+.gravity-flight-depth input{width:100%;accent-color:#edcb7c}
+.gravity-flight-warning{color:#ffa4b0;font-size:10px;line-height:1.4}
+.gravity-flight-explain{font-size:9px;line-height:1.5;color:#9ab2c2;margin:12px 0 0}
+.gravity-flight-metrics{left:14px;bottom:38px;width:min(310px,calc(100% - 290px));
+  min-width:165px;padding:12px;border:1px solid #396071;border-radius:10px;
+  background:#061b2ddb;pointer-events:none;backdrop-filter:blur(7px)}
+.gravity-flight-metrics>div{display:flex;align-items:baseline;justify-content:space-between;
+  gap:7px;margin-top:8px}
+.gravity-flight-metrics div span{font-size:10px;color:#91b3c4}
+.gravity-flight-metrics div b{font:750 11px ui-monospace,monospace;
+  color:#eafac7;overflow-wrap:anywhere;text-align:right}
+.gravity-flight-metrics p{font-size:9px;color:#9bb5c5;line-height:1.5;margin:11px 0 0}
+.gravity-flight-hint{bottom:12px;left:13px;color:#8daec0;font:800 9px ui-monospace,monospace;
+  pointer-events:none;text-shadow:0 1px 4px #000}
+.gravity-flight-view-explanation{color:#aac8d6}
+@media(max-width:680px){
+  .gravity-flight-heading{left:8px;top:8px;right:130px;gap:2px}
+  .gravity-flight-heading strong{font-size:12px}
+  .gravity-flight-heading small{font-size:8px}
+  .gravity-flight-controls{right:7px;top:75px;width:44%;max-height:calc(100% - 90px);padding:8px}
+  .gravity-flight-presets button{font-size:9px;padding:7px 1px}
+  .gravity-flight-axis{margin-top:9px}
+  .gravity-flight-range{grid-template-columns:1fr;gap:2px}
+  .gravity-flight-range span{display:none}
+  .gravity-flight-range input{padding:5px 4px;font-size:10px}
+  .gravity-flight-title strong{font-size:10px}
+  .gravity-flight-explain{font-size:9px}
+  .gravity-flight-metrics{left:8px;bottom:128px;min-width:0;
+    width:51%;padding:9px}
+  .gravity-flight-metrics>div{display:block;line-height:1.3}
+  .gravity-flight-metrics div b{display:block;font-size:10px;margin-top:2px}
+  .gravity-flight-metrics p{font-size:8px}
+  .gravity-flight-hint{bottom:120px;left:9px;right:52%;font-size:8px}
+}
+@media(max-height:600px) and (orientation:landscape){
+  .gravity-flight-metrics p,.gravity-flight-explain{display:none}
+  .gravity-flight-controls{top:52px;max-height:calc(100% - 57px)}
+}
+
+/* The old experiment becomes a dedicated learning page, not a flight overlay. */
+.physics-page{width:min(1460px,100%);margin:0 auto;padding:17px clamp(10px,2.4vw,34px) 28px;
+  color:#e9f2fa}
+.physics-page .physics-page-header{display:flex;justify-content:space-between;
+  align-items:center;gap:15px;flex-wrap:wrap;margin-bottom:16px}
+.physics-page .physics-kicker{font:800 10px ui-monospace,monospace;
+  letter-spacing:.14em;color:#83d8e9}
+.physics-page h1{font-size:clamp(22px,3vw,33px);margin:5px 0 5px}
+.physics-page-header p{margin:0;color:#9ab8c9;font-size:12px;line-height:1.6}
+.physics-page .physics-page-actions{display:flex;gap:8px;flex-wrap:wrap}
+.physics-page .physics-page-actions button{border:1px solid #44708a;background:#123146;
+  border-radius:8px;color:#d7e9f1;padding:10px 14px;font-size:12px;font-weight:750}
+.physics-page .physics-page-actions button:hover{background:#1c5168}
+.physics-page .physics-scene{position:relative;height:clamp(520px,72dvh,870px);
+  border:1px solid #305066;border-radius:14px;overflow:hidden;background:#071521}
+.physics-page .gravity-lab{position:absolute;inset:0;z-index:1;overflow:hidden;
+  background:#06111e;color:#e4f5fc}
+.physics-page .gravity-lab-surface{display:block;width:100%;height:100%!important;
+  touch-action:none;user-select:none;cursor:grab}
+.physics-page .gravity-lab-surface:active{cursor:grabbing}
+.physics-page .physics-page-footnote{display:flex;gap:9px;align-items:flex-start;
+  margin-top:14px;border:1px solid #253f53;border-radius:10px;
+  background:#0a1d2d;padding:13px;color:#b5cbd8;font-size:12px;line-height:1.6}
+@media(max-width:650px){
+  .physics-page{padding:10px 8px 20px}
+  .physics-page .physics-scene{height:max(550px,70dvh)}
+  .physics-page .physics-page-actions{width:100%}
+  .physics-page .physics-page-actions button{flex:1}
+}
