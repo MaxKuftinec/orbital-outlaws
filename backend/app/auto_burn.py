@@ -101,7 +101,8 @@ def _steer(state: State, angle: float) -> tuple[int, float, float]:
 
 
 def advance_guided(state: State, start_s: float, at_s: float, mu: float,
-                   plan: dict, progress: dict, *, system: bool = True) -> tuple[State, dict]:
+                   plan: dict, progress: dict, *, system: bool = True,
+                   detect_impact: bool = False) -> tuple[State, dict]:
     """Project a saved plan; return state and NEW progress without modifying DB.
 
     Integrates attitude, RCS fuel, 5 kg/s thrust and gravity in bounded steps.
@@ -114,7 +115,8 @@ def advance_guided(state: State, start_s: float, at_s: float, mu: float,
     elapsed = at_s - start_s
     if elapsed <= 0:
         return current, status
-    coast = lambda s, dt, t: (propagate_local(s, dt, mu, t) if system
+    coast = lambda s, dt, t: (propagate_local(s, dt, mu, t,
+                                           detect_impact=detect_impact) if system
                              else propagate(s, dt, mu))
     if status['status'] not in ACTIVE_STATES:
         return coast(current, elapsed, start_s), status
@@ -127,7 +129,7 @@ def advance_guided(state: State, start_s: float, at_s: float, mu: float,
             break
         steps += 1
         dt = min(STEP_S, at_s - t)
-        if math.hypot(current.x, current.y) < 91:
+        if math.hypot(current.x, current.y) < 91 and not detect_impact:
             status['status'] = 'failed'
             status['reason'] = 'Flight safety: central-body intersection'
             break
@@ -165,7 +167,8 @@ def advance_guided(state: State, start_s: float, at_s: float, mu: float,
                 break
             before_fuel = current.fuel_kg
             current = burn_segment(current, dt, mu, {'thrust': False, 'turn': turn,
-                                  'stabilize': False, 'gimbal': 0.}, start_s=t, system=system)
+                                  'stabilize': False, 'gimbal': 0.}, start_s=t, system=system,
+                                   detect_impact=detect_impact)
             status['align_elapsed_s'] += dt
             status['rcs_used_kg'] += max(0., before_fuel - current.fuel_kg)
             t += dt
@@ -189,7 +192,7 @@ def advance_guided(state: State, start_s: float, at_s: float, mu: float,
         before_fuel = current.fuel_kg
         current = burn_segment(current, dt, mu, {'thrust': True, 'turn': turn,
                               'stabilize': False, 'gimbal': max(-GIMBAL_MAX, min(GIMBAL_MAX, error))},
-                              start_s=t, system=system)
+                              start_s=t, system=system, detect_impact=detect_impact)
         used = max(0., before_fuel - current.fuel_kg)
         status['rcs_used_kg'] += max(0., used - ENGINE_FLOW_KG_S * dt)
         status['burn_elapsed_s'] += dt
