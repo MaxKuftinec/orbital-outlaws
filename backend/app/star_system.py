@@ -15,6 +15,19 @@ import math
 from dataclasses import replace
 from .physics import State, propagate
 
+# Legacy physical collision radius; encounter simulation uses the same value.
+PLANET_COLLISION_RADIUS_KM = 91.0
+
+
+class CelestialImpact(Exception):
+    """A physical surface crossing, distinct from a numerical propagation error."""
+
+    def __init__(self, body: str, at_s: float, state: State):
+        super().__init__(f"Spacecraft impacted {body} at t={at_s:.6f} s")
+        self.body, self.at_s, self.state = body, at_s, state
+
+
+
 # K2V Veyra: approximate but internally consistent main-sequence star.
 # Solar conversion values from JPL/IAU; parameters are design assumptions.
 SOLAR_MU = 132_712_440_018.
@@ -77,30 +90,74 @@ def star_collision(x: float,y: float, at_s: float) -> bool:
 
 
 def propagate_local(start: State, elapsed_s: float, planet_mu: float,
-                    start_s: float) -> State:
-    """Kepler drift + symmetric stellar-tide kicks in the translated planet frame.
+                    start_s: float, *, detect_impact: bool = False) -> State:
+    """Symmetric stellar-tide kicks and Kepler drift, with optional surface interception.
 
-    Retains exact conic motion between tidal corrections and supports backwards
-    projection for existing historical queries. For long offline gaps, coarse
-    sampling of the weak tidal term is a documented approximation.
+    Live player flights use adaptive forward steps near Kestrel so a plunge
+    terminates at its physical surface rather than at the Kepler singularity.
+    Backward and ordinary trajectory queries preserve the previous propagator.
     """
     if not math.isfinite(elapsed_s) or not math.isfinite(start_s):
         raise ValueError('Invalid star-system time')
+    radius = PLANET_COLLISION_RADIUS_KM
+    if detect_impact and math.hypot(start.x, start.y) <= radius:
+        raise CelestialImpact('kestrel', start_s, start)
     if elapsed_s == 0:
         return start
     span = abs(elapsed_s)
     step_limit = 16. if span <= 120 else 40. if span <= 3600 else 90.
-    steps = math.ceil(span / step_limit)
-    dt = elapsed_s/steps
-    body = start
-    t = start_s
-    for _ in range(steps):
-        ax,ay = stellar_tide(body.x,body.y,t)
-        kicked = replace(body, vx=body.vx+ax*dt/2, vy=body.vy+ay*dt/2)
-        drift = propagate(kicked,dt,planet_mu)
-        ax2,ay2 = stellar_tide(drift.x,drift.y,t+dt)
-        body = replace(drift, vx=drift.vx+ax2*dt/2,
-                       vy=drift.vy+ay2*dt/2)
+    if not detect_impact or elapsed_s < 0:
+        steps = math.ceil(span / step_limit)
+        dt = elapsed_s / steps
+        body, t = start, start_s
+        for _ in range(steps):
+            ax, ay = stellar_tide(body.x, body.y, t)
+            kicked = replace(body, vx=body.vx+ax*dt/2, vy=body.vy+ay*dt/2)
+            drift = propagate(kicked, dt, planet_mu)
+            ax2, ay2 = stellar_tide(drift.x, drift.y, t+dt)
+            body = replace(drift, vx=drift.vx+ax2*dt/2,
+                           vy=drift.vy+ay2*dt/2)
+            t += dt
+        return body
+
+    body, t, finish = start, start_s, start_s + elapsed_s
+    while t < finish - 1e-10:
+        r = math.hypot(body.x, body.y)
+        if r <= radius:
+            raise CelestialImpact('kestrel', t, body)
+        if star_collision(body.x, body.y, t):
+            raise CelestialImpact('veyra', t, body)
+        # Bound position changes near the surface to prevent tunneling.
+        speed = max(math.hypot(body.vx, body.vy),
+                    math.sqrt(planet_mu / r), 1e-6)
+        dt = min(finish-t, step_limit, 0.15*r/speed)
+        ax, ay = stellar_tide(body.x, body.y, t)
+        while True:
+            kicked = replace(body, vx=body.vx+ax*dt/2, vy=body.vy+ay*dt/2)
+            try:
+                drift = propagate(kicked, dt, planet_mu)
+                break
+            except (ValueError, OverflowError):
+                # Retry smaller intervals, without declaring a false impact.
+                if dt <= 1e-5:
+                    raise
+                dt /= 2
+        if math.hypot(drift.x, drift.y) <= radius:
+            low, high, impact = 0., dt, drift
+            for _ in range(32):
+                mid = (low + high) / 2
+                candidate = propagate(kicked, mid, planet_mu)
+                if math.hypot(candidate.x, candidate.y) <= radius:
+                    high, impact = mid, candidate
+                else:
+                    low = mid
+            scale = radius / math.hypot(impact.x, impact.y)
+            impact = replace(impact, x=impact.x*scale, y=impact.y*scale)
+            raise CelestialImpact('kestrel', t+high, impact)
+        if star_collision(drift.x, drift.y, t+dt):
+            raise CelestialImpact('veyra', t+dt, drift)
+        ax2, ay2 = stellar_tide(drift.x, drift.y, t+dt)
+        body = replace(drift, vx=drift.vx+ax2*dt/2, vy=drift.vy+ay2*dt/2)
         t += dt
     return body
 
