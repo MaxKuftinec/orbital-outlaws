@@ -69,7 +69,7 @@ test('live Kestrel and Veyra are gravitational sources, not decorative backdrops
   assert.ok(p.phi<f.phi,'planetary well is deeper close to Kestrel in a locally zoomed plot');
 });
 
-test('the canvas well renderer produces a bounded mesh with no independent animation engine',()=>{
+test('the well renderer caches its mesh while refreshing live contacts via animation frames',()=>{
   const comp=read('frontend/src/components/GravityFlightView.vue');
   const app=read('frontend/src/App.vue');
   const css=read('frontend/src/gravity-flight.css');
@@ -80,11 +80,15 @@ test('the canvas well renderer produces a bounded mesh with no independent anima
   assert.match(comp,/:value="axes\[\(axis\+'Max'\)/);
   assert.match(comp,/@wheel="wheel"/);
   assert.match(css,/\.physics-page \.physics-scene/);
-  assert.doesNotMatch(comp,/requestAnimationFrame/);
+  assert.match(comp,/requestAnimationFrame\(this\.frame\)/);
+  assert.match(comp,/paintSurface\(/);
+  assert.match(comp,/drawEntities\(/);
+  assert.match(comp,/lastSurfaceAt>650/);
+  assert.match(comp,/resetOverhead\(/);
   const scene=GRAV.world(snapshot,STAR),axes=GRAV.axesFor(scene,'kestrel');
   const ctx={
     createLinearGradient(){return {addColorStop(){}}},fillRect(){},beginPath(){},
-    moveTo(){},lineTo(){},closePath(){},fill(){},stroke(){},arc(){},
+    moveTo(){},lineTo(){},closePath(){},fill(){},stroke(){},arc(){},translate(){},bezierCurveTo(){},
     fillText(){},save(){},restore(){},
     set fillStyle(x){},set strokeStyle(x){},set font(x){},
     set textAlign(x){},set lineWidth(x){}
@@ -92,4 +96,49 @@ test('the canvas well renderer produces a bounded mesh with no independent anima
   const result=GRAV.paint(ctx,800,540,scene,axes,{detail:24});
   assert.equal(result.count,24);
   assert.equal(result.quads,24*24);
+});
+
+test('default overhead gravity view aligns pixel-for-pixel with the Flight camera',()=>{
+  const cam={width:840,height:550,scale:1.2,panX:90,panY:-48}
+  const snap={...snapshot,camera:cam}
+  const scene=GRAV.world(snap,STAR)
+  const axes=GRAV.axesFromCamera(scene,cam)
+  const x=260,y=31
+  const px=GRAV.plotPoint(x,y,GRAV.field(scene,x,y).phi,axes,cam.width,cam.height,{yaw:0,pitch:0,depth:1})
+  assert.ok(Math.abs(px.x-(cam.width/2+cam.panX+x*cam.scale))<1e-6)
+  assert.ok(Math.abs(px.y-(cam.height/2+cam.panY+y*cam.scale))<1e-6)
+});
+
+test('360-degree free camera rotation returns exactly to overhead',()=>{
+  const a={xMin:-100,xMax:100,yMin:-100,yMax:100,zMin:-10,zMax:2}
+  const first=GRAV.plotPoint(54,-36,-6,a,800,480,{yaw:0,pitch:0,depth:1})
+  const once=GRAV.plotPoint(54,-36,-6,a,800,480,{yaw:Math.PI*2,pitch:Math.PI*2,depth:1})
+  assert.ok(Math.hypot(first.x-once.x,first.y-once.y)<1e-8)
+  const side=GRAV.plotPoint(54,-36,-6,a,800,480,{yaw:0,pitch:Math.PI/2,depth:1})
+  assert.ok(Math.abs(side.y-first.y)>1)
+});
+
+test('real local salvage, allied craft, raiders and projectiles share the same transformation',()=>{
+  const snap={...snapshot,
+    ships:[{id:'p',x:0,y:0,player:true,type:'ship',alive:true},
+      {id:'raider',x:200,y:100,type:'enemy',alive:true},
+      {id:'ally',x:100,y:60,type:'ally',alive:true}],
+    pickups:[{id:'c',type:'credits',amount:20,x:60,y:80,alive:true},
+      {id:'w',type:'wreck',x:30,y:-50,alive:true},
+      {id:'f',type:'fuel',x:70,y:85,alive:true},
+      {id:'a',type:'ammo',x:25,y:30,alive:true},
+      {id:'r',type:'parts',x:65,y:35,alive:true}],
+    shots:[{id:'s',x:30,y:33,type:'shot',alive:true}],
+    waypoint:{x:150,y:180}}
+  const a=GRAV.world(snap,STAR)
+  const b=GRAV.world({...snap,systemView:true},STAR)
+  assert.equal(a.ships.length,3)
+  assert.equal(a.pickups.length,5)
+  assert.equal(a.shots.length,1)
+  assert.equal(a.entities.length,10)
+  const planet=STAR.planet(snap.time)
+  for(let i=0;i<a.entities.length;i++){
+    assert.ok(Math.abs((b.entities[i].x-a.entities[i].x)-planet.x)<1e-6)
+    assert.ok(Math.abs((b.entities[i].y-a.entities[i].y)-planet.y)<1e-6)
+  }
 });
