@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import replace
-from .physics import State, propagate
+from .physics import State, propagate, orbital_envelope
 
 # Legacy physical collision radius; encounter simulation uses the same value.
 PLANET_COLLISION_RADIUS_KM = 91.0
@@ -131,6 +131,13 @@ def propagate_local(start: State, elapsed_s: float, planet_mu: float,
         speed = max(math.hypot(body.vx, body.vy),
                     math.sqrt(planet_mu / r), 1e-6)
         dt = min(finish-t, step_limit, 0.15*r/speed)
+        if r < 3*radius:
+            # A grazing trajectory may dip below the surface between two
+            # outside endpoints. Shrink the interval when its osculating
+            # pericenter intersects Kestrel, without slowing safe low orbits.
+            periapsis, _ = orbital_envelope(body, planet_mu)
+            if periapsis <= radius:
+                dt = min(dt, max(1e-4, 0.25*(r-radius)/speed))
         ax, ay = stellar_tide(body.x, body.y, t)
         while True:
             kicked = replace(body, vx=body.vx+ax*dt/2, vy=body.vy+ay*dt/2)
