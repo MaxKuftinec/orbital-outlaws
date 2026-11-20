@@ -337,3 +337,39 @@
 .map-tools-tip{margin:8px 0 0;color:#819cb2;font:10px/1.55 ui-sans-serif,system-ui}
 .map-ruler-distance{padding-top:10px;text-align:left;font:700 11px/1.5 ui-monospace,monospace;overflow-wrap:anywhere}
 @media(max-width:600px){#canvas-workspace .map-tools-popover{min-width:216px;max-width:calc(100vw - 110px)}}
+
+/* Instrument-local inertial frames; canvas changes can optionally broadcast. */
+.arena-actions .ephemeris-settings-shortcut{
+  min-width:34px!important;padding:4px 9px!important;color:#dfc18b!important;
+  border-color:#7b6542!important
+}
+.arena-actions .ephemeris-settings-shortcut:disabled{opacity:.43}
+.settings-frame-scope{margin:13px 0 15px;padding:13px;border:1px solid #31536b;
+  border-radius:10px;background:#0b1e30;min-width:0}
+.settings-frame-scope legend{padding:0 6px;font:bold 11px ui-monospace,monospace;
+  letter-spacing:.035em;color:#c6e2ec}
+.settings-frame-scope label{display:flex;align-items:start;gap:11px;padding:11px;
+  border-radius:8px;cursor:pointer}
+.settings-frame-scope label:has(input:checked){background:#1b3e50}
+.settings-frame-scope label input{flex:none;accent-color:#91dbe9;width:18px;height:18px;margin:2px 0 0}
+.settings-frame-scope label span{display:grid;gap:4px}
+.settings-frame-scope label b{font-size:12px;color:#e6f2f8}
+.settings-frame-scope label small{font-size:10px;color:#9cb5c5;line-height:1.5}
+#settings-ephemeris-pane .settings-frame-choice{margin-top:14px}
+#settings-ephemeris-pane .settings-frame-choice button{min-height:89px}
+#settings-ephemeris-pane .settings-frame-choice button[aria-pressed="true"]{
+  border-color:#e2c58c;background:linear-gradient(120deg,#3b3327,#193546)
+}
+.ephemeris-market-settings{display:grid;gap:4px;margin-top:9px;max-width:250px}
+.ephemeris-market-settings>span{font:bold 9px ui-monospace,monospace;color:#c7ad7f;
+  letter-spacing:.1em}
+.ephemeris-market-settings select{width:100%;min-height:36px;padding:7px 10px;
+  background:#102e41;border:1px solid #496a7e;border-radius:6px;
+  color:#e8f2f7;font:700 11px ui-sans-serif,system-ui}
+.ephemeris-market-settings select:focus-visible{outline:2px solid #e0c38f;outline-offset:2px}
+@media(max-width:600px){
+  .settings-frame-scope{padding:9px}
+  .settings-frame-scope label{padding:10px 7px}
+  #settings-ephemeris-pane .settings-frame-choice button{min-height:73px}
+  .ephemeris-market-settings select{font-size:16px}
+}

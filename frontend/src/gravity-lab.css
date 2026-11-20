@@ -1,0 +1,113 @@
+/* Physics Lab is a VIEW of the existing cockpit, never a second flight canvas.
+   The legacy flight renderer skips paint while this layer is active. */
+.arena-head .arena-modes{display:flex;gap:3px;flex:none;padding:4px;border-radius:10px;
+  border:1px solid #31556a;background:#071d30}
+.arena-modes button{border:0;background:transparent;color:#9cb9c8;font:800 11px ui-sans-serif,system-ui;
+  padding:9px 12px;border-radius:7px;white-space:nowrap}
+.arena-modes button[aria-pressed="true"]{background:#1c5160;color:#e6fcff;box-shadow:0 2px 10px #0005}
+.arena-modes button:disabled{opacity:.5}
+.arena-shell.gravity-mode .arena-actions,
+.arena-shell.gravity-mode .flight-controls,
+.arena-shell.gravity-mode .mission-strip{display:none!important}
+#canvas-workspace.gravity-mode .mobile-flight-pad,
+#canvas-workspace.gravity-mode .canvas-floating,
+#canvas-workspace.gravity-mode .hud-toolbar,
+#canvas-workspace.gravity-mode .hud-picker,
+#canvas-workspace.gravity-mode .hud-picker-menu,
+#canvas-workspace.gravity-mode .map-scale-readout,
+#canvas-workspace.gravity-mode .canvas-overlay,
+#canvas-workspace.gravity-mode .selected-target-caption,
+#canvas-workspace.gravity-mode .hud-panel{display:none!important}
+#canvas-workspace .gravity-lab{position:absolute;inset:0;z-index:700;overflow:hidden;
+  background:#06111e;color:#e4f5fc;font-family:ui-sans-serif,system-ui}
+#canvas-workspace .gravity-lab-surface{display:block;width:100%;height:100%!important;
+  touch-action:none;user-select:none;cursor:grab}
+#canvas-workspace .gravity-lab-surface:active{cursor:grabbing}
+.gravity-lab-top,.gravity-lab-side,.gravity-lab-bottom{
+  position:absolute;pointer-events:none;z-index:2}
+.gravity-lab-top{top:15px;left:16px;right:145px}
+.gravity-lab-eyebrow,.gravity-lab-kicker{color:#80cbd7;letter-spacing:.12em;
+  font:800 9px/1.35 ui-monospace,monospace}
+.gravity-lab-top h3{font:800 clamp(15px,2.3vw,21px)/1.15 system-ui;
+  letter-spacing:.06em;margin:5px 0}
+.gravity-lab-top p{margin:5px 0 12px;color:#bbcfdb;font-size:11px}
+.gravity-lab-presets{display:flex;gap:5px;flex-wrap:wrap;pointer-events:auto}
+.gravity-lab-presets button,.gravity-lab-reset,.gravity-lab-probe button{
+  border:1px solid #517589;background:#113049d9;color:#d7edf7;
+  border-radius:7px;padding:9px 11px;font:750 11px/1.2 system-ui}
+.gravity-lab-presets button[aria-pressed="true"]{border-color:#d7b87a;
+  background:#594527e6;color:#ffe5b0}
+.gravity-lab-side{top:135px;right:12px;width:min(194px,40%);
+  padding:12px 13px;border:1px solid #31566bbb;border-radius:10px;
+  background:#071b2bde;backdrop-filter:blur(7px);pointer-events:auto}
+.gravity-lab-side strong{display:block;font-size:12px;margin:5px 0;color:#ffe1b1}
+.gravity-lab-side p{font-size:10px;line-height:1.5;color:#acc2ce;margin:6px 0 12px}
+.gravity-lab-check{display:flex;align-items:center;gap:7px;color:#c6dee8;font-size:11px;
+  margin:8px 0;cursor:pointer}
+.gravity-lab-check input{accent-color:#62d9f6;width:16px;height:16px}
+.gravity-lab-slider{display:grid;gap:7px;margin:14px 0 12px;color:#b5d2df;font-size:10px}
+.gravity-lab-slider span{display:flex;justify-content:space-between;gap:8px}
+.gravity-lab-slider b{color:#ffdf9c}
+.gravity-lab-slider input{width:100%;accent-color:#e9bf74}
+.gravity-lab-reset{width:100%;padding:8px 9px}
+.gravity-lab-bottom{left:14px;right:14px;bottom:13px;display:flex;
+  align-items:flex-end;justify-content:space-between;gap:10px}
+.gravity-lab-probe{min-width:0;width:min(330px,60%);padding:12px 15px;
+  border:1px solid #385a6ddd;border-radius:10px;background:#071b2be8;
+  backdrop-filter:blur(7px);pointer-events:auto}
+.gravity-lab-probe-values{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:11px 0 0}
+.gravity-lab-probe-values small{display:block;color:#a3c1d0;font-size:10px}
+.gravity-lab-probe-values strong{display:block;font:700 12px ui-monospace,monospace;color:#fff0c9;
+  margin-top:4px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.gravity-lab-probe button{margin-top:11px;padding:6px 9px}
+.gravity-lab-help{text-align:right;font-size:11px;color:#d3e4ec;
+  text-shadow:0 1px 4px #000;max-width:255px}
+.gravity-lab-help strong{color:#fbdca2;margin-left:7px}
+.gravity-lab-help small{display:block;color:#b8cbd4;line-height:1.4;
+  margin-top:6px;font-size:10px}
+.gravity-lab-error{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  color:#ffa5a5;font-size:13px}
+@media(max-width:1080px){
+  .arena-head{flex-wrap:wrap}
+  .arena-head .arena-modes{order:2}
+  .arena-head .arena-actions{order:3}
+}
+@media(max-width:680px){
+  .arena-head .arena-modes{order:2}
+  .arena-modes button{padding:8px 11px}
+  #canvas-workspace .gravity-lab-top{top:10px;left:10px;right:112px}
+  .gravity-lab-eyebrow{font-size:8px}
+  .gravity-lab-top h3{font-size:15px;margin:3px 0}
+  .gravity-lab-top p{font-size:9px;margin:4px 0 9px}
+  .gravity-lab-presets{gap:4px}
+  .gravity-lab-presets button{font-size:9px;padding:8px 6px}
+  .gravity-lab-side{top:130px;right:7px;width:44%;padding:9px}
+  .gravity-lab-side strong{font-size:11px}
+  .gravity-lab-side p{font-size:9px;margin:5px 0 8px}
+  .gravity-lab-check{font-size:10px}
+  .gravity-lab-slider{margin:8px 0;font-size:9px}
+  .gravity-lab-bottom{left:7px;right:auto;bottom:7px;display:block;width:53%}
+  .gravity-lab-probe{width:100%;padding:9px}
+  .gravity-lab-probe-values{grid-template-columns:1fr;gap:5px;margin:7px 0}
+  .gravity-lab-probe-values strong{font-size:11px;margin:1px 0}
+  .gravity-lab-help{text-align:left;margin-top:6px;font-size:9px}
+  .gravity-lab-help strong{margin-left:2px}
+  .gravity-lab-help small{font-size:9px}
+  .gravity-lab-probe button{font-size:9px;padding:6px}
+}
+@media(max-height:550px) and (max-width:1100px){
+  .gravity-lab-side p{display:none}
+  .gravity-lab-help small{display:none}
+}
+
+/* Workspace moves Fullscreen into the HUD toolbar. Keep that single action
+   accessible in Lab mode, hiding the flight-only Tools/Panels controls. */
+#canvas-workspace.gravity-mode .hud-toolbar{
+  display:flex!important;pointer-events:none;z-index:1000
+}
+#canvas-workspace.gravity-mode .hud-toolbar > :not(#fullscreen-btn){
+  display:none!important
+}
+#canvas-workspace.gravity-mode .hud-toolbar #fullscreen-btn{
+  display:inline-flex!important;pointer-events:auto
+}

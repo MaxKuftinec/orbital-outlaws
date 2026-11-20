@@ -1,11 +1,13 @@
 import { accountId, restoreSession } from './session'
 
-type Prefs = { layout?: Record<string, unknown>; frame?: 'planet' | 'star'; show_axes?: boolean; hotkeys?: Record<string, string> }
+type Prefs = { layout?: Record<string, unknown>; frame?: 'planet' | 'star'; ephemeris_frame?: 'planet' | 'star'; frame_scope?: 'canvas' | 'all'; show_axes?: boolean; hotkeys?: Record<string, string> }
 type ServerPrefs = { revision: number; preferences: Prefs; updated_at: number | null }
 type Status = 'local' | 'syncing' | 'saved' | 'error' | 'conflict'
 const KEYS = {
   layout: 'orbital-outlaws.hud-layout.v2',
   frame: 'orbital-outlaws.map-frame.v1',
+  ephemerisFrame: 'orbital-outlaws.ephemeris-frame.v1',
+  frameScope: 'orbital-outlaws.frame-scope.v1',
   axes: 'orbital-outlaws.show-axes.v1',
   hotkeys: 'orbital-outlaws.hotkeys.v1'
 }
@@ -36,6 +38,10 @@ function snapshot(): Prefs {
   if (layout) prefs.layout = layout
   const frame = localStorage.getItem(KEYS.frame)
   if (frame === 'star' || frame === 'planet') prefs.frame = frame
+  const ephemerisFrame = localStorage.getItem(KEYS.ephemerisFrame)
+  if (ephemerisFrame === 'star' || ephemerisFrame === 'planet') prefs.ephemeris_frame = ephemerisFrame
+  const scope = localStorage.getItem(KEYS.frameScope)
+  if (scope === 'canvas' || scope === 'all') prefs.frame_scope = scope
   const axes = localStorage.getItem(KEYS.axes)
   if (axes !== null) prefs.show_axes = axes !== 'false'
   const hotkeys = parseObject(localStorage.getItem(KEYS.hotkeys))
@@ -51,6 +57,8 @@ function applyRemote(prefs: Prefs) {
     clearLocal()
     if (prefs.layout) localStorage.setItem(KEYS.layout, JSON.stringify(prefs.layout))
     if (prefs.frame) localStorage.setItem(KEYS.frame, prefs.frame)
+    if (prefs.ephemeris_frame) localStorage.setItem(KEYS.ephemerisFrame, prefs.ephemeris_frame)
+    if (prefs.frame_scope) localStorage.setItem(KEYS.frameScope, prefs.frame_scope)
     if (typeof prefs.show_axes === 'boolean') localStorage.setItem(KEYS.axes, String(prefs.show_axes))
     if (prefs.hotkeys) localStorage.setItem(KEYS.hotkeys, JSON.stringify(prefs.hotkeys))
     window.dispatchEvent(new Event('orbital-preferences-applied'))

@@ -5,6 +5,7 @@ import * as directives from 'vuetify/directives'
 import 'vuetify/styles'
 import './cockpit.css'
 import './mobile.css'
+import './gravity-lab.css'
 import App from './App.vue'
 
 const vuetify = createVuetify({

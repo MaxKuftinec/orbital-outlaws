@@ -22,7 +22,8 @@
   const MAP=window.OrbitalMapTools;
   const VIS=window.OrbitalVisuals;
   const FRAMES=window.OrbitalReferenceFrames;
-  if(!NAV||!BALL||!COLL||!SAFE||!ARRIVAL||!ATTITUDE||!STAR||!MAP||!VIS||!FRAMES)throw new Error('Simulation modules missing');
+  const FRAME_CONFIG=window.OrbitalFrameConfig;
+  if(!NAV||!BALL||!COLL||!SAFE||!ARRIVAL||!ATTITUDE||!STAR||!MAP||!VIS||!FRAMES||!FRAME_CONFIG)throw new Error('Simulation modules missing');
   // 1 world distance unit = 1 km; velocities in km/s. Engines are futuristic.
   const ENGINE=Object.freeze({dryKg:900,propellantKg:200,thrustN:1600000,flowKgS:5,rcsN:2500,rcsFlowKgS:.04,leverM:7,shipLengthM:14,gimbalMax:28*Math.PI/180});
   const exhaustKmS=ENGINE.thrustN/ENGINE.flowKgS/1000;
@@ -1350,6 +1351,7 @@
     ephemerisToggle.textContent=state.ephemerisVisible?'◎ Ephemeris ON':'◎ Ephemeris OFF';
     ephemerisToggle.setAttribute('aria-pressed',String(state.ephemerisOwned&&state.ephemerisVisible));
     ephemerisToggle.classList.toggle('selected',state.ephemerisOwned&&state.ephemerisVisible);
+    $('ephemeris-settings-btn').disabled=!state.ephemerisOwned;
     const selectedAlly=navTarget(state.selectedNavKey);
     const friendly=selectedAlly?.isAlly&&selectedAlly.alive?selectedAlly:null;
     const allyRange=friendly?magnitude(friendly.x-p.x,friendly.y-p.y):Infinity;
@@ -1490,9 +1492,10 @@
     state.panX=-(target.x+o.x)*s;
     state.panY=-(target.y+o.y)*s;
   }
-  function showSystemMap(){
+  function showSystemMap(syncTools=true){
     state.systemView=true;
     try{localStorage.setItem(FRAME_KEY,'star');}catch{}globalThis.dispatchEvent?.(new Event('orbital-preferences-changed'));
+    if(syncTools)globalThis.OrbitalFrameConfig?.applyCanvasChange('star');
     const baseScale=Math.min(W/700,H/660);
     state.zoom=clamp(.65*Math.min(W,H)/(STAR.ORBIT_RADIUS_KM*baseScale),MIN_ZOOM,6);
     const planet=STAR.planet(state.t),s=scale();
@@ -1502,9 +1505,11 @@
     updateZoom();updateHud();
     logEvent('System map: VEYRA and orbiting KESTREL. Distances are in km.','good');
   }
-  function showPlanetMap(){
+  function showPlanetMap(syncTools=true){
     state.systemView=false;
-    try{localStorage.setItem(FRAME_KEY,'planet');}catch{}globalThis.dispatchEvent?.(new Event('orbital-preferences-changed'));state.followPlayer=false;state.followTarget=false;
+    try{localStorage.setItem(FRAME_KEY,'planet');}catch{}globalThis.dispatchEvent?.(new Event('orbital-preferences-changed'));
+    if(syncTools)globalThis.OrbitalFrameConfig?.applyCanvasChange('planet');
+    state.followPlayer=false;state.followTarget=false;
     state.zoom=1;state.panX=0;state.panY=0;
     updateZoom();updateHud();
     logEvent('Returned to Kestrel planetary view.','good');
@@ -1515,10 +1520,12 @@
     if(target.kind==='star'){
       state.systemView=true;
       try{localStorage.setItem(FRAME_KEY,'star');}catch{}globalThis.dispatchEvent?.(new Event('orbital-preferences-changed'));
+      globalThis.OrbitalFrameConfig?.applyCanvasChange('star');
       state.zoom=clamp(.65*Math.min(W,H)/(STAR.ORBIT_RADIUS_KM*Math.min(W/700,H/660)),MIN_ZOOM,6);
     }else if(target.kind==='planet'){
       state.systemView=false;state.zoom=1.8;
       try{localStorage.setItem(FRAME_KEY,'planet');}catch{}globalThis.dispatchEvent?.(new Event('orbital-preferences-changed'));
+      globalThis.OrbitalFrameConfig?.applyCanvasChange('planet');
     }else{
       state.zoom=clamp(Math.max(state.zoom,2.8),MIN_ZOOM,6);
     }
@@ -1627,6 +1634,11 @@
     $('settings-frame-star').setAttribute('aria-pressed',String(!!state.systemView));
     $('settings-frame-planet').setAttribute('aria-pressed',String(!state.systemView));
     $('settings-show-axes').checked=!!state.showAxes;
+    $('settings-frame-scope-canvas').checked=globalThis.OrbitalFrameConfig?.getScope()!=='all';
+    $('settings-frame-scope-all').checked=globalThis.OrbitalFrameConfig?.getScope()==='all';
+    const ephemFrame=globalThis.OrbitalFrameConfig?.getFrame('ephemeris')||'planet';
+    $('settings-ephemeris-frame-planet').setAttribute('aria-pressed',String(ephemFrame==='planet'));
+    $('settings-ephemeris-frame-star').setAttribute('aria-pressed',String(ephemFrame==='star'));
     updateMapScale();
   }
   function zoomAt(factor,px=W/2,py=H/2){
@@ -1667,6 +1679,9 @@
   });
   let lastMeasurementUiUpdate=0;
   function draw(){
+    // When Physics Lab owns this viewport, don't waste a 60 Hz flight paint
+    // behind it. Flight simulation and the server connection remain active.
+    if(globalThis.OrbitalVisualizationMode==='gravity')return;
     // Attached rulers move with physical bodies; refresh the Tools readout at
     // 4 Hz instead of writing to the DOM on every 60 FPS canvas render.
     const measurement=state.measurement;
@@ -1694,8 +1709,10 @@
       let steps=0;
       while(accumulator>=.015 && steps<22){step(.015);accumulator-=.015;steps++;if(state.ended)break;}
       if(steps>=22)accumulator=0;
-      if(state.t-state.lastPrediction>.22)computePrediction();
-      if(state.t-state.lastBallistic>.1)updateShotPreview();
+      if(globalThis.OrbitalVisualizationMode!=='gravity'){
+        if(state.t-state.lastPrediction>.22)computePrediction();
+        if(state.t-state.lastBallistic>.1)updateShotPreview();
+      }
     }
     if(now>nextHud){updateHud();nextHud=now+130;}
     draw();lastFrameId=requestAnimationFrame(frame);
@@ -1766,27 +1783,28 @@
     if(!state)return;
     const useStar=storedFrame()==='star';
     if(useStar!==!!state.systemView){
-      if(useStar)showSystemMap();else showPlanetMap();
+      if(useStar)showSystemMap(false);else showPlanetMap(false);
     }
     state.showAxes=storedAxes();
     hotkeys=loadHotkeys();updateHotkeyHints();
+    state.ephemerisCache=null;
     if(settingsOpen)renderHotkeys();
     updateHud();
   });
   function settingsTab(tab){
-    const controls=tab==='controls';
-    $('settings-controls-pane').classList.toggle('hidden',!controls);
-    $('settings-frame-pane').classList.toggle('hidden',controls);
-    $('settings-tab-controls').setAttribute('aria-selected',String(controls));
-    $('settings-tab-frame').setAttribute('aria-selected',String(!controls));
-    $('settings-tab-controls').classList.toggle('selected',controls);
-    $('settings-tab-frame').classList.toggle('selected',!controls);
+    for(const section of ['controls','frame','ephemeris']){
+      const selected=section===tab;
+      $('settings-'+section+'-pane').classList.toggle('hidden',!selected);
+      $('settings-tab-'+section).setAttribute('aria-selected',String(selected));
+      $('settings-tab-'+section).classList.toggle('selected',selected);
+    }
   }
-  function openSettings(){
+  function openSettings(tab='controls'){
     settingsOpen=true;capturingAction=null;state.down.clear();
     $('settings-modal').classList.remove('hidden');
-    settingsTab('controls');updateZoom();
-    renderHotkeys();$('hotkey-feedback').textContent='';$('settings-close').focus();
+    settingsTab(tab);updateZoom();
+    renderHotkeys();$('hotkey-feedback').textContent='';
+    (tab==='ephemeris' ? $('settings-ephemeris-frame-planet') : $('settings-close')).focus();
   }
   function closeSettings(){settingsOpen=false;capturingAction=null;$('settings-modal').classList.add('hidden');$('settings-btn').focus();}
   function toggleConsole(which){
@@ -1809,6 +1827,7 @@
         if(e.code==='Escape'){e.preventDefault();closeSettings();}
         return;
       }
+      if(window.OrbitalVisualizationMode==='gravity')return;
       if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName))return;
       const action=actionForKey(e.code);
       if(action){e.preventDefault();if(action!=='fire'&&action!=='repair')manual();state.down.add(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.add('pressed'));if(action==='fire')$('fire-btn').classList.add('pressed');if(action==='repair')$('repair-btn').classList.add('pressed');}
@@ -1904,9 +1923,23 @@
     window.addEventListener('orbital-set-reserve',requestReserveSetting);
     window.addEventListener('orbital-auto-burn-engage',requestAutoBurn);
     window.addEventListener('orbital-auto-burn-abort',abortAutoBurn);
-    $('settings-btn').addEventListener('click',openSettings);
+    window.addEventListener('orbital-reference-frames-updated',()=>{
+      state.ephemerisCache=null;
+      updateZoom();
+    });
+    $('settings-btn').addEventListener('click',()=>openSettings());
+    $('ephemeris-settings-btn').addEventListener('click',()=>openSettings('ephemeris'));
     $('settings-tab-controls').addEventListener('click',()=>settingsTab('controls'));
     $('settings-tab-frame').addEventListener('click',()=>settingsTab('frame'));
+    $('settings-tab-ephemeris').addEventListener('click',()=>settingsTab('ephemeris'));
+    window.addEventListener('orbital-ephemeris-frame-request',event=>{
+      const frame=event.detail?.frame;
+      if(frame==='star'||frame==='planet')FRAME_CONFIG.setFrame('ephemeris',frame);
+    });
+    $('settings-ephemeris-frame-planet').addEventListener('click',()=>FRAME_CONFIG.setFrame('ephemeris','planet'));
+    $('settings-ephemeris-frame-star').addEventListener('click',()=>FRAME_CONFIG.setFrame('ephemeris','star'));
+    $('settings-frame-scope-canvas').addEventListener('change',()=>FRAME_CONFIG.setScope('canvas'));
+    $('settings-frame-scope-all').addEventListener('change',()=>FRAME_CONFIG.setScope('all'));
     $('settings-frame-planet').addEventListener('click',showPlanetMap);
     $('settings-frame-star').addEventListener('click',showSystemMap);
     $('settings-show-axes').addEventListener('change',e=>{
@@ -2016,7 +2049,16 @@
     });
   }
   bindControls();updateHotkeyHints();reset();fitCanvas();
-  if(storedFrame()==='star')showSystemMap();
+  // Read-only world snapshot, consumed by the Physics Lab at low frequency.
+  window.OrbitalPhysicsLabSnapshot=()=>({time:state?.t||0});
+  window.addEventListener('orbital-visualization-mode',event=>{
+    if(event.detail?.mode==='gravity'&&state){
+      state.down.clear();
+      state.pointerThrust=false;
+      document.querySelectorAll('.pressed').forEach(button=>button.classList.remove('pressed'));
+    }
+  });
+  if(storedFrame()==='star')showSystemMap(false);
   lastFrameId=requestAnimationFrame(frame);
   if(window.OrbitalPersistence){
     pilotLink=window.OrbitalPersistence.attach({
