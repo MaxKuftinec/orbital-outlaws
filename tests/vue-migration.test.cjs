@@ -21,7 +21,7 @@ test('telemetry targeting and navigation are Vue Options API instruments',()=>{
 });
 
 test('canvas renderer is standalone and death never covers the arena',()=>{
-  assert.match(app,/'rendering\.js', 'gravity-lab\.js', 'touch-navigation\.js', 'game\.js'/);
+  assert.match(app,/'rendering\.js', 'gravity-lab\.js', 'gravity-flight\.js', 'touch-navigation\.js', 'game\.js'/);
   assert.match(rendering,/root\.OrbitalRenderer/);
   assert.match(rendering,/function drawEphemeris\(/);
   assert.match(game,/window\.OrbitalRenderer\.create/);
