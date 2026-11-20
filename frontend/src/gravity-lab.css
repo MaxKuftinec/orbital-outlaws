@@ -99,3 +99,15 @@
   .gravity-lab-side p{display:none}
   .gravity-lab-help small{display:none}
 }
+
+/* Workspace moves Fullscreen into the HUD toolbar. Keep that single action
+   accessible in Lab mode, hiding the flight-only Tools/Panels controls. */
+#canvas-workspace.gravity-mode .hud-toolbar{
+  display:flex!important;pointer-events:none;z-index:1000
+}
+#canvas-workspace.gravity-mode .hud-toolbar > :not(#fullscreen-btn){
+  display:none!important
+}
+#canvas-workspace.gravity-mode .hud-toolbar #fullscreen-btn{
+  display:inline-flex!important;pointer-events:auto
+}
