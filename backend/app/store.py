@@ -839,20 +839,26 @@ class WorldStore:
                 pass
             else:
                 now = max(self.now(world), entity.checkpoint_s)
-                if active:
-                    current = self._settle_auto(db, entity, world, now)
-                    if auto.progress['status'] in ACTIVE_STATES:
-                        auto.progress = {**auto.progress, 'status':'aborted',
-                                         'reason':'Manual flight control override'}
-                        auto.updated_s = now
-                        db.add(Event(world_id='kestrel', entity_id=entity_id, at_s=now,
-                                     kind='auto_abort', payload={'reason':'manual override'},
-                                     after=current.as_dict(),
-                                     idempotency_key='auto-abort:'+secrets.token_hex(16)))
-                else:
-                    current = advance(State(**entity.checkpoint),entity.checkpoint_s,now,
-                                      world.mu,self._controls(flight),flight.expires_s,
-                                      system=True)
+                try:
+                    if active:
+                        current = self._settle_auto(db, entity, world, now)
+                    else:
+                        current = advance(State(**entity.checkpoint),entity.checkpoint_s,now,
+                                          world.mu,self._controls(flight),flight.expires_s,
+                                          system=True, detect_impact=True)
+                except CelestialImpact as impact:
+                    self._terminate_player(db, entity, saved, impact.at_s,
+                                           impact.state, impact.body)
+                    return {'id': entity_id, 'state': impact.state.as_dict(),
+                            'version': entity.version, 'destroyed': True}
+                if active and auto.progress['status'] in ACTIVE_STATES:
+                    auto.progress = {**auto.progress, 'status':'aborted',
+                                     'reason':'Manual flight control override'}
+                    auto.updated_s = now
+                    db.add(Event(world_id='kestrel', entity_id=entity_id, at_s=now,
+                                 kind='auto_abort', payload={'reason':'manual override'},
+                                 after=current.as_dict(),
+                                 idempotency_key='auto-abort:'+secrets.token_hex(16)))
                 peri,apo = orbital_envelope(current,world.mu)
                 entity.checkpoint_s=now
                 entity.checkpoint=current.as_dict()
