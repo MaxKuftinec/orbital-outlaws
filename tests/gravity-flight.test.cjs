@@ -211,3 +211,30 @@ test('Classic and Survey palettes are selectable, and radii remain physical boun
   assert.match(view,/showEphemerisPath/)
   assert.match(view,/showOwnPath/)
 });
+
+test('WASD camera motion is camera-relative, frame-rate independent and diagonal-normalized',()=>{
+  const vec=keys=>GRAV.cameraKeyVector(new Set(keys));
+  assert.deepEqual({...vec(['KeyW'])},{x:0,y:1});
+  assert.deepEqual({...vec(['KeyS'])},{x:0,y:-1});
+  assert.deepEqual({...vec(['KeyA'])},{x:1,y:0});
+  assert.deepEqual({...vec(['KeyD'])},{x:-1,y:0});
+  assert.deepEqual({...vec(['KeyA','KeyD'])},{x:0,y:0});
+  assert.deepEqual({...vec(['KeyW','KeyS'])},{x:0,y:0});
+  const diagonal=vec(['KeyW','KeyD']);
+  assert.ok(Math.abs(Math.hypot(diagonal.x,diagonal.y)-1)<1e-12);
+  assert.ok(diagonal.x<0&&diagonal.y>0);
+});
+
+test('WASD navigates the gravitational surface without activating spacecraft RCS or engines',()=>{
+  const component=read('frontend/src/components/GravityFlightView.vue');
+  const flight=read('frontend/public/legacy/game.js');
+  assert.match(component,/window\.addEventListener\('keydown',this\.cameraKeyDown\)/);
+  assert.match(component,/window\.addEventListener\('keyup',this\.cameraKeyUp\)/);
+  assert.match(component,/window\.removeEventListener\('keydown',this\.cameraKeyDown\)/);
+  assert.match(component,/advanceCameraKeys\(now\)/);
+  assert.match(component,/speed=330/);
+  assert.match(component,/Math\.min\(\.05,Math\.max\(0,\(now-previous\)\/1000\)\)/);
+  assert.match(component,/this\.panBy\(direction\.x\*speed\*dt,direction\.y\*speed\*dt\)/);
+  assert.match(component,/settings-modal/);
+  assert.match(flight,/OrbitalVisualizationMode==='wells'&&[\s\S]*?\['KeyW','KeyA','KeyS','KeyD'\]\.includes\(e\.code\)\)return;/);
+});
