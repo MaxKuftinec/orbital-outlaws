@@ -60,19 +60,22 @@ test('surface mesh resolution and potential values are finite and bounded for ph
   }
 });
 
-test('lab shares the cockpit viewport, lazily loads the Vue module and suspends flight painting',()=>{
+test('Physics Lab is a separate page and the cockpit has its own real-world well view',()=>{
   const app=read('frontend/src/App.vue');
   const game=read('frontend/public/legacy/game.js');
   const component=read('frontend/src/components/GravityLab.vue');
-  const css=read('frontend/src/gravity-lab.css');
+  const physicsCss=read('frontend/src/gravity-flight.css');
   assert.match(app,/defineAsyncComponent\(\(\) => import\('\.\/components\/GravityLab\.vue'\)\)/);
-  assert.match(app,/visualization==='gravity'/);
-  assert.match(app,/<GravityLab v-if=/);
-  assert.match(game,/if\(window\.OrbitalVisualizationMode==='gravity'\)return;/);
+  assert.match(app,/view==='physics'/);
+  assert.match(app,/openPhysics\(\)/);
+  assert.match(app,/<GravityLab v-if="view==='physics'/);
+  assert.match(app,/<GravityFlightView v-if="view==='cockpit' && visualization==='wells'"/);
+  assert.match(game,/if\(\['wells','physics','atlas'\]\.includes\(globalThis\.OrbitalVisualizationMode\)\)return;/);
   assert.match(game,/window\.OrbitalPhysicsLabSnapshot=/);
+  assert.match(game,/window\.OrbitalGameSnapshot=/);
   assert.match(component,/@pointerdown="pointerDown"/);
   assert.match(component,/1500\)/);
   assert.match(component,/markRaw\(engine\.paint/);
-  assert.match(css,/\.arena-shell\.gravity-mode \.flight-controls/);
+  assert.match(physicsCss,/\.physics-page \.gravity-lab/);
   assert.doesNotMatch(component,/requestAnimationFrame/);
 });
