@@ -229,7 +229,7 @@ class WorldStore:
         return self.get_entity('kestrel', entity_id)
 
     def player_encounter(self, pilot_id: str):
-        """Advance a sector through every elapsed second, even if no client was online."""
+        """Advance a sector through every elapsed second, even if no client was online"""
         entity_id = 'pilot-' + pilot_id
         with self.sessions.begin() as db:
             world = db.get(World, 'kestrel')
@@ -556,12 +556,11 @@ class WorldStore:
                     'state': refueled.as_dict(), 'version': entity.version}
 
     def respawn_player(self, pilot_id: str) -> dict:
-        """Begin a new run from an active or destroyed pilot, preserving the sector."""
+        """Begin a new run from an active or destroyed pilot, preserving the sector"""
         entity_id = 'pilot-' + pilot_id
         with self.sessions() as db:
             if db.get(Entity, entity_id) is None:
                 raise LookupError('Unknown pilot')
-        self.player_encounter(pilot_id)
         with self.sessions.begin() as db:
             world = db.get(World, 'kestrel')
             entity = db.scalars(select(Entity).where(
@@ -570,12 +569,12 @@ class WorldStore:
                 EncounterSnapshot.entity_id == entity_id).with_for_update()).one()
             snapshot = copy.deepcopy(saved.snapshot)
             # Preserve the previous controllable ship in the immutable event
-            # history; a new run resets only this pilot and its progression.
+            # history; a new run resets only this pilot and its progression
             previous_alive=bool(snapshot['player'].get('alive'))
             previous_state=copy.deepcopy(entity.checkpoint)
             angle = 2 * math.pi * secrets.randbits(53) / 2**53
-            # Reuse the NPC's outer launch geometry and independent 360° velocity.
-            # Unlike an NPC, a player chooses their own burn/arrival intention.
+            # Reuse the NPC's outer launch geometry and independent 360° velocity
+            # Unlike an NPC, a player chooses their own burn/arrival intention
             launch = incoming_ship('pilot-01', angle, 'flyby', mu=world.mu)
             now = self.now(world)
             state = State(launch['x'], launch['y'],

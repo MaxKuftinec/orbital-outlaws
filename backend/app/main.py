@@ -125,8 +125,8 @@ class AutoBurnCommand(BaseModel):
 
 @app.websocket('/players/{pilot_id}/live')
 async def pilot_live(ws: WebSocket,pilot_id: str):
-    # Authenticate BEFORE accepting the socket. No bearer secrets in URLs.
-    # Pilot ownership is derived from a verified account, never a browser-chosen ID.
+    # Authenticate BEFORE accepting the socket. No bearer secrets in URLs
+    # Pilot ownership is derived from a verified account, never a browser-chosen ID
     is_local_dev = os.getenv('ORBITAL_DEV_COMMANDS') == '1' and os.getenv('AUTH_ENABLED') != '1'
     protocol = None
     auth_token = None

@@ -1,7 +1,7 @@
-"""Pilot-sector authoritative NPC simulation with deterministic offline catch-up.
+"""Pilot-sector authoritative NPC simulation with deterministic offline catch-up
 
 Kilometres, seconds and kilograms throughout. Live clients render the results;
-they never submit NPC positions, damage or rewards.
+they never submit NPC positions, damage or rewards
 """
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import math
 from dataclasses import replace
 from .star_system import stellar_tide, star_collision
 import secrets
-from .physics import State, propagate, apply_impulse, orbital_envelope
+from .physics import State, propagate, orbital_envelope
 from .npc_guidance import plan_transfer, queue_burn, move_with_burn
 from .arrival_guidance import desired_approach, resolve_arrival as advance_arrival, ACTIVE_ARRIVAL
 from .capture_physics import assess_capture, payload_mass, cool_capture_system
@@ -47,11 +47,11 @@ def ship(id: str, radius: float, angle: float, ally: bool = False) -> dict:
 def incoming_ship(id: str, angle: float, intent: str, ally: bool = False,
                   mu: float = MU, velocity_angle: float | None = None,
                   velocity_speed: float | None = None) -> dict:
-    """Random 360-degree launch, followed by a separate intention-driven course burn.
+    """Random 360-degree launch, followed by a separate intention-driven course burn
 
     The spawn position is independent of velocity direction. The intended
     orbital sense comes from random initial angular momentum, so clockwise
-    and counterclockwise are both possible.
+    and counterclockwise are both possible
     """
     if intent not in ('flyby', 'orbit'):
         raise ValueError('Unknown arrival intention')
@@ -78,7 +78,7 @@ def incoming_ship(id: str, angle: float, intent: str, ally: bool = False,
 
 
 def arrival_course(body: dict, mu: float) -> tuple[float, float]:
-    """Compatibility wrapper; approach choice is implemented by finite guidance."""
+    """Compatibility wrapper; approach choice is implemented by finite guidance"""
     return desired_approach(body,mu)
 
 
@@ -125,9 +125,12 @@ def state_of(body: dict) -> State:
 def move(body: dict, dt: float, mu: float, when: float | None = None):
     if not body.get('alive', True):
         return
+    if math.hypot(body['x'], body['y']) <= BODY_RADIUS:
+        print("Is it happening")
+        body['alive'] = False
     try:
         # Kestrel-relative inertial frame: stellar tidal kicks around the
-        # established planet-Kepler drift and finite-thrust integrator.
+        # established planet-Kepler drift and finite-thrust integrator
         if when is not None:
             tx,ty=stellar_tide(body['x'],body['y'],when-dt)
             body['vx'] += tx*dt/2

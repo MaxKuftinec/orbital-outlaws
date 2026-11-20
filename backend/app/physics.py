@@ -39,7 +39,7 @@ def _stumpff(z: float) -> tuple[float, float]:
 
 
 def propagate(initial: State, elapsed_s: float, mu: float) -> State:
-    """Exact (to numerical tolerance) Kepler propagation without stepping frames."""
+    """Exact (to numerical tolerance) Kepler propagation without stepping frames"""
     if not isfinite(elapsed_s) or not isfinite(mu) or mu <= 0:
         raise ValueError('Invalid propagation duration/gravitational parameter')
     if elapsed_s == 0:
@@ -52,7 +52,7 @@ def propagate(initial: State, elapsed_s: float, mu: float) -> State:
     alpha = 2/r0-v2/mu
     sqrt_mu = sqrt(mu)
     dt = elapsed_s
-    # Whole revolutions on bound Kepler orbits return to the identical state.
+    # Whole revolutions on bound Kepler orbits return to the identical state
     if alpha > 1e-12:
         period = 2*pi/(sqrt_mu*alpha**1.5)
         dt = remainder(dt, period)
@@ -60,7 +60,7 @@ def propagate(initial: State, elapsed_s: float, mu: float) -> State:
             return State(initial.x,initial.y,initial.vx,initial.vy,initial.mass_kg,initial.fuel_kg,
                          remainder(initial.heading+initial.omega*elapsed_s,2*pi),initial.omega)
     chi = (sqrt_mu*alpha*dt if alpha>1e-10 else sqrt_mu*dt/r0)
-    # Newton iteration on universal Kepler equation.
+    # Newton iteration on universal Kepler equation
     for _ in range(100):
         z = alpha*chi*chi
         c,s = _stumpff(z)
@@ -92,7 +92,7 @@ def propagate(initial: State, elapsed_s: float, mu: float) -> State:
 
 
 def orbital_envelope(state: State,mu: float) -> tuple[float, float | None]:
-    """Conservative radial envelope; None apoapsis means unbound (infinite)."""
+    """Conservative radial envelope; None apoapsis means unbound (infinite)"""
     r=hypot(state.x,state.y)
     v2=state.vx**2+state.vy**2
     energy=v2/2-mu/r
