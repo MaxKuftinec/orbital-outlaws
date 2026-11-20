@@ -22,6 +22,26 @@ def test_inbound_kepler_coast_terminates_at_kestrel_surface():
         PLANET_COLLISION_RADIUS_KM, abs=1e-4)
 
 
+def test_grazing_orbit_cannot_tunnel_below_surface():
+    # An orbit with a periapsis just 50 m inside the collision surface
+    # must be detected even if nearby sampling endpoints are outside.
+    apoapsis, periapsis = 170., PLANET_COLLISION_RADIUS_KM - .05
+    speed = math.sqrt(2 * PLANET_MU * periapsis /
+                      (apoapsis * (apoapsis + periapsis)))
+    with pytest.raises(CelestialImpact):
+        propagate_local(State(apoapsis, 0., 0., speed),
+                        15., PLANET_MU, 0., detect_impact=True)
+
+
+def test_near_surface_but_safe_orbit_does_not_false_positive():
+    apoapsis, periapsis = 170., PLANET_COLLISION_RADIUS_KM + .05
+    speed = math.sqrt(2 * PLANET_MU * periapsis /
+                      (apoapsis * (apoapsis + periapsis)))
+    result = propagate_local(State(apoapsis, 0., 0., speed),
+                             15., PLANET_MU, 0., detect_impact=True)
+    assert math.hypot(result.x, result.y) > PLANET_COLLISION_RADIUS_KM
+
+
 def test_circular_orbit_does_not_false_positive():
     safe = State(260., 0., 0., math.sqrt(PLANET_MU / 260.))
     result = propagate_local(safe, 120., PLANET_MU, 0., detect_impact=True)
