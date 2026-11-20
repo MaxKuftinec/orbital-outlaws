@@ -292,6 +292,16 @@ class WorldStore:
                 new['playerKills'] = old.get('playerKills', 0)
                 saved.snapshot = new
                 saved.saved_at_utc = now
+            # Settle an impact before running the encounter or handing the
+            # trajectory to a reconnecting WebSocket.
+            preflight_current = None
+            if saved.snapshot.get('player', {}).get('alive', True):
+                try:
+                    _, _, _, preflight_current = self._at(
+                        db, 'kestrel', entity_id, current_world_s)
+                except CelestialImpact as impact:
+                    self._terminate_player(db, entity, saved, impact.at_s,
+                                           impact.state, impact.body)
             # Simulate only *server uptime*. saved_at_utc is for auditing,
             # never authoritative simulation elapsed time after downtime.
             elapsed = max(0., current_world_s - float(saved.snapshot.get('t', current_world_s)))
@@ -304,11 +314,25 @@ class WorldStore:
                 snapshot, effects = advance_sector(
                     copy.deepcopy(saved.snapshot), elapsed, start_player, world.mu,
                     upgrades=(db.get(PlayerProgress, entity_id).upgrades or {}))
+                if effects.get('player_death') and saved.snapshot['player'].get('alive', True):
+                    death = effects['player_death']
+                    try:
+                        _, _, _, terminal = self._at(
+                            db, 'kestrel', entity_id, death['at_s'])
+                        death_time, death_cause = death['at_s'], death['cause']
+                    except CelestialImpact as impact:
+                        terminal = impact.state
+                        death_time, death_cause = impact.at_s, impact.body
+                    self._terminate_player(db, entity, saved, death_time,
+                                           terminal, death_cause)
+                    snapshot['player'].update(saved.snapshot['player'])
+                    snapshot['events'] = saved.snapshot['events']
                 if effects['credits']:
                     progress = db.scalars(select(PlayerProgress).where(
                         PlayerProgress.entity_id == entity_id).with_for_update()).one()
                     progress.credits += effects['credits']
-                if (effects['fuel'] or effects.get('capture_cargo_mass') or
+                if snapshot['player'].get('alive', True) and (
+                        effects['fuel'] or effects.get('capture_cargo_mass') or
                         effects['player_dvx'] or effects['player_dvy']):
                     # Integrate the active guidance before applying physical
                     # salvage/grapple impulses, so new fuel and mass are never
@@ -342,8 +366,22 @@ class WorldStore:
             # time as the NPC encounter. Do this AFTER obtaining the historical
             # start state, preserving the encounter's pre-integration timestamp.
             auto = db.get(AutoBurn, entity_id)
-            if auto and auto.progress['status'] in ACTIVE_STATES:
+            if (saved.snapshot.get('player', {}).get('alive', True) and
+                    auto and auto.progress['status'] in ACTIVE_STATES):
                 self._settle_auto(db, entity, world, current_world_s)
+            # Checkpoint coast periodically to bound reconnect processing cost.
+            if (preflight_current is not None and
+                    saved.snapshot.get('player', {}).get('alive', True) and
+                    current_world_s - entity.checkpoint_s >= 60.):
+                entity.checkpoint_s = current_world_s
+                entity.checkpoint = preflight_current.as_dict()
+                peri, apo = orbital_envelope(preflight_current, world.mu)
+                entity.periapsis_km, entity.apoapsis_km = peri, apo
+                entity.version += 1
+                db.add(Event(world_id='kestrel', entity_id=entity_id,
+                             at_s=current_world_s, kind='coast_checkpoint',
+                             payload={}, after=preflight_current.as_dict(),
+                             idempotency_key='coast:'+secrets.token_hex(16)))
             # Bind historical events to their actual server-runtime segment,
             # rather than presenting an old collision at reconnect time.
             snapshot_with_times = copy.deepcopy(saved.snapshot)
@@ -783,6 +821,10 @@ class WorldStore:
             world = db.get(World, 'kestrel')
             flight = db.get(FlightControl, entity_id)
             auto = db.get(AutoBurn, entity_id)
+            saved = db.get(EncounterSnapshot, entity_id)
+            if saved and not saved.snapshot.get('player', {}).get('alive', True):
+                return {'id': entity_id, 'state': entity.checkpoint,
+                        'version': entity.version}
             active = auto and auto.progress['status'] in ACTIVE_STATES
             if active and not (thrust or turn or stabilize):
                 # Do not create flight lease/events for regular neutral cockpit
