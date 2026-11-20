@@ -1852,6 +1852,11 @@
         return;
       }
       if(['physics','atlas'].includes(globalThis.OrbitalVisualizationMode))return;
+      // In Gravity Wells, WASD belongs exclusively to the camera.
+      // Do not fire main engines, RCS, stabilization or remapped flight
+      // actions while the user is exploring the mathematical surface.
+      if(globalThis.OrbitalVisualizationMode==='wells'&&
+         ['KeyW','KeyA','KeyS','KeyD'].includes(e.code))return;
       if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName))return;
       const action=actionForKey(e.code);
       if(action){e.preventDefault();if(action!=='fire'&&action!=='repair')manual();state.down.add(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.add('pressed'));if(action==='fire')$('fire-btn').classList.add('pressed');if(action==='repair')$('repair-btn').classList.add('pressed');}
