@@ -2100,6 +2100,9 @@
     if(type==='waypoint')key='waypoint';
     if(!key)return false;
     updateTargetOptions(key);state.navPlan=null;
+    if(type==='enemy'){
+      state.targetId=id;state.aimMode='locked';state.lastBallistic=-999;
+    }
     updateHud();return true;
   };
   window.addEventListener('orbital-visualization-mode',event=>{
