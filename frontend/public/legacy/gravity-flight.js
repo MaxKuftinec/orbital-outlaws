@@ -86,7 +86,8 @@
     const cX=-(camera.panX||0)/camera.scale,cY=-(camera.panY||0)/camera.scale;
     const xSpan=camera.width/camera.scale,ySpan=camera.height/camera.scale;
     const a={xMin:cX-xSpan/2,xMax:cX+xSpan/2,yMin:cY-ySpan/2,yMax:cY+ySpan/2};
-    return {...a,...sampleRange(scene,a)};
+    const z=sampleRange(scene,a);
+    return {...a,zMin:z.min,zMax:z.max};
   }
   // At yaw=tilt=0 the projection is EXACTLY the Flight screen transform
   // when axes are built from the flight camera. Tilt is unrestricted; a full
@@ -170,7 +171,7 @@
       if(p.x< -20||p.x>w+20||p.y< -20||p.y>h+20)continue;
       shape(ctx,'star',p.x,p.y,'#efc786',5.3);
       ctx.fillStyle='#f4cd8c';ctx.fillText(b.name,p.x,p.y-13);
-      rendered.push({...b,x:p.x,y:p.y,type:'body'});
+      rendered.push({...b,id:b.name,x:p.x,y:p.y,type:'body'});
     }
     // Draw spacecraft and pickups from the SAME live sector, not fabricated
     // background markers. At stellar scale several may share a pixel; the
