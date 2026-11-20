@@ -752,9 +752,18 @@ class WorldStore:
         entity_id='pilot-'+pilot_id
         with self.sessions.begin() as db:
             world=db.get(World,'kestrel')
+            entity=db.scalars(select(Entity).where(
+                Entity.id==entity_id).with_for_update()).one()
             saved=db.scalars(select(EncounterSnapshot).where(
                 EncounterSnapshot.entity_id == entity_id).with_for_update()).one()
-            _,_,_,player=self._at(db,'kestrel',entity_id,self.now(world))
+            if not saved.snapshot['player']['alive']:
+                return False
+            try:
+                _,_,_,player=self._at(db,'kestrel',entity_id,self.now(world))
+            except CelestialImpact as impact:
+                self._terminate_player(db, entity, saved, impact.at_s,
+                                       impact.state, impact.body)
+                return False
             snapshot=copy.deepcopy(saved.snapshot)
             fired=fire_projectile(snapshot,player,self.now(world),dx,dy)
             if fired:
