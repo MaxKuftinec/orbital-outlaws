@@ -87,7 +87,10 @@ export default defineComponent({
       this.frameId=requestAnimationFrame(this.frame)
       if(document.hidden)return
       const canvas=this.$refs.surface as HTMLCanvasElement|undefined
-      if(!canvas||!this.engine()||now-this.lastDrawAt<33)return
+      // Smooth ship/salvage movement at display refresh on desktop.
+      // Touch devices use a 30-FPS budget to limit battery/mesh overhead.
+      const coarse=window.matchMedia?.('(pointer:coarse)').matches??false
+      if(!canvas||!this.engine()||now-this.lastDrawAt<(coarse?33:16))return
       this.lastDrawAt=now
       // Keep entity positions fluid (up to 30 Hz). The much more expensive
       // potential mesh is cached and refreshed only when its geometry changes.
