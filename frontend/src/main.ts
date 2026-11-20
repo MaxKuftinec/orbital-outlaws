@@ -6,6 +6,7 @@ import 'vuetify/styles'
 import './cockpit.css'
 import './mobile.css'
 import './gravity-lab.css'
+import './gravity-flight.css'
 import App from './App.vue'
 
 const vuetify = createVuetify({
