@@ -141,3 +141,37 @@
   .gravity-flight-legend{font-size:8px!important;line-height:1.35!important}
   .gravity-flight-controls{max-height:calc(100% - 115px)}
 }
+
+/* Separate physical world window from magnification of the rendered fabric */
+.gravity-flight-zoom-modes{display:grid;gap:6px;margin:12px 0 6px;
+  border:1px solid #34576e;background:#0b2234;border-radius:8px;padding:10px}
+.gravity-flight-zoom-modes>span{font:800 9px ui-monospace,monospace;
+  color:#9ecfe4;letter-spacing:.08em}
+.gravity-flight-zoom-modes>div{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.gravity-flight-zoom-modes button{min-width:0;border:1px solid #4b7287;
+  background:#152d43;color:#c0dbe8;font:750 10px system-ui;padding:9px 4px;
+  border-radius:6px}
+.gravity-flight-zoom-modes button[aria-pressed=true]{
+  background:#254d5e;border-color:#8debcf;color:#e6fff1}
+.gravity-flight-zoom-modes small{font-size:9px;line-height:1.4;color:#acc5d3}
+.gravity-flight-palette{min-width:0;margin:14px 0 8px;padding:10px;
+  border:1px solid #42617a;border-radius:8px}
+.gravity-flight-palette legend{padding:0 6px;color:#b7d5e1;
+  font:800 9px ui-monospace,monospace;letter-spacing:.06em}
+.gravity-flight-palette-options{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.gravity-flight-palette-options button{display:flex;flex-direction:column;gap:5px;
+  min-width:0;padding:6px;border:1px solid #496a7d;background:#0d2034;
+  border-radius:6px;color:#c6dde7;font:750 9px system-ui;line-height:1.2}
+.gravity-flight-palette-options button[aria-pressed=true]{border-color:#e4d3a1;
+  color:#fff4cb;box-shadow:inset 0 0 0 1px #9a8555}
+.gravity-flight-palette-swatch{display:block;width:100%;height:17px;border-radius:3px}
+.gravity-flight-palette-swatch.classic{background:linear-gradient(90deg,#0b2638,#25758b,#c28e45)}
+.gravity-flight-palette-swatch.survey{background:linear-gradient(90deg,#1d3456,#648db4,#f2a05e)}
+.gravity-flight-palette small{display:block;color:#8daec0;font-size:9px;
+  line-height:1.4;margin-top:8px}
+@media(max-width:680px){
+  .gravity-flight-zoom-modes{padding:6px;gap:5px}
+  .gravity-flight-zoom-modes button{font-size:9px;padding:7px 2px}
+  .gravity-flight-palette{padding:7px}
+  .gravity-flight-palette-options button{font-size:8px}
+}
