@@ -1679,6 +1679,9 @@
   });
   let lastMeasurementUiUpdate=0;
   function draw(){
+    // When Physics Lab owns this viewport, don't waste a 60 Hz flight paint
+    // behind it. Flight simulation and the server connection remain active.
+    if(window.OrbitalVisualizationMode==='gravity')return;
     // Attached rulers move with physical bodies; refresh the Tools readout at
     // 4 Hz instead of writing to the DOM on every 60 FPS canvas render.
     const measurement=state.measurement;
@@ -1706,8 +1709,10 @@
       let steps=0;
       while(accumulator>=.015 && steps<22){step(.015);accumulator-=.015;steps++;if(state.ended)break;}
       if(steps>=22)accumulator=0;
-      if(state.t-state.lastPrediction>.22)computePrediction();
-      if(state.t-state.lastBallistic>.1)updateShotPreview();
+      if(window.OrbitalVisualizationMode!=='gravity'){
+        if(state.t-state.lastPrediction>.22)computePrediction();
+        if(state.t-state.lastBallistic>.1)updateShotPreview();
+      }
     }
     if(now>nextHud){updateHud();nextHud=now+130;}
     draw();lastFrameId=requestAnimationFrame(frame);
@@ -1822,6 +1827,7 @@
         if(e.code==='Escape'){e.preventDefault();closeSettings();}
         return;
       }
+      if(window.OrbitalVisualizationMode==='gravity')return;
       if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName))return;
       const action=actionForKey(e.code);
       if(action){e.preventDefault();if(action!=='fire'&&action!=='repair')manual();state.down.add(action);document.querySelectorAll(`[data-thrust="${action}"]`).forEach(b=>b.classList.add('pressed'));if(action==='fire')$('fire-btn').classList.add('pressed');if(action==='repair')$('repair-btn').classList.add('pressed');}
@@ -2043,6 +2049,15 @@
     });
   }
   bindControls();updateHotkeyHints();reset();fitCanvas();
+  // Read-only world snapshot, consumed by the Physics Lab at low frequency.
+  window.OrbitalPhysicsLabSnapshot=()=>({time:state?.t||0});
+  window.addEventListener('orbital-visualization-mode',event=>{
+    if(event.detail?.mode==='gravity'&&state){
+      state.down.clear();
+      state.pointerThrust=false;
+      document.querySelectorAll('.pressed').forEach(button=>button.classList.remove('pressed'));
+    }
+  });
   if(storedFrame()==='star')showSystemMap(false);
   lastFrameId=requestAnimationFrame(frame);
   if(window.OrbitalPersistence){
