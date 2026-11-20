@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import replace
-from .star_system import stellar_tide, star_collision
+from .star_system import stellar_tide, star_collision, PLANET_COLLISION_RADIUS_KM
 import secrets
 from .physics import State, propagate, orbital_envelope
 from .npc_guidance import plan_transfer, queue_burn, move_with_burn
@@ -17,7 +17,7 @@ from .tether import begin_tether, step_tether
 from .npc_intelligence import risk_report, evasive_burn, coordinate_allies, choose_raider_target
 
 MU = 310000.0
-BODY_RADIUS = 91.0
+BODY_RADIUS = PLANET_COLLISION_RADIUS_KM
 SHOT_SPEED = 205.0
 SHOT_RADIUS = 14.0
 SHIP_DIAMETER = 4.0
@@ -126,8 +126,9 @@ def move(body: dict, dt: float, mu: float, when: float | None = None):
     if not body.get('alive', True):
         return
     if math.hypot(body['x'], body['y']) <= BODY_RADIUS:
-        print("Is it happening")
         body['alive'] = False
+        body['deathCause'] = 'kestrel'
+        return
     try:
         # Kestrel-relative inertial frame: stellar tidal kicks around the
         # established planet-Kepler drift and finite-thrust integrator
@@ -143,10 +144,15 @@ def move(body: dict, dt: float, mu: float, when: float | None = None):
             body[field] = getattr(result, field)
         if 'fuel' in body:
             body['fuel'] = result.fuel_kg
-        if math.hypot(result.x, result.y) < BODY_RADIUS or (when is not None and star_collision(result.x,result.y,when)):
+        if math.hypot(result.x, result.y) <= BODY_RADIUS:
             body['alive'] = False
+            body['deathCause'] = 'kestrel'
+        elif when is not None and star_collision(result.x,result.y,when):
+            body['alive'] = False
+            body['deathCause'] = 'veyra'
     except (ValueError, OverflowError):
         body['alive'] = False
+        body['deathCause'] = 'numerical-error'
 
 
 def distance(a: dict, b: dict) -> float:
@@ -166,6 +172,7 @@ def destroy(sector: dict, body: dict, when: float, cause: str):
     if not body.get('alive', True) or body.get('hp', 1) > 0:
         return
     body['alive'] = False
+    body['deathCause'] = cause
     event(sector, when, f"{body['name']} destroyed ({cause}).", 'danger')
     if body.get('isAlly') or body.get('isPlayer'):
         return
@@ -475,6 +482,7 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
     time_step = max(.25, min(12., seconds / 15000))
     while elapsed < seconds-1e-8:
         dt = min(time_step, seconds-elapsed, .25 if sector.get('captureTether') else time_step)
+        player_was_alive = player.get('alive', True)
         cool_capture_system(player,dt)
         when = sector['t']+dt
         allies = [sector['ally'], *sector.get('allies', [])]
@@ -737,6 +745,9 @@ def advance_sector(sector: dict, seconds: float, start_player: State, mu: float 
                       f"{active['durationS']:.1f} s; peak tension "
                       f"{active['peakTensionN']:.0f} N; residual heat "
                       f"{decision.heat_mj:.2f} MJ.",'good')
+        if player_was_alive and not player.get('alive', True) and 'player_death' not in effects:
+            effects['player_death'] = {'at_s': when,
+                                       'cause': player.get('deathCause', 'combat')}
         sector['shots']=[shot for shot in sector['shots'] if shot.get('alive',True)]
         sector['pickups']=[p for p in sector['pickups'] if p.get('alive',True)]
         elapsed+=dt
