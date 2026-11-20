@@ -16,13 +16,14 @@ const publicPreview = import.meta.env.VITE_PUBLIC_PREVIEW === '1'
 
 const legacyFiles = [
   'map-tools.js', 'map-visuals.js', 'star-system.js', 'reference-frames.js', 'frame-config.js', 'autopilot-attitude.js', 'navigation.js', 'ballistics.js', 'collisions.js', 'autopilot-safety.js',
-  'arrival.js', 'persistence.js', 'workspace.js', 'rendering.js', 'gravity-lab.js', 'touch-navigation.js', 'game.js'
+  'arrival.js', 'persistence.js', 'workspace.js', 'rendering.js', 'gravity-lab.js', 'gravity-flight.js', 'touch-navigation.js', 'game.js'
 ]
 
 export default defineComponent({
   name: 'OrbitalCockpit',
   components: { CommsPanel, ShipPanel, TechnologyMarket, TelemetryPanel, TargetingPanel, NavigationPanel, SystemAtlas, PilotProfile, AutoBurnPanel,
-    GravityLab: defineAsyncComponent(() => import('./components/GravityLab.vue')) },
+    GravityLab: defineAsyncComponent(() => import('./components/GravityLab.vue')),
+    GravityFlightView: defineAsyncComponent(() => import('./components/GravityFlightView.vue')) },
   data() {
     return {
       publicPreview,
@@ -30,10 +31,10 @@ export default defineComponent({
       backendOnline: false,
       persistentOnline: false,
       mobileInstrumentsOpen: false,
-      visualization: 'flight' as 'flight' | 'gravity',
+      visualization: 'flight' as 'flight' | 'wells',
       physicsLabReady: false,
       startupError: '',
-      view: window.location.hash === '#/atlas' ? 'atlas' : 'cockpit'
+      view: window.location.hash === '#/atlas' ? 'atlas' : window.location.hash === '#/physics' ? 'physics' : 'cockpit'
     }
   },
   mounted() {
@@ -44,6 +45,7 @@ export default defineComponent({
     ;(window as typeof window & { ORBITAL_API_BASE_URL?: string }).ORBITAL_API_BASE_URL =
       import.meta.env.VITE_API_BASE_URL ?? ''
     setupPreferenceSync()
+    this.onHashChange()
     this.startCockpit()
     if (!this.publicPreview && !this.authenticated) {
       this.$nextTick(() => this.openProfile())
@@ -65,16 +67,18 @@ export default defineComponent({
     onMobileKeydown(event: Event) {
       if ((event as KeyboardEvent).key === 'Escape') {
         this.mobileInstrumentsOpen = false
-        if (this.visualization === 'gravity' && document.getElementById('settings-modal')?.classList.contains('hidden'))
+        if (this.visualization === 'wells' && document.getElementById('settings-modal')?.classList.contains('hidden'))
           this.setVisualization('flight')
       }
     },
-    setVisualization(mode: 'flight' | 'gravity') {
-      if (mode === 'gravity' && !this.physicsLabReady) return
+    setVisualization(mode: 'flight' | 'wells') {
+      if (mode === 'wells' && !this.physicsLabReady) return
       this.visualization = mode
       this.mobileInstrumentsOpen = false
-      ;(window as any).OrbitalVisualizationMode = mode
-      window.dispatchEvent(new CustomEvent('orbital-visualization-mode', { detail: { mode } }))
+      if (this.view === 'cockpit') {
+        ;(window as any).OrbitalVisualizationMode = mode
+        window.dispatchEvent(new CustomEvent('orbital-visualization-mode', { detail: { mode } }))
+      }
     },
     openProfile() {
       this.mobileInstrumentsOpen = false;
@@ -89,14 +93,23 @@ export default defineComponent({
     },
     onHashChange() {
       this.mobileInstrumentsOpen = false
-      this.view = window.location.hash === '#/atlas' ? 'atlas' : 'cockpit'
-      if (this.view === 'atlas') this.setVisualization('flight')
+      const hash = window.location.hash
+      this.view = hash === '#/atlas' ? 'atlas' : hash === '#/physics' ? 'physics' : 'cockpit'
+      if (this.view !== 'cockpit') this.visualization = 'flight'
+      const mode = this.view === 'cockpit' ? this.visualization : this.view
+      ;(window as any).OrbitalVisualizationMode = mode
+      window.dispatchEvent(new CustomEvent('orbital-visualization-mode', { detail: { mode } }))
       this.$nextTick(() => window.dispatchEvent(new Event('resize')))
     },
     openAtlas() {
-      this.setVisualization('flight')
       this.mobileInstrumentsOpen = false
       window.location.hash = '#/atlas'
+      this.onHashChange()
+      window.scrollTo({top:0,behavior:'smooth'})
+    },
+    openPhysics() {
+      this.mobileInstrumentsOpen = false
+      window.location.hash = '#/physics'
       this.onHashChange()
       window.scrollTo({top:0,behavior:'smooth'})
     },
@@ -161,6 +174,27 @@ export default defineComponent({
 
   <PilotProfile ref="pilotProfile" />
   <SystemAtlas v-show="view==='atlas'" @back="openCockpit" @inspect="inspectBody" />
+  <section v-show="view==='physics'" class="physics-page" aria-label="Physics Lab for mathematical exploration">
+    <header class="physics-page-header">
+      <div>
+        <span class="physics-kicker">ORBITAL OUTLAWS / LEARNING &amp; RESEARCH</span>
+        <h1>◈ Physics Lab</h1>
+        <p>Explore ideal mathematical models independently of the live flight canvas</p>
+      </div>
+      <nav class="physics-page-actions" aria-label="Physics Lab navigation">
+        <button type="button" @click="openCockpit">◎ Return to cockpit</button>
+        <button type="button" @click="openAtlas">◈ System Atlas</button>
+      </nav>
+    </header>
+    <div class="physics-scene">
+      <GravityLab v-if="view==='physics' && physicsLabReady"/>
+      <div v-else class="physics-page-loading">Loading mathematical instruments…</div>
+    </div>
+    <div class="physics-page-footnote">
+      <span aria-hidden="true">ⓘ</span>
+      <span>The presets here are learning experiments. Their object positions and masses are intentionally configurable models, not necessarily the live player sector. For real-time gravity around Kestrel and Veyra, select <b>Gravity Wells</b> in the cockpit</span>
+    </div>
+  </section>
   <div v-show="view==='cockpit'" class="app-shell">
     <header class="topbar">
       <div class="identity">
@@ -171,6 +205,7 @@ export default defineComponent({
         <div class="sim-clock"><span class="dot live"></span><div><span class="quiet-label">ENCOUNTER TIME</span><strong id="sim-clock">00:00</strong></div></div>
         
         <v-btn density="compact" variant="tonal" class="pilot-registry-nav" title="Register, verify or sign in to your pilot profile" @click="openProfile">✧ Pilot Profile</v-btn>
+        <v-btn density="compact" variant="outlined" class="action-btn physics-app-nav" @click="openPhysics" title="Open independent physics experiments">◈ Physics Lab</v-btn>
         <v-btn density="compact" variant="outlined" id="open-atlas-btn" class="action-btn atlas-app-nav" title="Open the Veyra System Atlas: lore, star system and flight guides" @click="openAtlas">◈ System Atlas</v-btn>
         <v-btn density="compact" variant="tonal"  id="settings-btn" type="button" class="action-btn" title="Flight control and map settings">⚙ Settings</v-btn>
         
@@ -181,25 +216,26 @@ export default defineComponent({
     <nav class="mobile-navigation" aria-label="Mobile cockpit navigation">
       <button type="button" ref="mobileInstrumentsToggle" aria-controls="mobile-instruments" :aria-expanded="mobileInstrumentsOpen" @click="toggleMobileInstruments">☷ Instruments</button>
       <button type="button" @click="openAtlas">◈ System atlas</button>
+      <button type="button" @click="openPhysics">◈ Physics Lab</button>
       <button type="button" @click="openProfile">✧ Profile</button>
       <button type="button" @click="openMobileSettings">⚙ Settings</button>
     </nav>
 
     <main class="game-layout">
-      <section class="arena-shell" :class="{'gravity-mode': visualization==='gravity'}" aria-label="Orbital gameplay area">
+      <section class="arena-shell" :class="{'gravity-wells': visualization==='wells'}" aria-label="Orbital gameplay area">
         <div class="arena-head">
           <div><span class="section-kicker">SECTOR 01</span><div class="arena-title">Kestrel system · parent star + planet <span class="online"></span></div></div>
           <div class="arena-modes" role="group" aria-label="Cockpit visualizations">
             <button type="button" :aria-pressed="visualization==='flight'" @click="setVisualization('flight')">◎ Flight</button>
-            <button type="button" :aria-pressed="visualization==='gravity'"
-                    :disabled="!physicsLabReady" @click="setVisualization('gravity')">◈ Physics Lab</button>
+            <button type="button" :aria-pressed="visualization==='wells'"
+                    :disabled="!physicsLabReady" @click="setVisualization('wells')">◈ Gravity Wells</button>
           </div>
           <div class="arena-actions"><v-btn density="compact" variant="tonal"  id="orbit-btn" class="small-btn selected" aria-pressed="true">◌ Trajectory</v-btn><v-btn density="compact" variant="tonal" id="ephemeris-visibility-btn" class="small-btn" aria-pressed="false" title="Show or hide the selected object's projected orbit" disabled>◎ Ephemeris OFF</v-btn><v-btn density="compact" variant="outlined" id="ephemeris-settings-btn" class="small-btn ephemeris-settings-shortcut" title="Configure Ephemeris Computer reference frame" aria-label="Configure Ephemeris Computer reference frame" disabled>⚙</v-btn><v-btn density="compact" variant="tonal" id="focus-target-btn" class="small-btn focus-target-btn" aria-label="Center and zoom to selected navigation target" title="Center and zoom to selected navigation target (camera only)" disabled>⌖ Focus</v-btn><v-btn density="compact" variant="tonal" id="follow-target-btn" class="small-btn follow-target-btn" aria-pressed="false" aria-label="Follow selected navigation target with camera" title="Keep camera centered on moving selection; dragging releases follow" disabled>◎ Follow</v-btn><v-btn density="compact" variant="tonal"  id="zoom-out" class="small-btn" aria-label="Zoom out">−</v-btn><span id="zoom-level" class="zoom-text">1.0×</span><v-btn density="compact" variant="tonal"  id="zoom-in" class="small-btn" aria-label="Zoom in">+</v-btn></div>
         </div>
         <div class="canvas-wrap" id="canvas-workspace" :class="{'gravity-mode': visualization==='gravity'}">
           <button type="button" id="fullscreen-btn" class="fullscreen-btn" aria-label="Enter fullscreen cockpit">⛶ Fullscreen</button>
           <canvas id="orbit-canvas" aria-label="Top-down orbital flight map. On touch devices, drag to pan, pinch to zoom, and tap an object to select it"></canvas>
-          <GravityLab v-if="view==='cockpit' && visualization==='gravity'" />
+          <GravityFlightView v-if="view==='cockpit' && visualization==='wells'" />
           <div class="mobile-flight-pad" aria-label="Touch spacecraft flight controls">
             <div class="mobile-gesture-hint">DRAG TO PAN <span>·</span> PINCH TO ZOOM <span>·</span> TAP TO TARGET</div>
             <div class="mobile-pad-grid">
