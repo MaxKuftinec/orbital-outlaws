@@ -1681,7 +1681,7 @@
   function draw(){
     // When Physics Lab owns this viewport, don't waste a 60 Hz flight paint
     // behind it. Flight simulation and the server connection remain active.
-    if(window.OrbitalVisualizationMode==='gravity')return;
+    if(globalThis.OrbitalVisualizationMode==='gravity')return;
     // Attached rulers move with physical bodies; refresh the Tools readout at
     // 4 Hz instead of writing to the DOM on every 60 FPS canvas render.
     const measurement=state.measurement;
@@ -1709,7 +1709,7 @@
       let steps=0;
       while(accumulator>=.015 && steps<22){step(.015);accumulator-=.015;steps++;if(state.ended)break;}
       if(steps>=22)accumulator=0;
-      if(window.OrbitalVisualizationMode!=='gravity'){
+      if(globalThis.OrbitalVisualizationMode!=='gravity'){
         if(state.t-state.lastPrediction>.22)computePrediction();
         if(state.t-state.lastBallistic>.1)updateShotPreview();
       }
