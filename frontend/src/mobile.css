@@ -19,7 +19,7 @@
   .app-shell .sim-clock{padding:2px 4px}
   .app-shell .sim-clock strong{font-size:12px}
   .app-shell .sim-clock .quiet-label{font-size:8px}
-  .mobile-navigation{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;
+  .mobile-navigation{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;
     position:relative;z-index:15;margin:0 0 10px}
   .mobile-navigation button{display:grid;place-items:center;min-width:0;min-height:43px;
     padding:7px 4px;border:1px solid #2d5169;background:#102b3e;color:#d0e7f1;
@@ -147,3 +147,5 @@
 @media (prefers-reduced-motion:reduce){
   .app-shell .sidebar{transition:none!important}
 }
+
+@media (max-width:400px){.mobile-navigation button{font-size:8px;padding-inline:1px}}
