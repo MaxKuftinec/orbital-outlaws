@@ -11,6 +11,10 @@ export default defineComponent({
     return {
       preset:'camera' as 'camera'|'kestrel'|'veyra'|'system',
       yaw:0,pitch:0,depth:1,
+      zoomMode:'fabric' as 'fabric'|'world',
+      fabricZoom:1,
+      palette:localStorage.getItem('orbital-outlaws.well-palette.v1')==='classic'?'classic':'survey',
+      showBoundary:true,showOwnPath:true,showEphemerisPath:true,
       axes:null as Axes|null,
       scene:null as Scene|null,
       invalid:'',
@@ -112,6 +116,8 @@ export default defineComponent({
         this.backbuffer.width=pw;this.backbuffer.height=ph;this.cacheDirty=true
       }
       const options={yaw:this.yaw,pitch:this.pitch,depth:this.depth,
+        fabricZoom:this.fabricZoom,palette:this.palette,
+        showBoundary:this.showBoundary,
         detail:w<620?23:36,showLabels:this.showLabels}
       if(this.cacheDirty||now-this.lastSurfaceAt>650){
         const bctx=this.backbuffer.getContext('2d',{alpha:false})
@@ -125,6 +131,12 @@ export default defineComponent({
       if(!ctx)return
       ctx.setTransform(dpr,0,0,dpr,0,0)
       ctx.drawImage(this.backbuffer,0,0,w,h)
+      if(this.showOwnPath||this.showEphemerisPath){
+        const plotted={...scene,
+          orbitVisible:scene.orbitVisible&&this.showOwnPath,
+          ephemerisVisible:scene.ephemerisVisible&&this.showEphemerisPath}
+        engine.drawTrajectories(ctx,w,h,plotted,axes,options)
+      }
       this.shownEntities=markRaw(this.showContacts?
         engine.drawEntities(ctx,w,h,scene,axes,options):[])
       if(now-this.lastReadoutAt>300){
@@ -139,6 +151,17 @@ export default defineComponent({
       }
     },
     invalidate(){this.cacheDirty=true},
+    setPalette(name:'classic'|'survey'){
+      if(name!=='classic'&&name!=='survey')return
+      this.palette=name
+      localStorage.setItem('orbital-outlaws.well-palette.v1',name)
+      window.dispatchEvent(new Event('orbital-preferences-changed'))
+      this.invalidate()
+    },
+    setZoomMode(mode:'fabric'|'world'){
+      if(mode!=='fabric'&&mode!=='world')return
+      this.zoomMode=mode
+    },
     selectPreset(preset:'kestrel'|'veyra'|'system'){
       if(!this.scene)return
       this.preset=preset
@@ -148,6 +171,7 @@ export default defineComponent({
       this.invalidate()
     },
     matchFlight(){
+      this.fabricZoom=1
       this.preset='camera'
       this.manualXY=false;this.manualZ=false;this.invalid=''
       if(this.scene){
@@ -269,8 +293,9 @@ export default defineComponent({
       const canvas=this.$refs.surface as HTMLCanvasElement
       const w=Math.max(200,canvas?.clientWidth||800),h=Math.max(200,canvas?.clientHeight||550)
       const co=Math.cos(this.yaw),si=Math.sin(this.yaw)
-      const xMove=-(dx*co+dy*si)*(a.xMax-a.xMin)/w
-      const yMove=-(-dx*si+dy*co)*(a.yMax-a.yMin)/h
+      const magnification=Math.max(.15,this.fabricZoom)
+      const xMove=-(dx*co+dy*si)*(a.xMax-a.xMin)/(w*magnification)
+      const yMove=-(-dx*si+dy*co)*(a.yMax-a.yMin)/(h*magnification)
       this.axes={...a,xMin:a.xMin+xMove,xMax:a.xMax+xMove,
         yMin:a.yMin+yMove,yMax:a.yMax+yMove}
       this.manualXY=true;this.preset='camera'
@@ -279,6 +304,13 @@ export default defineComponent({
     zoomBy(factor:number){
       if(!this.axes||!Number.isFinite(factor)||factor<=0)return
       const f=Math.max(.70,Math.min(1.43,factor))
+      if(this.zoomMode==='fabric'){
+        // Dolly/magnify the entire projected surface, without changing
+        // physical world window, player position or Flight camera zoom.
+        this.fabricZoom=Math.max(.15,Math.min(40,this.fabricZoom/f))
+        this.invalidate()
+        return
+      }
       const a=this.axes
       const cx=(a.xMin+a.xMax)/2,cy=(a.yMin+a.yMax)/2
       const hx=(a.xMax-a.xMin)*f/2,hy=(a.yMax-a.yMin)*f/2
@@ -297,7 +329,7 @@ export default defineComponent({
 <template>
   <section class="gravity-flight" aria-label="Live gravitational wells replacing the starfield map">
     <canvas ref="surface" class="gravity-flight-surface"
-      aria-label="Same live universe as Flight, represented as gravitational wells. Drag to orbit freely, right drag to pan, wheel to zoom"
+      aria-label="Live gravitational potential. Wheel zooms into fabric or world according to selected mode. Drag to rotate, right drag to pan"
       @contextmenu.prevent
       @pointerdown="pointerDown" @pointermove="pointerMove"
       @pointerup="pointerUp" @pointercancel="pointerUp" @lostpointercapture="pointerUp"
@@ -318,6 +350,17 @@ export default defineComponent({
         <button type="button" @click="resetOverhead" title="Align view exactly with Flight">◎ Overhead</button>
         <button type="button" @click="matchFlight" title="Rejoin Flight pan and zoom exactly">⌖ Match Flight</button>
       </div>
+      <div class="gravity-flight-zoom-modes" role="group" aria-label="Mouse wheel zoom operation">
+        <span>SCROLL WHEEL CONTROLS</span>
+        <div>
+          <button type="button" :aria-pressed="zoomMode==='fabric'"
+            @click="setZoomMode('fabric')">◉ Fabric zoom</button>
+          <button type="button" :aria-pressed="zoomMode==='world'"
+            @click="setZoomMode('world')">⊞ World zoom</button>
+        </div>
+        <small v-if="zoomMode==='fabric'">Move closer to the rendered well without changing physical X/Y bounds · {{ fabricZoom.toFixed(2) }}×</small>
+        <small v-else>Change the spatial X/Y range and synchronize with the Flight map</small>
+      </div>
       <div class="gravity-flight-orientation">Yaw {{ ((yaw*180/Math.PI)%360+360)%360|0 }}° · Tilt {{ ((pitch*180/Math.PI)%360+360)%360|0 }}°</div>
       <template v-if="axes">
         <div v-for="axis in (['x','y','z'] as const)" :key="axis" class="gravity-flight-axis">
@@ -337,10 +380,23 @@ export default defineComponent({
         <input id="gravity-flight-exaggeration" type="range" min=".4" max="2" step=".2"
           v-model.number="depth" @input="invalidate">
       </div>
+      <fieldset class="gravity-flight-palette">
+        <legend>FABRIC COLOR PALETTE</legend>
+        <div class="gravity-flight-palette-options">
+          <button type="button" :aria-pressed="palette==='classic'"
+            @click="setPalette('classic')"><span class="gravity-flight-palette-swatch classic"></span>Classic · Teal</button>
+          <button type="button" :aria-pressed="palette==='survey'"
+            @click="setPalette('survey')"><span class="gravity-flight-palette-swatch survey"></span>Survey · Contrast</button>
+        </div>
+        <small>Classic is retained unchanged; Survey is the new preview theme</small>
+      </fieldset>
+      <label class="gravity-flight-show-contacts"><input v-model="showBoundary" type="checkbox" @change="invalidate"> Show physical surface / interior</label>
+      <label class="gravity-flight-show-contacts"><input v-model="showOwnPath" type="checkbox"> Own trajectory</label>
+      <label class="gravity-flight-show-contacts"><input v-model="showEphemerisPath" type="checkbox"> Ephemeris forecast (if installed)</label>
       <label class="gravity-flight-show-contacts"><input v-model="showContacts" type="checkbox"> Show live objects</label>
       <label class="gravity-flight-show-contacts"><input v-model="showLabels" type="checkbox"> Object labels</label>
       <p v-if="invalid" class="gravity-flight-warning" role="status">{{ invalid }}</p>
-      <p class="gravity-flight-explain">Pan/zoom share the flight camera. Edit X, Y and potential (Z) limits independently to stretch the field. Orbital motion and gravity calculations do not change</p>
+      <p class="gravity-flight-explain">Dashed cyan is your flight forecast; dashed gold is Ephemeris. The bright body-radius ring separates the actual spherical interior from exterior space. Fabric zoom moves the view toward the surface; World zoom changes map axes</p>
     </aside>
     <div class="gravity-flight-metrics" aria-label="Live field at your spacecraft">
       <small>YOUR SPACECRAFT · NEWTONIAN FIELD</small>
@@ -350,6 +406,6 @@ export default defineComponent({
       <div class="gravity-flight-legend">◈ Credits · ◆ Wreck · ● Fuel · ▲ Ammo · ◇ Parts · ◎ Ships</div>
       <p>Inertial Newtonian potential, not literal curved spacetime or Kestrel-frame effective potential</p>
     </div>
-    <div class="gravity-flight-hint">DRAG ORBIT 360° · RIGHT/SHIFT DRAG PAN · WHEEL ZOOM · TAP SELECT · TWO FINGERS PAN/ZOOM</div>
+    <div class="gravity-flight-hint">DRAG ORBIT 360° · RIGHT/SHIFT DRAG PAN · SCROLL {{ zoomMode.toUpperCase() }} ZOOM · TAP SELECT · PINCH ZOOM</div>
   </section>
 </template>
