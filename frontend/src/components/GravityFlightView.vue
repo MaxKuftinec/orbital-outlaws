@@ -101,14 +101,18 @@ export default defineComponent({
       const previous=this.cameraKeyFrameAt
       this.cameraKeyFrameAt=now
       if(!previous||!this.heldCameraKeys.size||!this.axes)return
-      // W/S advance and retreat; A/D strafe, relative to the viewed plane.
-      const x=Number(this.heldCameraKeys.has('KeyA'))-Number(this.heldCameraKeys.has('KeyD'))
-      const y=Number(this.heldCameraKeys.has('KeyW'))-Number(this.heldCameraKeys.has('KeyS'))
-      if(x===0&&y===0)return
+      const modal=document.getElementById('settings-modal')
+      const active=document.activeElement as HTMLElement|null
+      if((modal&&!modal.classList.contains('hidden'))||
+         active?.matches?.('input,textarea,select,[contenteditable="true"]')){
+        this.clearCameraKeys()
+        return
+      }
+      const direction=this.engine().cameraKeyVector(this.heldCameraKeys)
+      if(!direction.x&&!direction.y)return
       const dt=Math.min(.05,Math.max(0,(now-previous)/1000))
-      const length=Math.hypot(x,y)
       const speed=330 // screen pixels per second at 1x fabric magnification
-      this.panBy(x/length*speed*dt,y/length*speed*dt)
+      this.panBy(direction.x*speed*dt,direction.y*speed*dt)
     },
     refresh(force=false){
       const engine=this.engine(),snapshot=this.snapshot(),system=(window as any).OrbitalStarSystem
