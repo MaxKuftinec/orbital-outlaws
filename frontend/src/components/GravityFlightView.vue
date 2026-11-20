@@ -32,6 +32,8 @@ export default defineComponent({
       lastSurfaceAt:0,lastDrawAt:0,lastReadoutAt:0,
       lastSurfaceAxes:null as Axes|null,
       lastSceneTime:0,
+      heldCameraKeys:markRaw(new Set<string>()),
+      cameraKeyFrameAt:0,
       shownEntities:markRaw([] as any[]),
       manualXY:false,
       manualZ:false,
@@ -46,18 +48,68 @@ export default defineComponent({
       this.observer.observe(this.$refs.surface as Element)
     }
     window.addEventListener('resize',this.onResize)
+    window.addEventListener('keydown',this.cameraKeyDown)
+    window.addEventListener('keyup',this.cameraKeyUp)
+    window.addEventListener('blur',this.clearCameraKeys)
+    document.addEventListener('visibilitychange',this.onVisibilityChange)
     this.frameId=requestAnimationFrame(this.frame)
   },
   beforeUnmount(){
     cancelAnimationFrame(this.frameId)
     this.observer?.disconnect()
     window.removeEventListener('resize',this.onResize)
+    window.removeEventListener('keydown',this.cameraKeyDown)
+    window.removeEventListener('keyup',this.cameraKeyUp)
+    window.removeEventListener('blur',this.clearCameraKeys)
+    document.removeEventListener('visibilitychange',this.onVisibilityChange)
+    this.clearCameraKeys()
     this.pointers.clear()
   },
   methods:{
     engine():any{return (window as any).OrbitalGravityFlight},
     snapshot():any{return (window as any).OrbitalGameSnapshot?.()},
     onResize(){this.cacheDirty=true;this.refresh(true)},
+    onVisibilityChange(){
+      if(document.hidden)this.clearCameraKeys()
+    },
+    clearCameraKeys(){
+      this.heldCameraKeys.clear()
+      this.cameraKeyFrameAt=0
+    },
+    acceptsCameraKeys(event:KeyboardEvent):boolean{
+      if(event.altKey||event.ctrlKey||event.metaKey)return false
+      const target=event.target as HTMLElement|null
+      if(target?.closest?.('input,textarea,select,[contenteditable="true"],[role="textbox"]'))return false
+      // Don't steal typing or keybindings from an active settings dialog.
+      const modal=document.getElementById('settings-modal')
+      if(modal&&!modal.classList.contains('hidden'))return false
+      if(document.querySelector('[role="dialog"]:not(.hidden),dialog[open]'))return false
+      return true
+    },
+    cameraKeyDown(event:KeyboardEvent){
+      if(!['KeyW','KeyA','KeyS','KeyD'].includes(event.code))return
+      if(!this.acceptsCameraKeys(event))return
+      event.preventDefault()
+      this.heldCameraKeys.add(event.code)
+    },
+    cameraKeyUp(event:KeyboardEvent){
+      if(!['KeyW','KeyA','KeyS','KeyD'].includes(event.code))return
+      this.heldCameraKeys.delete(event.code)
+      if(this.acceptsCameraKeys(event))event.preventDefault()
+    },
+    advanceCameraKeys(now:number){
+      const previous=this.cameraKeyFrameAt
+      this.cameraKeyFrameAt=now
+      if(!previous||!this.heldCameraKeys.size||!this.axes)return
+      // W/S advance and retreat; A/D strafe, relative to the viewed plane.
+      const x=Number(this.heldCameraKeys.has('KeyA'))-Number(this.heldCameraKeys.has('KeyD'))
+      const y=Number(this.heldCameraKeys.has('KeyW'))-Number(this.heldCameraKeys.has('KeyS'))
+      if(x===0&&y===0)return
+      const dt=Math.min(.05,Math.max(0,(now-previous)/1000))
+      const length=Math.hypot(x,y)
+      const speed=330 // screen pixels per second at 1x fabric magnification
+      this.panBy(x/length*speed*dt,y/length*speed*dt)
+    },
     refresh(force=false){
       const engine=this.engine(),snapshot=this.snapshot(),system=(window as any).OrbitalStarSystem
       if(!engine||!snapshot||!system)return
@@ -89,7 +141,8 @@ export default defineComponent({
     },
     frame(now:number){
       this.frameId=requestAnimationFrame(this.frame)
-      if(document.hidden)return
+      if(document.hidden){this.clearCameraKeys();return}
+      this.advanceCameraKeys(now)
       const canvas=this.$refs.surface as HTMLCanvasElement|undefined
       // Smooth ship/salvage movement at display refresh on desktop.
       // Touch devices use a 30-FPS budget to limit battery/mesh overhead.
@@ -361,6 +414,11 @@ export default defineComponent({
         <small v-if="zoomMode==='fabric'">Move closer to the rendered well without changing physical X/Y bounds · {{ fabricZoom.toFixed(2) }}×</small>
         <small v-else>Change the spatial X/Y range and synchronize with the Flight map</small>
       </div>
+      <div class="gravity-flight-camera-guide" aria-label="Keyboard camera controls">
+        <span>CAMERA TRANSLATION</span>
+        <div class="gravity-flight-wasd"><kbd>W</kbd><div><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div></div>
+        <small>W/S move forward/back · A/D strafe left/right · drag to orbit</small>
+      </div>
       <div class="gravity-flight-orientation">Yaw {{ ((yaw*180/Math.PI)%360+360)%360|0 }}° · Tilt {{ ((pitch*180/Math.PI)%360+360)%360|0 }}°</div>
       <template v-if="axes">
         <div v-for="axis in (['x','y','z'] as const)" :key="axis" class="gravity-flight-axis">
@@ -406,6 +464,6 @@ export default defineComponent({
       <div class="gravity-flight-legend">◈ Credits · ◆ Wreck · ● Fuel · ▲ Ammo · ◇ Parts · ◎ Ships</div>
       <p>Inertial Newtonian potential, not literal curved spacetime or Kestrel-frame effective potential</p>
     </div>
-    <div class="gravity-flight-hint">DRAG ORBIT 360° · RIGHT/SHIFT DRAG PAN · SCROLL {{ zoomMode.toUpperCase() }} ZOOM · TAP SELECT · PINCH ZOOM</div>
+    <div class="gravity-flight-hint">WASD MOVE CAMERA · DRAG ORBIT 360° · RIGHT/SHIFT DRAG PAN · SCROLL {{ zoomMode.toUpperCase() }} ZOOM · TAP SELECT</div>
   </section>
 </template>
