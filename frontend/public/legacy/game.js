@@ -1282,6 +1282,25 @@
     }
     state.predicted=out;state.dangerPrediction=dangerous;state.lastPrediction=state.t;
   }
+  // Build a single Ephemeris forecast for both Flight and Gravity Wells.
+  // The cache is independent of rendering mode, so changing the view never
+  // hides or duplicates the authoritative instrument forecast.
+  function ensureEphemerisForecast(){
+    if(!state.ephemerisOwned||!state.ephemerisVisible)return null;
+    const target=navTarget(state.selectedNavKey);
+    if(!target?.alive||target.type==='star'||target.type==='planet')return null;
+    const now=performance.now();
+    if(!state.ephemerisCache||state.ephemerisCache.key!==target.id||
+       now-state.ephemerisCache.ms>650){
+      const predicted=NAV.propagate(target,180,WORLD.mu,.7,WORLD.crashRadius,100000,true);
+      const t60=NAV.propagate(target,60,WORLD.mu,1,WORLD.crashRadius,100000);
+      const t120=NAV.propagate(target,120,WORLD.mu,1,WORLD.crashRadius,100000);
+      state.ephemerisCache={key:target.id,ms:now,
+        points:predicted.points||[],markers:[t60,t120]};
+    }
+    return state.ephemerisCache;
+  }
+  window.OrbitalEphemerisForecast=ensureEphemerisForecast;
   function formatTime(t){const sec=Math.floor(t);return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;}
   // During the Options API migration, Vue owns instrument text/state.
   // Direct DOM mutation is allowed only in the original standalone cockpit.
@@ -1709,7 +1728,12 @@
       let steps=0;
       while(accumulator>=.015 && steps<22){step(.015);accumulator-=.015;steps++;if(state.ended)break;}
       if(steps>=22)accumulator=0;
-      if(!['wells','physics','atlas'].includes(globalThis.OrbitalVisualizationMode)){
+      const mode=globalThis.OrbitalVisualizationMode;
+      // Flight draws frequently; Wells shares the same forecast with a
+      // lower computation cadence, while non-cockpit pages stay idle.
+      if(mode==='wells'){
+        if(state.t-state.lastPrediction>.5)computePrediction();
+      }else if(!['physics','atlas'].includes(mode)){
         if(state.t-state.lastPrediction>.22)computePrediction();
         if(state.t-state.lastBallistic>.1)updateShotPreview();
       }
@@ -2061,6 +2085,13 @@
       followPlayer:!!state.followPlayer,followTarget:!!state.followTarget
     }:null,
     selectedNavKey:state?.selectedNavKey||'',
+    orbitVisible:!!state?.orbitVisible,
+    dangerPrediction:!!state?.dangerPrediction,
+    ownTrajectory:state?.orbitVisible?state.predicted||[]:[],
+    ephemerisOwned:!!state?.ephemerisOwned,
+    ephemerisVisible:!!state?.ephemerisVisible,
+    ephemerisFrame:globalThis.OrbitalFrameConfig?.getFrame('ephemeris')||'planet',
+    ephemeris:ensureEphemerisForecast(),
     ships:state?[
       {...state.player,player:true,type:'ship'},
       state.ally&&{...state.ally,type:'ally'},
