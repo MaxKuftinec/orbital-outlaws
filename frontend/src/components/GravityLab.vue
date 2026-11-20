@@ -1,5 +1,5 @@
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { defineComponent, markRaw } from 'vue'
 
 type LabScene = 'binary' | 'uniform' | 'kestrel'
 type PointerTrack = { id: number; x: number; y: number; yaw: number; pitch: number; moved: boolean } | null
@@ -103,11 +103,11 @@ export default defineComponent({
       const scene = engine.scenario(this.sceneType, this.epoch, this.system())
       this.sceneDescription = scene.note
       this.measured = engine.fieldAt(scene, this.probe.x, this.probe.y)
-      this.viewCache = engine.paint(ctx, width, height, scene, {
+      this.viewCache = markRaw(engine.paint(ctx, width, height, scene, {
         yaw: this.yaw, pitch: this.pitch, zoom: this.zoom,
         depth: this.depth, arrows: this.arrows, probe: this.probe,
         detail: width < 610 ? 24 : 38
-      })
+      }))
     },
     pointerDown(event: PointerEvent) {
       if (event.button !== 0) return
