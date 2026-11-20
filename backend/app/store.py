@@ -259,7 +259,10 @@ class WorldStore:
             elapsed = max(0., current_world_s - float(saved.snapshot.get('t', current_world_s)))
             if elapsed >= .05:
                 start_s = float(saved.snapshot['t'])
-                _, _, _, start_player = self._at(db, 'kestrel', entity_id, start_s)
+                if not saved.snapshot.get('player', {}).get('alive', True):
+                    start_player = State(**entity.checkpoint)
+                else:
+                    _, _, _, start_player = self._at(db, 'kestrel', entity_id, start_s)
                 snapshot, effects = advance_sector(
                     copy.deepcopy(saved.snapshot), elapsed, start_player, world.mu,
                     upgrades=(db.get(PlayerProgress, entity_id).upgrades or {}))
@@ -809,6 +812,11 @@ class WorldStore:
                 return world,entity,at,projected
             control=event.payload.get('control')
             expires=event.payload.get('expires_s',0)
+        # A destroyed pilot cannot continue along its last orbital trajectory.
+        if entity.kind == 'player' and at >= entity.checkpoint_s:
+            saved = db.get(EncounterSnapshot, entity_id)
+            if saved and not saved.snapshot.get('player', {}).get('alive', True):
+                return world, entity, at, State(**entity.checkpoint)
         return world,entity,at,advance(base,base_t,at,world.mu,control,expires,
                                        system=world_id=='kestrel')
 
