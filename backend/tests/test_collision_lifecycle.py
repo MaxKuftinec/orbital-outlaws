@@ -55,6 +55,7 @@ def test_destroyed_orbit_freezes_through_reconnect_restart_and_respawn(postgres_
     entity_id = 'pilot-' + pilot
     store.now = lambda world: 0.
     store.connect_player(pilot)
+    store.player_encounter(pilot)
     with store.sessions.begin() as db:
         ship = db.get(Entity, entity_id)
         ship.checkpoint = State(170., 0., -45., 0.).as_dict()
@@ -92,6 +93,7 @@ def test_respawn_does_not_replay_a_legacy_invalid_checkpoint(postgres_url):
     pilot = uuid4().hex
     store.now = lambda world: 0.
     store.connect_player(pilot)
+    store.player_encounter(pilot)
     with store.sessions.begin() as db:
         entity = db.get(Entity, 'pilot-' + pilot)
         entity.checkpoint = State(0., 0., 0., 0.).as_dict()
