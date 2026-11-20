@@ -326,7 +326,11 @@ class WorldStore:
                     self._terminate_player(db, entity, saved, death_time,
                                            terminal, death_cause)
                     snapshot['player'].update(saved.snapshot['player'])
-                    snapshot['events'] = saved.snapshot['events']
+                    # Preserve encounter combat events and append the terminal
+                    # event instead of replacing the encounter's event history.
+                    snapshot['events'] = (
+                        snapshot.get('events', []) + saved.snapshot['events'][-1:]
+                    )[-30:]
                 if effects['credits']:
                     progress = db.scalars(select(PlayerProgress).where(
                         PlayerProgress.entity_id == entity_id).with_for_update()).one()
@@ -910,13 +914,24 @@ class WorldStore:
 
     def get_entity(self,world_id: str,entity_id: str,at_s: float|None=None):
         with self.sessions() as db:
-            world,ent,at,s=self._at(db,world_id,entity_id,at_s)
+            try:
+                world,ent,at,s=self._at(db,world_id,entity_id,at_s)
+                impact = None
+            except CelestialImpact as caught:
+                # Read-only future projections report the physical terminal
+                # state. A live encounter will commit the death transaction.
+                world=db.get(World,world_id)
+                ent=db.get(Entity,entity_id)
+                at=self.now(world) if at_s is None else float(at_s)
+                s, impact = caught.state, caught
             result={'id':ent.id,'kind':ent.kind,'state':s.as_dict(),'at_s':at,
                     'version':ent.version,'predicted':at>self.now(world)+.005}
+            if impact:
+                result['impact'] = {'body': impact.body, 'at_s': impact.at_s}
             if ent.kind=='player':
                 auto=db.get(AutoBurn,ent.id)
                 if auto:
-                    if auto.progress['status'] in ACTIVE_STATES and at>=ent.checkpoint_s:
+                    if not impact and auto.progress['status'] in ACTIVE_STATES and at>=ent.checkpoint_s:
                         _,projected=advance_guided(State(**ent.checkpoint),
                                                    ent.checkpoint_s,at,world.mu,
                                                    auto.plan,auto.progress,
