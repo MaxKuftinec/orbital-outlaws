@@ -348,11 +348,19 @@
     drawEntities(ctx,w,h,scene,axes,options);
     return mesh;
   }
+  // Normalized camera strafe direction: diagonal key combinations don't
+  // move faster, and opposing keys cancel rather than accumulating drift.
+  function cameraKeyVector(keys){
+    const x=Number(keys.has('KeyA'))-Number(keys.has('KeyD'));
+    const y=Number(keys.has('KeyW'))-Number(keys.has('KeyS'));
+    const length=Math.hypot(x,y);
+    return length?{x:x/length,y:y/length}:{x:0,y:0};
+  }
   function fmt(value){
     return Math.abs(value)>1e5?value.toExponential(2):
       Number(value.toPrecision(5)).toLocaleString('en-US',{maximumFractionDigits:2});
   }
   return {world,field,axesFor,axesFromCamera,validAxes,sampleRange,PALETTES,paletteFor,
     plotPoint,paintSurface,drawBodyBoundaries,trajectoryPoint,trajectoryPaths,
-    drawTrajectories,drawEntities,paint,fmt,entityColor};
+    drawTrajectories,drawEntities,paint,fmt,entityColor,cameraKeyVector};
 });
