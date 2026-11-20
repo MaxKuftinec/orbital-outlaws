@@ -869,6 +869,11 @@ class WorldStore:
         if not entity or entity.world_id!=world_id:raise LookupError('Entity not found')
         at=self.now(world) if at_s is None else float(at_s)
         if at<0:raise ValueError('Negative world time')
+        # Encounter death is authoritative for all forward live projections.
+        if entity.kind == 'player' and at >= entity.checkpoint_s:
+            saved = db.get(EncounterSnapshot, entity_id)
+            if saved and not saved.snapshot.get('player', {}).get('alive', True):
+                return world, entity, at, State(**entity.checkpoint)
         if at>=entity.checkpoint_s:
             base=State(**entity.checkpoint);base_t=entity.checkpoint_s
             flight=db.get(FlightControl,entity_id) if entity.kind=='player' else None
@@ -877,28 +882,31 @@ class WorldStore:
             auto=db.get(AutoBurn,entity_id) if entity.kind=='player' else None
             if auto and auto.progress['status'] in ACTIVE_STATES:
                 result,_=advance_guided(base,base_t,at,world.mu,auto.plan,
-                                        auto.progress,system=world_id=='kestrel')
+                                        auto.progress,system=world_id=='kestrel',
+                                        detect_impact=entity.kind=='player')
                 return world,entity,at,result
         else:
-            event=db.scalars(select(Event).where(and_(Event.entity_id==entity_id,Event.at_s<=at)).order_by(Event.at_s.desc(),Event.id.desc()).limit(1)).first()
+            event=db.scalars(select(Event).where(
+                and_(Event.entity_id==entity_id,Event.at_s<=at)
+            ).order_by(Event.at_s.desc(),Event.id.desc()).limit(1)).first()
             if not event:raise ValueError('Entity did not exist at this time')
             base=State(**event.after);base_t=event.at_s
+            if event.kind == 'ship_destroyed':
+                return world, entity, at, base
             historical_plan=event.payload.get('auto_plan')
             historical_progress=event.payload.get('auto_progress')
             if historical_plan and historical_progress and historical_progress['status'] in ACTIVE_STATES:
                 projected,_=advance_guided(base,base_t,at,world.mu,
                                            historical_plan,historical_progress,
-                                           system=world_id=='kestrel')
+                                           system=world_id=='kestrel',
+                                           detect_impact=entity.kind=='player')
                 return world,entity,at,projected
             control=event.payload.get('control')
             expires=event.payload.get('expires_s',0)
-        # A destroyed pilot cannot continue along its last orbital trajectory.
-        if entity.kind == 'player' and at >= entity.checkpoint_s:
-            saved = db.get(EncounterSnapshot, entity_id)
-            if saved and not saved.snapshot.get('player', {}).get('alive', True):
-                return world, entity, at, State(**entity.checkpoint)
-        return world,entity,at,advance(base,base_t,at,world.mu,control,expires,
-                                       system=world_id=='kestrel')
+        return world,entity,at,advance(
+            base,base_t,at,world.mu,control,expires,
+            system=world_id=='kestrel',
+            detect_impact=entity.kind=='player' and world_id=='kestrel')
 
     def get_entity(self,world_id: str,entity_id: str,at_s: float|None=None):
         with self.sessions() as db:
