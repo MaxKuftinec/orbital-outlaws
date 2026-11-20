@@ -549,10 +549,15 @@ class WorldStore:
             if not ally: raise ValueError('Select an active allied craft')
             now = self.now(world)
             active_auto = db.get(AutoBurn, entity_id)
-            if active_auto and active_auto.progress['status'] in ACTIVE_STATES:
-                current = self._settle_auto(db, entity, world, now)
-            else:
-                _, _, _, current = self._at(db, 'kestrel', entity_id, now)
+            try:
+                if active_auto and active_auto.progress['status'] in ACTIVE_STATES:
+                    current = self._settle_auto(db, entity, world, now)
+                else:
+                    _, _, _, current = self._at(db, 'kestrel', entity_id, now)
+            except CelestialImpact as impact:
+                self._terminate_player(db, entity, saved, impact.at_s,
+                                       impact.state, impact.body)
+                return {'status': 'destroyed', 'transferred_kg': 0.}
             separation = math.hypot(current.x-ally['x'], current.y-ally['y'])
             relative = math.hypot(current.vx-ally['vx'], current.vy-ally['vy'])
             if separation > 18 or relative >= 2.5:
@@ -623,18 +628,18 @@ class WorldStore:
             flight = db.get(FlightControl, entity_id)
             at = max(self.now(world), entity.checkpoint_s)
             active_auto = db.get(AutoBurn, entity_id)
-            if active_auto and active_auto.progress['status'] in ACTIVE_STATES:
-                current = self._settle_auto(db, entity, world, at)
-            else:
-                try:
+            try:
+                if active_auto and active_auto.progress['status'] in ACTIVE_STATES:
+                    current = self._settle_auto(db, entity, world, at)
+                else:
                     current = advance(State(**entity.checkpoint), entity.checkpoint_s, at,
                                       world.mu, self._controls(flight), flight.expires_s,
                                       system=True, detect_impact=True)
-                except CelestialImpact as impact:
-                    self._terminate_player(db, entity, saved, impact.at_s,
-                                           impact.state, impact.body)
-                    return {'pilot_id':pilot_id, 'added_kg':0.0, 'destroyed':True,
-                            'state':impact.state.as_dict()}
+            except CelestialImpact as impact:
+                self._terminate_player(db, entity, saved, impact.at_s,
+                                       impact.state, impact.body)
+                return {'pilot_id':pilot_id, 'added_kg':0.0, 'destroyed':True,
+                        'state':impact.state.as_dict()}
             capacity_kg = 200.0
             room_kg = max(0.0, capacity_kg - current.fuel_kg)
             added_kg = min(room_kg, requested_kg) if requested_kg is not None else room_kg
