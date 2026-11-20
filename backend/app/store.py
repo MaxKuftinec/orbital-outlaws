@@ -236,10 +236,12 @@ class WorldStore:
     def connect_player(self, pilot_id: str):
         """Single browser pilot: create once, then always resume the stored ship."""
         entity_id = 'pilot-' + pilot_id
+        new_pilot = False
         with self.sessions.begin() as db:
             world = db.get(World, 'kestrel')
             entity = db.get(Entity, entity_id)
             if not entity:
+                new_pilot = True
                 angle = 2 * math.pi * secrets.randbits(53) / 2**53
                 launch = incoming_ship('pilot-01', angle, 'flyby', mu=world.mu)
                 state = State(launch['x'], launch['y'],
@@ -263,7 +265,8 @@ class WorldStore:
             if entity and not db.get(PlayerSettings,entity_id) and not any(
                     isinstance(obj,PlayerSettings) and obj.entity_id==entity_id for obj in db.new):
                 db.add(PlayerSettings(entity_id=entity_id,reserve_kg=36.))
-        self.player_encounter(pilot_id)
+        if not new_pilot:
+            self.player_encounter(pilot_id)
         return self.get_entity('kestrel', entity_id)
 
     def player_encounter(self, pilot_id: str):
